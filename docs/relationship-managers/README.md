@@ -77,3 +77,45 @@ existed and needed no changes.
   and manage relationship managers."
 - No bulk import, no email invite flow (the super admin sets a temporary
   password directly, same as `/admin/team` today).
+
+## Follow-up: automatic round-robin assignment on approval
+
+Originally, approving an agency on Agent Approvals still required the admin
+to manually pick its RM from a dropdown. That's now automatic.
+
+### Backend
+
+- **New** `src/services/rmAssignment.service.js` — `pickNextRoundRobinRm()`.
+  Stateless round robin: fetches active `relationship_manager` users ordered
+  by `created_at`, counts how many agencies already have a non-null
+  `rm_user_id`, and picks `rms[assignedSoFar % rms.length]`. No separate
+  "next in line" pointer to keep in sync — it's derived from data that
+  already exists, so it can't drift.
+- **`src/controllers/admin.controller.js`** (`patchAgency`) — on the
+  `pending → approved` transition, if the request didn't already include an
+  explicit `rmUserId`, calls `pickNextRoundRobinRm()` and merges it into the
+  patch before calling `updateAgency`. An explicit `rmUserId` in the same
+  request (a deliberate manual override) still wins — the auto-assignment
+  only fills the gap when nothing was specified.
+- If there are zero active RMs, the agency approves with `rm_user_id` left
+  `null` rather than failing the approval.
+
+### Frontend
+
+- **`src/pages/AgentApprovals.jsx`** — removed the "Assign Relationship
+  Manager" `<Select>` from `DecisionPanel` entirely, along with the
+  `/admin/team` fetch it depended on. Approve/Reject no longer send
+  `rmUserId`. The submitted-details card now fetches `/admin/relationship-managers`
+  and shows the assigned RM's name (with "Assigned automatically,
+  round-robin") once one exists; pending agencies show a one-line note that
+  assignment happens automatically on approval.
+
+### Verified
+
+Live against the running local backend (`admin@xclusiveoman.com`):
+registered 4 test agencies, approved them in sequence with 2 active RMs —
+confirmed the assignment cycled RM A → RM B → RM A → (explicit override to
+RM A, which correctly beat what round-robin would have picked). Also
+confirmed through the real browser UI (login → approve → RM shown in
+Submitted Details). All test agencies/RMs were reset (rejected /
+disabled) afterward.
