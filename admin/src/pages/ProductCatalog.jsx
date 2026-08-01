@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client.js';
-import { useAuth } from '../context/AuthContext.jsx';
 import { Badge, Button, Card, Checkbox, ErrorText, Select, Table, TextInput } from '../components/ui.jsx';
 
 const ENTITY_FIELDS = {
@@ -218,41 +217,18 @@ function SimpleEntityTab({ entity }) {
 }
 
 export default function ProductCatalog() {
-  const { user, logout, socketConnected } = useAuth();
   const [tab, setTab] = useState('fdPackages');
 
   return (
     <div className="min-h-screen bg-[#eef1ef]">
-      <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line-light bg-white/95 px-5 py-3 shadow-sm backdrop-blur">
-        <div>
-          <div className="text-sm font-bold text-ink">Xclusive Oman Admin</div>
-          <div className="text-[11px] text-muted">Product catalog</div>
-        </div>
-        <div className="flex items-center justify-end gap-3 text-xs">
-          <Link to="/approvals" className="hidden font-semibold text-ink hover:underline sm:inline">
-            Agent Approvals
-          </Link>
-          <div
-            className="flex h-8 w-8 items-center justify-center rounded-full border border-line-light bg-panel"
-            title={socketConnected ? 'Live connection active' : 'Connecting…'}
-          >
-            <span className={`h-2.5 w-2.5 rounded-full ${socketConnected ? 'bg-[#2f7d32] shadow-[0_0_0_4px_rgba(47,125,50,0.12)]' : 'bg-[#ccc]'}`} />
-          </div>
-          <span className="hidden sm:inline">
-            {user?.fullName} <span className="text-muted">({user?.role})</span>
-          </span>
-          <Button onClick={logout}>Log out</Button>
-        </div>
-      </div>
-
-      <div className="mx-auto max-w-6xl p-5 lg:p-8">
-        <h2 className="mb-4 text-2xl font-bold">Product Catalog</h2>
-        <div className="mb-5 flex flex-wrap gap-2">
+      <div className="mx-auto max-w-6xl p-6 lg:p-10">
+        <h2 className="mb-5 text-3xl font-bold">Product Catalog</h2>
+        <div className="mb-6 flex flex-wrap gap-2">
           {TABS.map((t) => (
             <button
               key={t.key}
               onClick={() => setTab(t.key)}
-              className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${
+              className={`rounded-full border px-4 py-2 text-xs font-semibold ${
                 tab === t.key ? 'border-ink bg-ink text-white' : 'border-line-light bg-white text-[#666]'
               }`}
             >

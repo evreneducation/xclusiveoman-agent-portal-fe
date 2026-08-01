@@ -297,11 +297,11 @@ export default function FdPackageEditor() {
 
   return (
     <div className="min-h-screen bg-[#eef1ef]">
-      <div className="mx-auto max-w-4xl space-y-4 p-5 lg:p-8">
+      <div className="mx-auto max-w-4xl space-y-4 p-6 lg:p-10">
         <button onClick={() => navigate('/catalog')} className="text-xs text-muted hover:text-ink">
           ← Back to catalog
         </button>
-        <h2 className="text-2xl font-bold">{isNew ? 'Add FD Package' : `Edit — ${form.title || ''}`}</h2>
+        <h2 className="text-3xl font-bold">{isNew ? 'Add FD Package' : `Edit — ${form.title || ''}`}</h2>
 
         <BasicsForm form={form} update={update} />
         <PricingForm form={form} update={update} />
