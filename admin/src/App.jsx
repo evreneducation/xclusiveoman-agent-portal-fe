@@ -6,6 +6,7 @@ import Login from './pages/Login.jsx';
 import AgentApprovals from './pages/AgentApprovals.jsx';
 import ProductCatalog from './pages/ProductCatalog.jsx';
 import FdPackageEditor from './pages/FdPackageEditor.jsx';
+import MiceCatalog from './pages/MiceCatalog.jsx';
 import NeftVerification from './pages/NeftVerification.jsx';
 import TransactionLedger from './pages/TransactionLedger.jsx';
 
@@ -19,6 +20,7 @@ export default function App() {
             <Route path="/approvals" element={<AgentApprovals />} />
             <Route path="/catalog" element={<ProductCatalog />} />
             <Route path="/catalog/fd-packages/:id" element={<FdPackageEditor />} />
+            <Route path="/mice-catalog" element={<MiceCatalog />} />
             <Route path="/neft-verification" element={<NeftVerification />} />
             <Route path="/transactions" element={<TransactionLedger />} />
           </Route>

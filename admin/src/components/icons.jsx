@@ -60,6 +60,18 @@ export function TransactionsIcon(props) {
   );
 }
 
+export function MiceCatalogIcon(props) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M3 21h18" />
+      <path d="M5 21V7l7-4 7 4v14" />
+      <path d="M9 21v-6h6v6" />
+      <path d="M9 11h.01" />
+      <path d="M15 11h.01" />
+    </svg>
+  );
+}
+
 export function LogoutIcon(props) {
   return (
     <svg {...base} {...props}>
