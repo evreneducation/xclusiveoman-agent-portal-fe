@@ -1,13 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { api } from '../api/client.js';
-import { useAuth } from '../context/AuthContext.jsx';
-import { Badge, Button, Select, Table } from '../components/ui.jsx';
+import { Badge, Select, Table } from '../components/ui.jsx';
 
 const STATUS_TONE = { confirmed: 'green', pending: 'amber', failed: 'red', pending_verification: 'amber' };
 
 export default function TransactionLedger() {
-  const { user, logout, socketConnected } = useAuth();
   const [transactions, setTransactions] = useState([]);
   const [method, setMethod] = useState('');
   const [status, setStatus] = useState('');
@@ -27,32 +24,10 @@ export default function TransactionLedger() {
 
   return (
     <div className="min-h-screen bg-[#eef1ef]">
-      <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line-light bg-white/95 px-5 py-3 shadow-sm backdrop-blur">
-        <div className="text-sm font-bold text-ink">Xclusive Oman Admin</div>
-        <div className="flex items-center gap-3 text-xs">
-          <Link to="/approvals" className="font-semibold text-ink hover:underline">
-            Agent Approvals
-          </Link>
-          <Link to="/neft-verification" className="font-semibold text-ink hover:underline">
-            NEFT Verification
-          </Link>
-          <div
-            className="flex h-8 w-8 items-center justify-center rounded-full border border-line-light bg-panel"
-            title={socketConnected ? 'Live connection active' : 'Connecting…'}
-          >
-            <span className={`h-2.5 w-2.5 rounded-full ${socketConnected ? 'bg-[#2f7d32]' : 'bg-[#ccc]'}`} />
-          </div>
-          <span>
-            {user?.fullName} <span className="text-muted">({user?.role})</span>
-          </span>
-          <Button onClick={logout}>Log out</Button>
-        </div>
-      </div>
+      <div className="mx-auto max-w-5xl p-6 lg:p-10">
+        <h2 className="mb-5 text-3xl font-bold">Transaction Ledger</h2>
 
-      <div className="mx-auto max-w-5xl p-5 lg:p-8">
-        <h2 className="mb-4 text-2xl font-bold">Transaction Ledger</h2>
-
-        <div className="mb-4 flex flex-wrap gap-3">
+        <div className="mb-5 flex flex-wrap gap-3">
           <Select className="max-w-[160px]" value={method} onChange={(e) => setMethod(e.target.value)}>
             <option value="">All methods</option>
             <option value="cashfree">Cashfree</option>
