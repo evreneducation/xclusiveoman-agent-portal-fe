@@ -2,10 +2,19 @@ import { Link, Outlet, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAuth } from '../context/AuthContext.jsx';
 import { Button } from './ui.jsx';
-import { ApprovalsIcon, CatalogIcon, LogoutIcon, MiceCatalogIcon, NeftIcon, TransactionsIcon } from './icons.jsx';
+import {
+  ApprovalsIcon,
+  CatalogIcon,
+  LogoutIcon,
+  MiceCatalogIcon,
+  NeftIcon,
+  RelationshipManagerIcon,
+  TransactionsIcon,
+} from './icons.jsx';
 
 const NAV_ITEMS = [
   { to: '/approvals', label: 'Agent Approvals', Icon: ApprovalsIcon },
+  { to: '/relationship-managers', label: 'Relationship Managers', Icon: RelationshipManagerIcon },
   { to: '/catalog', label: 'Product Catalog', Icon: CatalogIcon },
   { to: '/mice-catalog', label: 'MICE Catalog', Icon: MiceCatalogIcon },
   { to: '/neft-verification', label: 'NEFT Verification', Icon: NeftIcon },

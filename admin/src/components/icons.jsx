@@ -72,6 +72,18 @@ export function MiceCatalogIcon(props) {
   );
 }
 
+export function RelationshipManagerIcon(props) {
+  return (
+    <svg {...base} {...props}>
+      <rect x="2" y="4" width="20" height="16" rx="2" />
+      <circle cx="9" cy="10" r="2" />
+      <path d="M6 16c0-1.66 1.34-3 3-3s3 1.34 3 3" />
+      <path d="M14 9h5" />
+      <path d="M14 13h5" />
+    </svg>
+  );
+}
+
 export function LogoutIcon(props) {
   return (
     <svg {...base} {...props}>
