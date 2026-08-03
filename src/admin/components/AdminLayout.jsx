@@ -9,12 +9,14 @@ import {
   MiceCatalogIcon,
   NeftIcon,
   RelationshipManagerIcon,
+  SalesManagerIcon,
   TransactionsIcon,
 } from './icons.jsx';
 
 const NAV_ITEMS = [
   { to: '/admin/approvals', label: 'Agent Approvals', Icon: ApprovalsIcon },
   { to: '/admin/relationship-managers', label: 'Relationship Managers', Icon: RelationshipManagerIcon },
+  { to: '/admin/sales-managers', label: 'Sales Managers', Icon: SalesManagerIcon },
   { to: '/admin/catalog', label: 'Product Catalog', Icon: CatalogIcon },
   { to: '/admin/mice-catalog', label: 'MICE Catalog', Icon: MiceCatalogIcon },
   { to: '/admin/neft-verification', label: 'NEFT Verification', Icon: NeftIcon },

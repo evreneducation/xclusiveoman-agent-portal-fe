@@ -9,6 +9,7 @@ import FdPackageEditor from './pages/FdPackageEditor.jsx';
 import MiceCatalog from './pages/MiceCatalog.jsx';
 import NeftVerification from './pages/NeftVerification.jsx';
 import RelationshipManagers from './pages/RelationshipManagers.jsx';
+import SalesManagers from './pages/SalesManagers.jsx';
 import TransactionLedger from './pages/TransactionLedger.jsx';
 
 export default function App() {
@@ -20,6 +21,7 @@ export default function App() {
           <Route element={<AdminLayout />}>
             <Route path="approvals" element={<AgentApprovals />} />
             <Route path="relationship-managers" element={<RelationshipManagers />} />
+            <Route path="sales-managers" element={<SalesManagers />} />
             <Route path="catalog" element={<ProductCatalog />} />
             <Route path="catalog/fd-packages/:id" element={<FdPackageEditor />} />
             <Route path="mice-catalog" element={<MiceCatalog />} />
