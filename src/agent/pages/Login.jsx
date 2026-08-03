@@ -146,8 +146,8 @@ function RegisterPanel() {
           <TextInput type="email" required value={form.email} onChange={(e) => update('email', e.target.value)} />
         </div>
         <div>
-          <FieldLabel>Phone (optional)</FieldLabel>
-          <TextInput value={form.phone} onChange={(e) => update('phone', e.target.value)} />
+          <FieldLabel>Phone</FieldLabel>
+          <TextInput required value={form.phone} onChange={(e) => update('phone', e.target.value)} />
         </div>
         <div>
           <FieldLabel>Password</FieldLabel>

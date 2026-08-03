@@ -84,6 +84,18 @@ export function RelationshipManagerIcon(props) {
   );
 }
 
+export function SalesManagerIcon(props) {
+  return (
+    <svg {...base} {...props}>
+      <rect x="4" y="3" width="16" height="18" rx="2" />
+      <circle cx="12" cy="9" r="2.5" />
+      <path d="M8 17c0-1.93 1.79-3.5 4-3.5s4 1.57 4 3.5" />
+      <path d="M9 3v2" />
+      <path d="M15 3v2" />
+    </svg>
+  );
+}
+
 export function LogoutIcon(props) {
   return (
     <svg {...base} {...props}>
