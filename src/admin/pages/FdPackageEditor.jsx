@@ -47,7 +47,7 @@ function HeroImageUpload({ packageId, value, onUploaded }) {
             {uploading ? 'Uploading…' : value ? 'Change image' : 'Upload image'}
             <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" disabled={!packageId || uploading} onChange={handleFile} />
           </label>
-          {!packageId && <p className="mt-1 text-[10px] text-muted">Save as draft first to upload an image.</p>}
+          {!packageId && <p className="mt-1 text-[10px] text-muted">Setting up…</p>}
           <ErrorText>{error}</ErrorText>
         </div>
       </div>
@@ -125,8 +125,31 @@ function CarouselImagesUpload({ packageId, images, onChange }) {
           />
         </label>
       </div>
-      {!packageId && <p className="mt-1 text-[10px] text-muted">Save as draft first to upload images.</p>}
+      {!packageId && <p className="mt-1 text-[10px] text-muted">Setting up…</p>}
       <ErrorText>{error}</ErrorText>
+    </div>
+  );
+}
+
+function HotelPicker({ hotelId, onChange }) {
+  const [hotels, setHotels] = useState([]);
+
+  useEffect(() => {
+    api.get('/hotels').then((d) => setHotels(d.hotels));
+  }, []);
+
+  return (
+    <div>
+      <FieldLabel>Hotel</FieldLabel>
+      <Select value={hotelId || ''} onChange={(e) => onChange(e.target.value || null)}>
+        <option value="">None</option>
+        {hotels.map((h) => (
+          <option key={h.id} value={h.id}>
+            {h.name} {h.city ? `— ${h.city}` : ''}
+          </option>
+        ))}
+      </Select>
+      <p className="mt-1 text-[10px] text-muted">From the general Hotel Catalog (Product Catalog → Hotels).</p>
     </div>
   );
 }
@@ -153,6 +176,7 @@ function BasicsForm({ form, update, packageId, images, onImagesChange }) {
             ))}
           </div>
         </div>
+        <HotelPicker hotelId={form.hotelId} onChange={(id) => update('hotelId', id)} />
         <HeroImageUpload packageId={packageId} value={form.heroImageUrl} onUploaded={(url) => update('heroImageUrl', url)} />
         <CarouselImagesUpload packageId={packageId} images={images} onChange={onImagesChange} />
         <div className="sm:col-span-2">
@@ -306,6 +330,7 @@ function AddonsManager({ fdPackageId, addons, onChange }) {
   const [activities, setActivities] = useState([]);
   const [tours, setTours] = useState([]);
   const [selection, setSelection] = useState('');
+  const [location, setLocation] = useState('');
   const [price, setPrice] = useState('');
 
   useEffect(() => {
@@ -314,13 +339,17 @@ function AddonsManager({ fdPackageId, addons, onChange }) {
   }, []);
 
   async function add() {
-    if (!selection || !price) return;
+    if (!selection || !location || !price) return;
     const [kind, id] = selection.split(':');
-    const payload = kind === 'activity' ? { activityId: id, pricePerPax: Number(price) } : { tourId: id, pricePerPax: Number(price) };
+    const payload =
+      kind === 'activity'
+        ? { activityId: id, location, pricePerPax: Number(price) }
+        : { tourId: id, location, pricePerPax: Number(price) };
     const { addon } = await api.post(`/admin/fd-packages/${fdPackageId}/addons`, payload);
     const name = (kind === 'activity' ? activities : tours).find((x) => x.id === id)?.name;
     onChange([...addons, { ...addon, name }]);
     setSelection('');
+    setLocation('');
     setPrice('');
   }
 
@@ -331,12 +360,17 @@ function AddonsManager({ fdPackageId, addons, onChange }) {
 
   return (
     <Card label="Add-on activities & tours" className="border-white">
+      <p className="mb-3 text-xs text-muted">
+        The same activity/tour can be added more than once with a different departure location and price —
+        e.g. a tour priced differently ex-Muscat vs ex-Salalah.
+      </p>
       <Table
-        columns={['Name', 'Price / pax', '']}
+        columns={['Name', 'Location', 'Price / pax', '']}
         rows={addons}
         renderRow={(a) => (
           <tr key={a.id} className="border-b border-line-light last:border-0">
             <td className="px-3 py-2">{a.name}</td>
+            <td className="px-3 py-2">{a.location || '—'}</td>
             <td className="px-3 py-2">OMR {a.pricePerPax}</td>
             <td className="px-3 py-2 text-right">
               <button onClick={() => remove(a.id)} className="text-[#a5162d] hover:underline">
@@ -346,7 +380,7 @@ function AddonsManager({ fdPackageId, addons, onChange }) {
           </tr>
         )}
       />
-      <div className="mt-3 flex items-end gap-2">
+      <div className="mt-3 flex flex-wrap items-end gap-2">
         <div>
           <FieldLabel>Activity / tour</FieldLabel>
           <Select value={selection} onChange={(e) => setSelection(e.target.value)}>
@@ -362,6 +396,10 @@ function AddonsManager({ fdPackageId, addons, onChange }) {
               </option>
             ))}
           </Select>
+        </div>
+        <div>
+          <FieldLabel>Departure location</FieldLabel>
+          <TextInput placeholder="e.g. Muscat" value={location} onChange={(e) => setLocation(e.target.value)} />
         </div>
         <div>
           <FieldLabel>Price per pax</FieldLabel>
@@ -389,7 +427,18 @@ export default function FdPackageEditor() {
   const [submitting, setSubmitting] = useState('');
 
   useEffect(() => {
-    if (isNew) return;
+    if (isNew) {
+      // Create the draft immediately on open rather than waiting for an
+      // explicit "Save as Draft" click, so hero image / carousel images /
+      // departure dates / itinerary / add-ons are usable right away instead
+      // of being gated behind a manual save first.
+      api.post('/admin/fd-packages', { title: 'New FD Package', status: 'draft' }).then(({ fdPackage }) => {
+        setForm(fdPackage);
+        setPackageId(fdPackage.id);
+        navigate(`/admin/catalog/fd-packages/${fdPackage.id}`, { replace: true });
+      });
+      return;
+    }
     api.get(`/admin/fd-packages/${id}`).then(({ fdPackage }) => {
       setForm(fdPackage);
       setPackageId(fdPackage.id);
@@ -399,6 +448,7 @@ export default function FdPackageEditor() {
       setAddonsEnabled((fdPackage.addons || []).length > 0);
       setImages(fdPackage.images || []);
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, isNew]);
 
   function update(key, value) {
@@ -444,11 +494,7 @@ export default function FdPackageEditor() {
             {addonsEnabled && <AddonsManager fdPackageId={packageId} addons={addons} onChange={setAddons} />}
           </>
         )}
-        {!packageId && (
-          <p className="text-xs text-muted">
-            Save as draft first to unlock departure dates, itinerary, and add-ons.
-          </p>
-        )}
+        {!packageId && <p className="text-xs text-muted">Setting up…</p>}
 
         <ErrorText>{error}</ErrorText>
         <div className="flex justify-end gap-2">
