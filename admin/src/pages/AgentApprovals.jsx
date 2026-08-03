@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api/client.js';
-import { Badge, Button, Card, ErrorText, FieldLabel, Select, Tag, TextInput } from '../components/ui.jsx';
+import { Badge, Button, Card, ErrorText, FieldLabel, Tag, TextInput } from '../components/ui.jsx';
 
 const STATUS_TABS = [
   { value: '', label: 'All' },
@@ -21,17 +20,15 @@ const STATUS_BADGE = {
   suspended: 'grey',
 };
 
-function DecisionPanel({ agency, team, onDecided }) {
+function DecisionPanel({ agency, onDecided }) {
   const [tier, setTier] = useState(agency.tier || 'gold');
   const [creditLimit, setCreditLimit] = useState(agency.creditLimit ?? '');
-  const [rmUserId, setRmUserId] = useState(agency.rmUserId || '');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState('');
 
   useEffect(() => {
     setTier(agency.tier || 'gold');
     setCreditLimit(agency.creditLimit ?? '');
-    setRmUserId(agency.rmUserId || '');
     setError('');
   }, [agency.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -43,7 +40,9 @@ function DecisionPanel({ agency, team, onDecided }) {
       if (status === 'approved') {
         payload.tier = tier;
         if (creditLimit !== '') payload.creditLimit = Number(creditLimit);
-        if (rmUserId) payload.rmUserId = rmUserId;
+        // No rmUserId here — the backend assigns the next Relationship
+        // Manager automatically (round-robin) the moment status flips to
+        // 'approved'.
       }
       const { agency: updated } = await api.patch(`/admin/agencies/${agency.id}`, payload);
       onDecided(updated);
@@ -77,17 +76,11 @@ function DecisionPanel({ agency, team, onDecided }) {
             placeholder="e.g. 5000"
           />
         </div>
-        <div>
-          <FieldLabel>Assign Relationship Manager</FieldLabel>
-          <Select value={rmUserId} onChange={(e) => setRmUserId(e.target.value)}>
-            <option value="">— None —</option>
-            {team.map((member) => (
-              <option key={member.id} value={member.id}>
-                {member.fullName} ({member.role})
-              </option>
-            ))}
-          </Select>
-        </div>
+        {agency.status === 'pending' && (
+          <p className="rounded-md bg-panel px-3 py-2 text-xs text-muted">
+            A Relationship Manager is assigned automatically (round-robin) on approval — no need to pick one.
+          </p>
+        )}
 
         <ErrorText>{error}</ErrorText>
 
@@ -105,10 +98,10 @@ function DecisionPanel({ agency, team, onDecided }) {
 }
 
 export default function AgentApprovals() {
-  const { user, logout, socketConnected, isSuperAdmin } = useAuth();
+  const { isSuperAdmin } = useAuth();
   const [statusFilter, setStatusFilter] = useState('pending');
   const [agencies, setAgencies] = useState([]);
-  const [team, setTeam] = useState([]);
+  const [relationshipManagers, setRelationshipManagers] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -136,12 +129,16 @@ export default function AgentApprovals() {
   useEffect(() => {
     if (!isSuperAdmin) return;
     api
-      .get('/admin/team')
-      .then(({ team: list }) => setTeam(list))
+      .get('/admin/relationship-managers')
+      .then(({ relationshipManagers: list }) => setRelationshipManagers(list))
       .catch(() => {});
   }, [isSuperAdmin]);
 
   const selected = useMemo(() => agencies.find((a) => a.id === selectedId) || null, [agencies, selectedId]);
+  const selectedRm = useMemo(
+    () => (selected?.rmUserId ? relationshipManagers.find((rm) => rm.id === selected.rmUserId) : null),
+    [selected, relationshipManagers]
+  );
 
   function handleDecided(updatedAgency) {
     setAgencies((list) => list.map((a) => (a.id === updatedAgency.id ? updatedAgency : a)));
@@ -153,37 +150,12 @@ export default function AgentApprovals() {
 
   return (
     <div className="min-h-screen bg-[#eef1ef]">
-      <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line-light bg-white/95 px-5 py-3 shadow-sm backdrop-blur">
-        <div>
-          <div className="text-sm font-bold text-ink">Xclusive Oman Admin</div>
-          <div className="text-[11px] text-muted">Agency onboarding desk</div>
-        </div>
-        <div className="flex items-center justify-end gap-3 text-xs">
-        <Link to="/catalog" className="hidden font-semibold text-ink hover:underline sm:inline">
-          Product Catalog
-        </Link>
-        <Link to="/neft-verification" className="hidden font-semibold text-ink hover:underline sm:inline">
-          NEFT Verification
-        </Link>
-        <div
-          className="flex h-8 w-8 items-center justify-center rounded-full border border-line-light bg-panel"
-          title={socketConnected ? 'Live connection active' : 'Connecting…'}
-        >
-          <span className={`h-2.5 w-2.5 rounded-full ${socketConnected ? 'bg-[#2f7d32] shadow-[0_0_0_4px_rgba(47,125,50,0.12)]' : 'bg-[#ccc]'}`} />
-        </div>
-        <span className="hidden sm:inline">
-          {user?.fullName} <span className="text-muted">({user?.role})</span>
-        </span>
-        <Button onClick={logout}>Log out</Button>
-        </div>
-      </div>
-
       <div className="flex flex-col lg:flex-row">
-        <div className="w-full flex-none border-b border-line-light bg-white/90 p-5 lg:min-h-[calc(100vh-65px)] lg:w-96 lg:border-b-0 lg:border-r">
-          <div className="mb-5 flex items-end justify-between gap-3">
+        <div className="w-full flex-none border-b border-line-light bg-white/90 p-6 lg:min-h-screen lg:w-[26rem] lg:border-b-0 lg:border-r">
+          <div className="mb-6 flex items-end justify-between gap-3">
             <div>
-              <h2 className="text-xl font-bold">Agent Approvals</h2>
-              <p className="mt-1 text-xs text-muted">Review agency registrations and account status.</p>
+              <h2 className="text-2xl font-bold">Agent Approvals</h2>
+              <p className="mt-1.5 text-sm text-muted">Review agency registrations and account status.</p>
             </div>
             <Badge tone="grey">{agencies.length}</Badge>
           </div>
@@ -226,11 +198,11 @@ export default function AgentApprovals() {
           </div>
         </div>
 
-        <div className="flex-1 p-5 lg:p-8">
+        <div className="flex-1 p-6 lg:p-10">
           {!selected && <p className="rounded-lg border border-line-light bg-white p-5 text-sm text-muted">Select an agency from the list.</p>}
 
           {selected && (
-            <div className="max-w-3xl">
+            <div className="max-w-4xl">
               <div className="mb-5 rounded-xl border border-line-light bg-white p-5 shadow-sm">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
@@ -269,11 +241,18 @@ export default function AgentApprovals() {
                       <div>{selected.tier}</div>
                     </div>
                   )}
+                  {selected.rmUserId && (
+                    <div className="rounded-md bg-panel px-3 py-2">
+                      <div className="text-[10px] font-semibold uppercase text-muted">Relationship Manager</div>
+                      <div>{selectedRm ? selectedRm.fullName : 'Assigned'}</div>
+                      <div className="text-[10px] text-muted">Assigned automatically, round-robin</div>
+                    </div>
+                  )}
                 </div>
               </Card>
 
               {isSuperAdmin ? (
-                <DecisionPanel agency={selected} team={team} onDecided={handleDecided} />
+                <DecisionPanel agency={selected} onDecided={handleDecided} />
               ) : (
                 <p className="rounded-lg border border-line-light bg-white p-4 text-sm text-muted shadow-sm">
                   Only Super Admins can approve, reject, or reassign agencies — you're viewing

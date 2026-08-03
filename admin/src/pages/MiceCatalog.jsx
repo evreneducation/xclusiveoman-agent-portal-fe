@@ -1,31 +1,24 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { Badge, Button, Card, Checkbox, ErrorText, Select, Table, TextInput } from '../components/ui.jsx';
 
+const MICE_HOTEL_FIELDS = [
+  { key: 'name', label: 'Name', type: 'text', required: true },
+  { key: 'city', label: 'City', type: 'text', required: true },
+  { key: 'category', label: 'Star category', type: 'number' },
+  { key: 'miceBallroomCapacity', label: 'Ballroom capacity', type: 'number' },
+  { key: 'miceBreakoutRooms', label: 'Breakout rooms', type: 'number' },
+  { key: 'description', label: 'Description', type: 'text' },
+  { key: 'isMiceEnabled', label: 'MICE-enabled', type: 'checkbox' },
+];
+
 const ENTITY_FIELDS = {
-  hotels: [
-    { key: 'name', label: 'Name', type: 'text', required: true },
-    { key: 'city', label: 'City', type: 'text', required: true },
-    { key: 'category', label: 'Star category', type: 'number' },
-    { key: 'description', label: 'Description', type: 'text' },
-    { key: 'isMiceEnabled', label: 'MICE-enabled', type: 'checkbox' },
-  ],
-  tours: [
-    { key: 'name', label: 'Name', type: 'text', required: true },
-    { key: 'city', label: 'City', type: 'text', required: true },
-    { key: 'duration', label: 'Duration', type: 'text' },
-    { key: 'description', label: 'Description', type: 'text' },
-    { key: 'suitableAgeMin', label: 'Suitable age (min)', type: 'number' },
-    { key: 'isBestseller', label: 'Bestseller', type: 'checkbox' },
-  ],
   activities: [
     { key: 'name', label: 'Name', type: 'text', required: true },
     { key: 'city', label: 'City', type: 'text', required: true },
     { key: 'duration', label: 'Duration', type: 'text' },
     { key: 'pricePerPax', label: 'Price per pax (OMR)', type: 'number' },
     { key: 'description', label: 'Description', type: 'text' },
-    { key: 'isBestseller', label: 'Bestseller', type: 'checkbox' },
   ],
   transfers: [
     { key: 'name', label: 'Name', type: 'text', required: true },
@@ -40,70 +33,23 @@ const ENTITY_FIELDS = {
     { key: 'city', label: 'City', type: 'text' },
     { key: 'description', label: 'Description', type: 'text' },
   ],
+  experiences: [
+    { key: 'name', label: 'Name', type: 'text', required: true },
+    { key: 'description', label: 'Description', type: 'text' },
+    { key: 'suitableGroupSizeMin', label: 'Min group size', type: 'number' },
+    { key: 'suitableGroupSizeMax', label: 'Max group size', type: 'number' },
+  ],
 };
 
 const TABS = [
-  { key: 'fdPackages', label: 'FD Packages' },
-  { key: 'hotels', label: 'Hotels' },
-  { key: 'tours', label: 'Tours' },
+  { key: 'hotels', label: 'MICE Hotels' },
   { key: 'activities', label: 'Activities' },
   { key: 'transfers', label: 'Transfers' },
+  { key: 'experiences', label: 'Experiences' },
 ];
 
-const STATUS_TONE = { published: 'green', draft: 'grey', closed: 'red' };
-
-function FdPackagesTab() {
-  const [items, setItems] = useState([]);
-  const [search, setSearch] = useState('');
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    api
-      .get('/admin/fd-packages')
-      .then(({ fdPackages }) => setItems(fdPackages))
-      .finally(() => setLoading(false));
-  }, []);
-
-  const filtered = items.filter((i) => i.title.toLowerCase().includes(search.toLowerCase()));
-
-  return (
-    <div>
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <TextInput className="max-w-xs" placeholder="Search FD packages…" value={search} onChange={(e) => setSearch(e.target.value)} />
-        <Link to="/catalog/fd-packages/new">
-          <Button variant="accent">+ Add New FD Package</Button>
-        </Link>
-      </div>
-      {loading ? (
-        <p className="text-xs text-muted">Loading…</p>
-      ) : (
-        <Table
-          columns={['Package', 'Theme', 'Duration', 'Status', '']}
-          rows={filtered}
-          renderRow={(pkg) => (
-            <tr key={pkg.id} className="border-b border-line-light last:border-0">
-              <td className="px-3 py-2 font-semibold">{pkg.title}</td>
-              <td className="px-3 py-2">{pkg.theme || '—'}</td>
-              <td className="px-3 py-2">{pkg.duration || '—'}</td>
-              <td className="px-3 py-2">
-                <Badge tone={STATUS_TONE[pkg.status] || 'grey'}>{pkg.status}</Badge>
-              </td>
-              <td className="px-3 py-2 text-right">
-                <Link to={`/catalog/fd-packages/${pkg.id}`} className="text-accent hover:underline">
-                  Edit
-                </Link>
-              </td>
-            </tr>
-          )}
-        />
-      )}
-    </div>
-  );
-}
-
-function AddEntityForm({ entity, onCreated }) {
-  const fields = ENTITY_FIELDS[entity];
-  const [form, setForm] = useState({});
+function AddEntityForm({ entity, fields, endpoint, onCreated, defaults = {} }) {
+  const [form, setForm] = useState(defaults);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -121,9 +67,9 @@ function AddEntityForm({ entity, onCreated }) {
         if (form[f.key] === undefined) continue;
         payload[f.key] = f.type === 'number' ? Number(form[f.key]) : form[f.key];
       }
-      const { [entity.slice(0, -1)]: created } = await api.post(`/admin/${entity}`, payload);
+      const { [entity]: created } = await api.post(endpoint, payload);
       onCreated(created);
-      setForm({});
+      setForm(defaults);
     } catch (err) {
       setError(err.message || 'Unable to create');
     } finally {
@@ -132,7 +78,7 @@ function AddEntityForm({ entity, onCreated }) {
   }
 
   return (
-    <Card label={`Add ${entity.slice(0, -1)}`} className="mt-4 border-white">
+    <Card label={`Add ${entity}`} className="mt-4 border-white">
       <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {fields.map((f) => (
           <div key={f.key}>
@@ -152,7 +98,7 @@ function AddEntityForm({ entity, onCreated }) {
               <TextInput
                 type={f.type === 'number' ? 'number' : 'text'}
                 required={f.required}
-                value={form[f.key] || ''}
+                value={form[f.key] ?? ''}
                 onChange={(e) => update(f.key, e.target.value)}
               />
             )}
@@ -161,7 +107,7 @@ function AddEntityForm({ entity, onCreated }) {
         <div className="sm:col-span-2">
           <ErrorText>{error}</ErrorText>
           <Button variant="accent" type="submit" disabled={submitting} className="mt-2">
-            {submitting ? 'Saving…' : `Save ${entity.slice(0, -1)}`}
+            {submitting ? 'Saving…' : `Save ${entity}`}
           </Button>
         </div>
       </form>
@@ -169,7 +115,68 @@ function AddEntityForm({ entity, onCreated }) {
   );
 }
 
+function MiceHotelsTab() {
+  const [items, setItems] = useState([]);
+  const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  function load() {
+    setLoading(true);
+    api
+      .get(`/admin/hotels?mice=true${search ? `&search=${encodeURIComponent(search)}` : ''}`)
+      .then(({ hotels }) => setItems(hotels))
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(load, [search]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function handleDelete(id) {
+    await api.del(`/admin/hotels/${id}`);
+    setItems((list) => list.filter((i) => i.id !== id));
+  }
+
+  return (
+    <div>
+      <TextInput className="mb-3 max-w-xs" placeholder="Search MICE hotels…" value={search} onChange={(e) => setSearch(e.target.value)} />
+      {loading ? (
+        <p className="text-xs text-muted">Loading…</p>
+      ) : (
+        <Table
+          columns={['Hotel', 'City', 'Ballroom capacity', 'Breakout rooms', '']}
+          rows={items}
+          renderRow={(item) => (
+            <tr key={item.id} className="border-b border-line-light last:border-0">
+              <td className="px-3 py-2 font-semibold">{item.name}</td>
+              <td className="px-3 py-2">{item.city || '—'}</td>
+              <td className="px-3 py-2">{item.mice_ballroom_capacity ?? '—'}</td>
+              <td className="px-3 py-2">{item.mice_breakout_rooms ?? '—'}</td>
+              <td className="px-3 py-2 text-right">
+                <button onClick={() => handleDelete(item.id)} className="text-[#a5162d] hover:underline">
+                  Delete
+                </button>
+              </td>
+            </tr>
+          )}
+        />
+      )}
+      {!loading && items.length === 0 && (
+        <p className="mt-3 rounded-lg border border-line-light bg-panel px-3 py-3 text-xs text-muted">
+          No MICE-enabled hotels yet — add one below, or enable an existing hotel for MICE from Product Catalog.
+        </p>
+      )}
+      <AddEntityForm
+        entity="hotel"
+        fields={MICE_HOTEL_FIELDS}
+        endpoint="/admin/hotels"
+        defaults={{ isMiceEnabled: true }}
+        onCreated={(created) => setItems((list) => [created, ...list])}
+      />
+    </div>
+  );
+}
+
 function SimpleEntityTab({ entity }) {
+  const fields = ENTITY_FIELDS[entity];
   const [items, setItems] = useState([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
@@ -189,6 +196,8 @@ function SimpleEntityTab({ entity }) {
     setItems((list) => list.filter((i) => i.id !== id));
   }
 
+  const hasCity = entity !== 'experiences';
+
   return (
     <div>
       <TextInput className="mb-3 max-w-xs" placeholder={`Search ${entity}…`} value={search} onChange={(e) => setSearch(e.target.value)} />
@@ -196,12 +205,16 @@ function SimpleEntityTab({ entity }) {
         <p className="text-xs text-muted">Loading…</p>
       ) : (
         <Table
-          columns={['Name', 'City', '']}
+          columns={hasCity ? ['Name', 'City', ''] : ['Name', 'Group size', '']}
           rows={items}
           renderRow={(item) => (
             <tr key={item.id} className="border-b border-line-light last:border-0">
               <td className="px-3 py-2 font-semibold">{item.name}</td>
-              <td className="px-3 py-2">{item.city || '—'}</td>
+              <td className="px-3 py-2">
+                {hasCity
+                  ? item.city || '—'
+                  : `${item.suitable_group_size_min ?? '—'}–${item.suitable_group_size_max ?? '—'}`}
+              </td>
               <td className="px-3 py-2 text-right">
                 <button onClick={() => handleDelete(item.id)} className="text-[#a5162d] hover:underline">
                   Delete
@@ -211,18 +224,31 @@ function SimpleEntityTab({ entity }) {
           )}
         />
       )}
-      <AddEntityForm entity={entity} onCreated={(created) => setItems((list) => [created, ...list])} />
+      <AddEntityForm
+        entity={entity.slice(0, -1)}
+        fields={fields}
+        endpoint={`/admin/${entity}`}
+        onCreated={(created) => setItems((list) => [created, ...list])}
+      />
     </div>
   );
 }
 
-export default function ProductCatalog() {
-  const [tab, setTab] = useState('fdPackages');
+export default function MiceCatalog() {
+  const [tab, setTab] = useState('hotels');
 
   return (
     <div className="min-h-screen bg-[#eef1ef]">
       <div className="mx-auto max-w-6xl p-6 lg:p-10">
-        <h2 className="mb-5 text-3xl font-bold">Product Catalog</h2>
+        <div className="mb-5 flex items-center gap-3">
+          <h2 className="text-3xl font-bold">MICE Catalog Manager</h2>
+          <Badge tone="grey">MICE-specific master data</Badge>
+        </div>
+        <p className="mb-6 max-w-2xl text-sm text-muted">
+          Hotels here are the ones flagged MICE-enabled (with ballroom capacity &amp; breakout rooms) — they, along
+          with activities, transfers, and experiences, populate the MICE Content Hub and curation screen on the
+          agent side.
+        </p>
         <div className="mb-6 flex flex-wrap gap-2">
           {TABS.map((t) => (
             <button
@@ -237,7 +263,7 @@ export default function ProductCatalog() {
           ))}
         </div>
 
-        {tab === 'fdPackages' ? <FdPackagesTab /> : <SimpleEntityTab entity={tab} />}
+        {tab === 'hotels' ? <MiceHotelsTab /> : <SimpleEntityTab entity={tab} />}
       </div>
     </div>
   );

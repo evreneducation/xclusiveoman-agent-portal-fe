@@ -1,15 +1,24 @@
 // Small Tailwind-only building blocks mirroring the wireframe's visual language
 // (.btn, .field, .wf-box, .badge, .tag classes in Xclusive-Oman-Wireframes.html).
+import { motion } from 'framer-motion';
 
 export function Button({ variant = 'default', className = '', ...props }) {
-  const base = 'inline-flex items-center justify-center rounded-md border px-4 py-2 text-xs font-semibold shadow-sm transition duration-150 focus:outline-none focus:ring-2 focus:ring-accent/25 disabled:cursor-not-allowed disabled:opacity-50';
+  const base = 'inline-flex items-center justify-center rounded-md border px-5 py-2.5 text-xs font-semibold shadow-sm transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-accent/25 disabled:cursor-not-allowed disabled:opacity-50';
   const variants = {
     default: 'border-line-light bg-white text-ink hover:border-ink hover:bg-panel',
     solid: 'border-ink bg-ink text-white hover:bg-[#171717]',
     accent: 'border-accent bg-accent text-white hover:bg-[#9f4224]',
     danger: 'border-[#d9a0aa] bg-[#fff7f8] text-[#a5162d] hover:border-[#a5162d] hover:bg-[#fdecef]',
   };
-  return <button className={`${base} ${variants[variant]} ${className}`} {...props} />;
+  return (
+    <motion.button
+      whileHover={props.disabled ? undefined : { scale: 1.015 }}
+      whileTap={props.disabled ? undefined : { scale: 0.985 }}
+      transition={{ duration: 0.12 }}
+      className={`${base} ${variants[variant]} ${className}`}
+      {...props}
+    />
+  );
 }
 
 export function FieldLabel({ children }) {
@@ -19,7 +28,7 @@ export function FieldLabel({ children }) {
 export function TextInput({ className = '', ...props }) {
   return (
     <input
-      className={`w-full rounded-md border border-line-light bg-white px-3 py-2.5 text-sm text-ink shadow-sm placeholder:text-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/15 ${className}`}
+      className={`w-full rounded-md border border-line-light bg-white px-3.5 py-3 text-sm text-ink shadow-sm placeholder:text-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/15 ${className}`}
       {...props}
     />
   );
@@ -28,7 +37,7 @@ export function TextInput({ className = '', ...props }) {
 export function Select({ className = '', children, ...props }) {
   return (
     <select
-      className={`w-full rounded-md border border-line-light bg-white px-3 py-2.5 text-sm text-ink shadow-sm focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/15 ${className}`}
+      className={`w-full rounded-md border border-line-light bg-white px-3.5 py-3 text-sm text-ink shadow-sm focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/15 ${className}`}
       {...props}
     >
       {children}
@@ -38,14 +47,19 @@ export function Select({ className = '', children, ...props }) {
 
 export function Card({ label, className = '', children }) {
   return (
-    <div className={`relative rounded-lg border border-line-light bg-white/95 p-4 shadow-sm ${className}`}>
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, ease: 'easeOut' }}
+      className={`relative rounded-lg border border-line-light bg-white/95 p-5 shadow-sm sm:p-6 ${className}`}
+    >
       {label && (
         <div className="mb-3 text-[10px] font-semibold uppercase text-muted">
           {label}
         </div>
       )}
       {children}
-    </div>
+    </motion.div>
   );
 }
 
