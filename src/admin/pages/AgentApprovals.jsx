@@ -101,7 +101,6 @@ export default function AgentApprovals() {
   const { isSuperAdmin } = useAuth();
   const [statusFilter, setStatusFilter] = useState('pending');
   const [agencies, setAgencies] = useState([]);
-  const [relationshipManagers, setRelationshipManagers] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -126,19 +125,7 @@ export default function AgentApprovals() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter]);
 
-  useEffect(() => {
-    if (!isSuperAdmin) return;
-    api
-      .get('/admin/relationship-managers')
-      .then(({ relationshipManagers: list }) => setRelationshipManagers(list))
-      .catch(() => {});
-  }, [isSuperAdmin]);
-
   const selected = useMemo(() => agencies.find((a) => a.id === selectedId) || null, [agencies, selectedId]);
-  const selectedRm = useMemo(
-    () => (selected?.rmUserId ? relationshipManagers.find((rm) => rm.id === selected.rmUserId) : null),
-    [selected, relationshipManagers]
-  );
 
   function handleDecided(updatedAgency) {
     setAgencies((list) => list.map((a) => (a.id === updatedAgency.id ? updatedAgency : a)));
@@ -193,6 +180,11 @@ export default function AgentApprovals() {
                 <Badge tone={STATUS_BADGE[agency.status] || 'grey'} className="mt-3">
                   {agency.status}
                 </Badge>
+                {agency.rmName && (
+                  <div className="mt-2 text-[11px] text-muted">
+                    RM: <span className="font-semibold text-ink">{agency.rmName}</span>
+                  </div>
+                )}
               </button>
             ))}
           </div>
@@ -244,7 +236,7 @@ export default function AgentApprovals() {
                   {selected.rmUserId && (
                     <div className="rounded-md bg-panel px-3 py-2">
                       <div className="text-[10px] font-semibold uppercase text-muted">Relationship Manager</div>
-                      <div>{selectedRm ? selectedRm.fullName : 'Assigned'}</div>
+                      <div>{selected.rmName || 'Assigned'}</div>
                       <div className="text-[10px] text-muted">Assigned automatically, round-robin</div>
                     </div>
                   )}
