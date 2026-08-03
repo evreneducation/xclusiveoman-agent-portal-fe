@@ -1,4 +1,8 @@
-const BASE_URL = '/api';
+// In dev, VITE_API_PROXY_TARGET is unset and the Vite proxy handles same-origin
+// '/api' requests (see vite.config.js). In production, set VITE_API_PROXY_TARGET
+// to the backend's absolute URL so the built app can reach a separately hosted API.
+const API_TARGET = import.meta.env.VITE_API_PROXY_TARGET?.replace(/\/+$/, '');
+const BASE_URL = API_TARGET ? `${API_TARGET}/api` : '/api';
 
 let accessToken = null;
 let onUnauthorized = null;
