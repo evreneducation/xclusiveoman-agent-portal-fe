@@ -5,7 +5,133 @@ import { Button, Card, Checkbox, ErrorText, FieldLabel, Select, Tag, Table, Text
 
 const THEMES = ['Culture', 'Adventure', 'Nature'];
 
-function BasicsForm({ form, update }) {
+function HeroImageUpload({ packageId, value, onUploaded }) {
+  const [error, setError] = useState('');
+  const [uploading, setUploading] = useState(false);
+
+  async function handleFile(e) {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-selecting the same file later
+    if (!file) return;
+    setError('');
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+      const { fdPackage } = await api.postForm(`/admin/fd-packages/${packageId}/hero-image`, formData);
+      onUploaded(fdPackage.heroImageUrl);
+    } catch (err) {
+      setError(err.message || 'Unable to upload image');
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  return (
+    <div>
+      <FieldLabel>Hero image</FieldLabel>
+      <div className="flex items-center gap-3">
+        {value ? (
+          <img src={value} alt="" className="h-16 w-16 flex-none rounded-md border border-line-light object-cover" />
+        ) : (
+          <div className="flex h-16 w-16 flex-none items-center justify-center rounded-md border border-dashed border-line-light font-mono text-[9px] text-muted">
+            No image
+          </div>
+        )}
+        <div>
+          <label
+            className={`inline-flex cursor-pointer items-center rounded-md border px-3 py-2 text-xs font-semibold shadow-sm ${
+              packageId ? 'border-line-light bg-white text-ink hover:border-ink hover:bg-panel' : 'cursor-not-allowed border-line-light bg-panel text-muted'
+            }`}
+          >
+            {uploading ? 'Uploading…' : value ? 'Change image' : 'Upload image'}
+            <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" disabled={!packageId || uploading} onChange={handleFile} />
+          </label>
+          {!packageId && <p className="mt-1 text-[10px] text-muted">Save as draft first to upload an image.</p>}
+          <ErrorText>{error}</ErrorText>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CarouselImagesUpload({ packageId, images, onChange }) {
+  const [error, setError] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [removingUrl, setRemovingUrl] = useState('');
+
+  async function handleFiles(e) {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (files.length === 0) return;
+    setError('');
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      files.forEach((file) => formData.append('images', file));
+      const { fdPackage } = await api.postForm(`/admin/fd-packages/${packageId}/images`, formData);
+      onChange(fdPackage.images);
+    } catch (err) {
+      setError(err.message || 'Unable to upload images');
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function handleRemove(url) {
+    setError('');
+    setRemovingUrl(url);
+    try {
+      const { fdPackage } = await api.del(`/admin/fd-packages/${packageId}/images/${encodeURIComponent(url)}`);
+      onChange(fdPackage.images);
+    } catch (err) {
+      setError(err.message || 'Unable to remove image');
+    } finally {
+      setRemovingUrl('');
+    }
+  }
+
+  return (
+    <div className="sm:col-span-2">
+      <FieldLabel>Carousel images</FieldLabel>
+      <div className="flex flex-wrap gap-2">
+        {images.map((url) => (
+          <div key={url} className="group relative h-16 w-16 flex-none">
+            <img src={url} alt="" className="h-16 w-16 rounded-md border border-line-light object-cover" />
+            <button
+              type="button"
+              onClick={() => handleRemove(url)}
+              disabled={removingUrl === url}
+              className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-ink bg-white text-[10px] font-bold text-ink shadow-sm hover:bg-panel disabled:opacity-50"
+              title="Remove image"
+            >
+              {removingUrl === url ? '…' : '×'}
+            </button>
+          </div>
+        ))}
+        <label
+          className={`flex h-16 w-16 flex-none cursor-pointer items-center justify-center rounded-md border border-dashed text-center font-mono text-[9px] leading-tight ${
+            packageId ? 'border-line-light text-muted hover:border-ink hover:text-ink' : 'cursor-not-allowed border-line-light text-muted'
+          }`}
+        >
+          {uploading ? 'Uploading…' : '+ Add images'}
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            multiple
+            className="hidden"
+            disabled={!packageId || uploading}
+            onChange={handleFiles}
+          />
+        </label>
+      </div>
+      {!packageId && <p className="mt-1 text-[10px] text-muted">Save as draft first to upload images.</p>}
+      <ErrorText>{error}</ErrorText>
+    </div>
+  );
+}
+
+function BasicsForm({ form, update, packageId, images, onImagesChange }) {
   return (
     <Card label="Basics" className="border-white">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -27,14 +153,8 @@ function BasicsForm({ form, update }) {
             ))}
           </div>
         </div>
-        <div>
-          <FieldLabel>Hero image URL</FieldLabel>
-          <TextInput
-            placeholder="https://…"
-            value={form.heroImageUrl || ''}
-            onChange={(e) => update('heroImageUrl', e.target.value)}
-          />
-        </div>
+        <HeroImageUpload packageId={packageId} value={form.heroImageUrl} onUploaded={(url) => update('heroImageUrl', url)} />
+        <CarouselImagesUpload packageId={packageId} images={images} onChange={onImagesChange} />
         <div className="sm:col-span-2">
           <FieldLabel>Short description</FieldLabel>
           <TextInput value={form.shortDescription || ''} onChange={(e) => update('shortDescription', e.target.value)} />
@@ -81,11 +201,17 @@ function PricingForm({ form, update }) {
   );
 }
 
-function MerchandisingForm({ form, update }) {
+function MerchandisingForm({ form, update, addonsEnabled, onToggleAddons }) {
   return (
     <Card label="Merchandising & discovery attributes" className="border-white">
       <Checkbox checked={!!form.isFeatured} onChange={(v) => update('isFeatured', v)} label="Mark as Featured / Highly Recommended" />
       <Checkbox checked={!!form.isBestseller} onChange={(v) => update('isBestseller', v)} label="Mark as Bestseller" />
+      <Checkbox
+        checked={addonsEnabled}
+        onChange={onToggleAddons}
+        label="Add-ons"
+        hint="Attach priced add-on activities/tours to this package"
+      />
     </Card>
   );
 }
@@ -257,6 +383,8 @@ export default function FdPackageEditor() {
   const [dates, setDates] = useState([]);
   const [itinerary, setItinerary] = useState([]);
   const [addons, setAddons] = useState([]);
+  const [addonsEnabled, setAddonsEnabled] = useState(false);
+  const [images, setImages] = useState([]);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState('');
 
@@ -268,6 +396,8 @@ export default function FdPackageEditor() {
       setDates(fdPackage.departureDates || []);
       setItinerary(fdPackage.itinerary || []);
       setAddons(fdPackage.addons || []);
+      setAddonsEnabled((fdPackage.addons || []).length > 0);
+      setImages(fdPackage.images || []);
     });
   }, [id, isNew]);
 
@@ -303,15 +433,15 @@ export default function FdPackageEditor() {
         </button>
         <h2 className="text-3xl font-bold">{isNew ? 'Add FD Package' : `Edit — ${form.title || ''}`}</h2>
 
-        <BasicsForm form={form} update={update} />
+        <BasicsForm form={form} update={update} packageId={packageId} images={images} onImagesChange={setImages} />
         <PricingForm form={form} update={update} />
-        <MerchandisingForm form={form} update={update} />
+        <MerchandisingForm form={form} update={update} addonsEnabled={addonsEnabled} onToggleAddons={setAddonsEnabled} />
 
         {packageId && (
           <>
             <DepartureDatesManager fdPackageId={packageId} dates={dates} onChange={setDates} />
             <ItineraryManager fdPackageId={packageId} itinerary={itinerary} onChange={setItinerary} />
-            <AddonsManager fdPackageId={packageId} addons={addons} onChange={setAddons} />
+            {addonsEnabled && <AddonsManager fdPackageId={packageId} addons={addons} onChange={setAddons} />}
           </>
         )}
         {!packageId && (
