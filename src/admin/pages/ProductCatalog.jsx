@@ -4,21 +4,6 @@ import { api } from '../api/client.js';
 import { Badge, Button, Card, Checkbox, ErrorText, Select, Table, TextInput } from '../components/ui.jsx';
 
 const ENTITY_FIELDS = {
-  hotels: [
-    { key: 'name', label: 'Name', type: 'text', required: true },
-    { key: 'city', label: 'City', type: 'text', required: true },
-    { key: 'category', label: 'Star category', type: 'number' },
-    { key: 'description', label: 'Description', type: 'text' },
-    { key: 'isMiceEnabled', label: 'MICE-enabled', type: 'checkbox' },
-  ],
-  tours: [
-    { key: 'name', label: 'Name', type: 'text', required: true },
-    { key: 'city', label: 'City', type: 'text', required: true },
-    { key: 'duration', label: 'Duration', type: 'text' },
-    { key: 'description', label: 'Description', type: 'text' },
-    { key: 'suitableAgeMin', label: 'Suitable age (min)', type: 'number' },
-    { key: 'isBestseller', label: 'Bestseller', type: 'checkbox' },
-  ],
   activities: [
     { key: 'name', label: 'Name', type: 'text', required: true },
     { key: 'city', label: 'City', type: 'text', required: true },
@@ -92,6 +77,143 @@ function FdPackagesTab() {
                 <Link to={`/admin/catalog/fd-packages/${pkg.id}`} className="text-accent hover:underline">
                   Edit
                 </Link>
+              </td>
+            </tr>
+          )}
+        />
+      )}
+    </div>
+  );
+}
+
+function HotelsTab() {
+  const [items, setItems] = useState([]);
+  const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  function load() {
+    setLoading(true);
+    api
+      .get(`/hotels${search ? `?search=${encodeURIComponent(search)}` : ''}`)
+      .then(({ hotels }) => setItems(hotels))
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(load, [search]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function handleDelete(id) {
+    await api.del(`/admin/hotels/${id}`);
+    setItems((list) => list.filter((i) => i.id !== id));
+  }
+
+  return (
+    <div>
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <TextInput className="max-w-xs" placeholder="Search hotels…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <Link to="/admin/catalog/hotels/new">
+          <Button variant="accent">+ Add New Hotel</Button>
+        </Link>
+      </div>
+      {loading ? (
+        <p className="text-xs text-muted">Loading…</p>
+      ) : (
+        <Table
+          columns={['', 'Hotel', 'City', 'State', 'Star', 'Email', 'Price / night', '']}
+          rows={items}
+          renderRow={(hotel) => (
+            <tr key={hotel.id} className="border-b border-line-light last:border-0">
+              <td className="px-3 py-2">
+                {hotel.images?.[0] ? (
+                  <img src={hotel.images[0]} alt="" className="h-10 w-10 rounded-md border border-line-light object-cover" />
+                ) : (
+                  <div className="flex h-10 w-10 items-center justify-center rounded-md border border-dashed border-line-light font-mono text-[8px] text-muted">
+                    No image
+                  </div>
+                )}
+              </td>
+              <td className="px-3 py-2 font-semibold">{hotel.name}</td>
+              <td className="px-3 py-2">{hotel.city || '—'}</td>
+              <td className="px-3 py-2">{hotel.state || '—'}</td>
+              <td className="px-3 py-2">{hotel.category ? <Badge tone="amber">{hotel.category}★</Badge> : '—'}</td>
+              <td className="px-3 py-2">{hotel.email || '—'}</td>
+              <td className="px-3 py-2">{hotel.price_per_night != null ? `₹${hotel.price_per_night}` : '—'}</td>
+              <td className="px-3 py-2 text-right">
+                <div className="flex justify-end gap-3">
+                  <Link to={`/admin/catalog/hotels/${hotel.id}`} className="text-accent hover:underline">
+                    Edit
+                  </Link>
+                  <button onClick={() => handleDelete(hotel.id)} className="text-[#a5162d] hover:underline">
+                    Delete
+                  </button>
+                </div>
+              </td>
+            </tr>
+          )}
+        />
+      )}
+    </div>
+  );
+}
+
+function ToursTab() {
+  const [items, setItems] = useState([]);
+  const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  function load() {
+    setLoading(true);
+    api
+      .get(`/tours${search ? `?search=${encodeURIComponent(search)}` : ''}`)
+      .then(({ tours }) => setItems(tours))
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(load, [search]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function handleDelete(id) {
+    await api.del(`/admin/tours/${id}`);
+    setItems((list) => list.filter((i) => i.id !== id));
+  }
+
+  return (
+    <div>
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <TextInput className="max-w-xs" placeholder="Search tours…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <Link to="/admin/catalog/tours/new">
+          <Button variant="accent">+ Add New Tour</Button>
+        </Link>
+      </div>
+      {loading ? (
+        <p className="text-xs text-muted">Loading…</p>
+      ) : (
+        <Table
+          columns={['', 'Tour', 'City', 'Category', 'Duration', 'Price (INR)', '']}
+          rows={items}
+          renderRow={(tour) => (
+            <tr key={tour.id} className="border-b border-line-light last:border-0">
+              <td className="px-3 py-2">
+                {tour.images?.[0] ? (
+                  <img src={tour.images[0]} alt="" className="h-10 w-10 rounded-md border border-line-light object-cover" />
+                ) : (
+                  <div className="flex h-10 w-10 items-center justify-center rounded-md border border-dashed border-line-light font-mono text-[8px] text-muted">
+                    No image
+                  </div>
+                )}
+              </td>
+              <td className="px-3 py-2 font-semibold">{tour.name}</td>
+              <td className="px-3 py-2">{tour.city || '—'}</td>
+              <td className="px-3 py-2">{tour.category ? <Badge tone="amber">{tour.category}</Badge> : '—'}</td>
+              <td className="px-3 py-2">{tour.duration || '—'}</td>
+              <td className="px-3 py-2">{tour.price != null ? `₹${tour.price}` : '—'}</td>
+              <td className="px-3 py-2 text-right">
+                <div className="flex justify-end gap-3">
+                  <Link to={`/admin/catalog/tours/${tour.id}`} className="text-accent hover:underline">
+                    Edit
+                  </Link>
+                  <button onClick={() => handleDelete(tour.id)} className="text-[#a5162d] hover:underline">
+                    Delete
+                  </button>
+                </div>
               </td>
             </tr>
           )}
@@ -237,7 +359,15 @@ export default function ProductCatalog() {
           ))}
         </div>
 
-        {tab === 'fdPackages' ? <FdPackagesTab /> : <SimpleEntityTab entity={tab} />}
+        {tab === 'fdPackages' ? (
+          <FdPackagesTab />
+        ) : tab === 'hotels' ? (
+          <HotelsTab />
+        ) : tab === 'tours' ? (
+          <ToursTab />
+        ) : (
+          <SimpleEntityTab entity={tab} />
+        )}
       </div>
     </div>
   );
