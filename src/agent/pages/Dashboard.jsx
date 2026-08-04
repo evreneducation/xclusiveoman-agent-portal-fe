@@ -96,6 +96,9 @@ export default function Dashboard() {
           <Link to="/agent/departures">
             <Button variant="accent">Browse Group Departures</Button>
           </Link>
+          <Link to="/agent/package-builder">
+            <Button>Build a Custom FIT Package</Button>
+          </Link>
           <Link to="/agent/transactions">
             <Button>Payment &amp; Transaction History</Button>
           </Link>
