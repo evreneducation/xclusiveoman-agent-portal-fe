@@ -6,6 +6,7 @@ import Login from './pages/Login.jsx';
 import AgentApprovals from './pages/AgentApprovals.jsx';
 import ProductCatalog from './pages/ProductCatalog.jsx';
 import FdPackageEditor from './pages/FdPackageEditor.jsx';
+import HotelEditor from './pages/HotelEditor.jsx';
 import MiceCatalog from './pages/MiceCatalog.jsx';
 import NeftVerification from './pages/NeftVerification.jsx';
 import RelationshipManagers from './pages/RelationshipManagers.jsx';
@@ -24,6 +25,7 @@ export default function App() {
             <Route path="sales-managers" element={<SalesManagers />} />
             <Route path="catalog" element={<ProductCatalog />} />
             <Route path="catalog/fd-packages/:id" element={<FdPackageEditor />} />
+            <Route path="catalog/hotels/:id" element={<HotelEditor />} />
             <Route path="mice-catalog" element={<MiceCatalog />} />
             <Route path="neft-verification" element={<NeftVerification />} />
             <Route path="transactions" element={<TransactionLedger />} />
