@@ -12,6 +12,7 @@ import {
   LogoutIcon,
   MenuIcon,
   NotificationsIcon,
+  PanelIcon,
   PaymentsIcon,
   ProfileIcon,
   QuotesIcon,
@@ -31,31 +32,41 @@ const NAV_ITEMS = [
   { to: '/agent/profile', label: 'Profile', Icon: ProfileIcon },
 ];
 
-// The sidebar itself is the colored surface (deep teal, matching the
-// Login page's brand panel) rather than white-with-color-accents, so the
-// Agent Portal reads as its own themed app rather than a recolored copy of
-// the Admin Console's white sidebar.
-function SidebarContent({ onNavigate }) {
+const EXPANDED_WIDTH = 288; // w-72
+const COLLAPSED_WIDTH = 76;
+
+// Shared between the desktop rail and the mobile off-canvas drawer — the
+// mobile drawer always passes collapsed=false (it's already an overlay, so
+// there's no space to reclaim by going icon-only there).
+function SidebarContent({ onNavigate, collapsed = false }) {
   const { user, logout, socketConnected } = useAuth();
   const { pathname } = useLocation();
 
   return (
     <>
-      <div className="flex items-center gap-3 border-b border-white/10 px-6 py-6">
+      <div className={`flex items-center gap-3 border-b border-white/10 px-6 py-6 ${collapsed ? 'justify-center px-3' : ''}`}>
         <div className="flex h-11 w-11 flex-none items-center justify-center rounded-2xl bg-white text-base font-bold text-agent-ink shadow-lg shadow-black/20">
           XO
         </div>
-        <div>
-          <div className="text-sm font-bold leading-tight text-white">Xclusive Oman</div>
-          <div className="text-xs text-white/60">Agent Portal</div>
-        </div>
+        {!collapsed && (
+          <div>
+            <div className="text-sm font-bold leading-tight text-white">Xclusive Oman</div>
+            <div className="text-xs text-white/60">Agent Portal</div>
+          </div>
+        )}
       </div>
 
-      <nav className="flex-1 space-y-1.5 overflow-y-auto px-4 py-5">
+      <nav className="flex-1 space-y-1.5 overflow-y-auto overflow-x-hidden px-3 py-5">
         {NAV_ITEMS.map(({ to, label, Icon }) => {
           const active = pathname === to || pathname.startsWith(`${to}/`);
           return (
-            <Link key={to} to={to} className="relative block" onClick={onNavigate}>
+            <Link
+              key={to}
+              to={to}
+              className="relative block"
+              onClick={onNavigate}
+              title={collapsed ? label : undefined}
+            >
               {active && (
                 <motion.div
                   layoutId="agent-active-nav-pill"
@@ -64,34 +75,44 @@ function SidebarContent({ onNavigate }) {
                 />
               )}
               <span
-                className={`relative z-10 flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold transition-colors ${
-                  active ? 'text-white' : 'text-white/75 hover:bg-white/10 hover:text-white'
-                }`}
+                className={`relative z-10 flex items-center gap-3 rounded-xl py-3 text-sm font-semibold transition-colors ${
+                  collapsed ? 'justify-center px-0' : 'px-4'
+                } ${active ? 'text-white' : 'text-white/75 hover:bg-white/10 hover:text-white'}`}
               >
                 <Icon className="flex-none" />
-                {label}
+                {!collapsed && label}
               </span>
             </Link>
           );
         })}
       </nav>
 
-      <div className="space-y-3 border-t border-white/10 px-4 py-5">
-        <div className="flex items-center gap-2.5 rounded-xl bg-white/10 px-3.5 py-2.5 text-xs">
+      <div className={`space-y-3 border-t border-white/10 py-5 ${collapsed ? 'px-2' : 'px-4'}`}>
+        <div
+          className={`flex items-center gap-2.5 rounded-xl bg-white/10 py-2.5 text-xs ${
+            collapsed ? 'justify-center px-0' : 'px-3.5'
+          }`}
+        >
           <span
             className={`h-2.5 w-2.5 flex-none rounded-full ${
               socketConnected ? 'bg-[#4fd97a] shadow-[0_0_0_4px_rgba(79,217,122,0.25)]' : 'bg-white/30'
             }`}
           />
-          <span className="text-white/70">{socketConnected ? 'Live connection active' : 'Connecting…'}</span>
+          {!collapsed && <span className="text-white/70">{socketConnected ? 'Live connection active' : 'Connecting…'}</span>}
         </div>
-        <div className="px-1 text-xs">
-          <div className="font-semibold text-white">{user?.fullName}</div>
-          <div className="text-white/60">{user?.role}</div>
-        </div>
-        <Button onClick={logout} className="w-full justify-center gap-2">
+        {!collapsed && (
+          <div className="px-1 text-xs">
+            <div className="font-semibold text-white">{user?.fullName}</div>
+            <div className="text-white/60">{user?.role}</div>
+          </div>
+        )}
+        <Button
+          onClick={logout}
+          title={collapsed ? 'Log out' : undefined}
+          className={`w-full justify-center gap-2 ${collapsed ? 'px-0' : ''}`}
+        >
           <LogoutIcon width={16} height={16} />
-          Log out
+          {!collapsed && 'Log out'}
         </Button>
       </div>
     </>
@@ -101,21 +122,35 @@ function SidebarContent({ onNavigate }) {
 export default function AgentLayout() {
   const { pathname } = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  // Desktop rail starts collapsed (icon-only) to leave more room for page
+  // content — click the panel toggle to pin it open; click again to collapse.
+  const [collapsed, setCollapsed] = useState(true);
   const activeItem = NAV_ITEMS.find((item) => pathname === item.to || pathname.startsWith(`${item.to}/`));
 
   return (
     <div className="flex min-h-screen bg-agent-bg">
-      {/* Desktop sidebar — always visible at lg+ */}
+      {/* Desktop sidebar — always visible at lg+, collapsible to an icon rail */}
       <motion.aside
-        initial={{ x: -28, opacity: 0 }}
-        animate={{ x: 0, opacity: 1 }}
+        initial={{ x: -28, opacity: 0, width: COLLAPSED_WIDTH }}
+        animate={{ x: 0, opacity: 1, width: collapsed ? COLLAPSED_WIDTH : EXPANDED_WIDTH }}
         transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-        className="sticky top-0 hidden h-screen w-72 flex-none flex-col bg-[linear-gradient(180deg,#0b4f4a_0%,#083a36_100%)] shadow-xl shadow-black/10 lg:flex"
+        className="sticky top-0 hidden h-screen flex-none flex-col bg-[linear-gradient(180deg,#0b4f4a_0%,#083a36_100%)] shadow-xl shadow-black/10 lg:flex"
       >
-        <SidebarContent />
+        <div className={`flex items-center border-b border-white/10 px-3 py-3 ${collapsed ? 'justify-center' : 'justify-end'}`}>
+          <button
+            type="button"
+            onClick={() => setCollapsed((c) => !c)}
+            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            className="flex h-8 w-8 flex-none items-center justify-center rounded-lg text-white/70 hover:bg-white/10 hover:text-white"
+          >
+            <PanelIcon width={17} height={17} />
+          </button>
+        </div>
+        <SidebarContent collapsed={collapsed} />
       </motion.aside>
 
-      {/* Mobile off-canvas sidebar */}
+      {/* Mobile off-canvas sidebar — always fully expanded, it's an overlay */}
       <AnimatePresence>
         {mobileOpen && (
           <>

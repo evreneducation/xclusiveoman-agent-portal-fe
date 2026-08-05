@@ -15,6 +15,8 @@ import {
   LuLayoutGrid,
   LuLogOut,
   LuMegaphone,
+  LuPanelLeftClose,
+  LuPanelLeftOpen,
   LuPresentation,
   LuReceipt,
   LuUserCheck,
@@ -66,6 +68,9 @@ const NAV_ITEMS = [
   { key: 'support', to: '/admin/support', label: 'Support', Icon: LuHeadset },
 ];
 
+const EXPANDED_WIDTH = 288; // w-72
+const COLLAPSED_WIDTH = 76;
+
 function isActive(pathname, to) {
   return pathname === to || pathname.startsWith(`${to}/`);
 }
@@ -77,6 +82,9 @@ function groupHasActiveChild(pathname, item) {
 export default function AdminLayout() {
   const { user, logout, socketConnected } = useAuth();
   const { pathname } = useLocation();
+  // Starts collapsed (icon rail) — click the panel toggle to pin it open;
+  // click again to collapse back and give the page content the width back.
+  const [collapsed, setCollapsed] = useState(true);
   const [openGroups, setOpenGroups] = useState(() =>
     NAV_ITEMS.filter((item) => item.children && groupHasActiveChild(pathname, item)).map((item) => item.key)
   );
@@ -93,30 +101,56 @@ export default function AdminLayout() {
     setOpenGroups((groups) => (groups.includes(key) ? groups.filter((g) => g !== key) : [...groups, key]));
   }
 
+  // Clicking a group's icon while the rail is collapsed pins the sidebar
+  // open and expands straight into that group, rather than needing a
+  // separate flyout submenu for the collapsed state.
+  function handleGroupClick(key) {
+    if (collapsed) {
+      setCollapsed(false);
+      setOpenGroups((groups) => (groups.includes(key) ? groups : [...groups, key]));
+    } else {
+      toggleGroup(key);
+    }
+  }
+
   return (
     <div className="flex min-h-screen bg-[#eef1f7]">
       <motion.aside
-        initial={{ x: -28, opacity: 0 }}
-        animate={{ x: 0, opacity: 1 }}
+        initial={{ x: -28, opacity: 0, width: COLLAPSED_WIDTH }}
+        animate={{ x: 0, opacity: 1, width: collapsed ? COLLAPSED_WIDTH : EXPANDED_WIDTH }}
         transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-        className="sticky top-0 flex h-screen w-72 flex-none flex-col border-r border-line-light bg-white/95 backdrop-blur"
+        className="sticky top-0 flex h-screen flex-none flex-col border-r border-line-light bg-white/95 backdrop-blur"
       >
-        <div className="flex items-center gap-3 border-b border-line-light px-6 py-6">
+        <div className={`flex items-center border-b border-line-light px-3 py-3 ${collapsed ? 'justify-center' : 'justify-end'}`}>
+          <button
+            type="button"
+            onClick={() => setCollapsed((c) => !c)}
+            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            className="flex h-8 w-8 flex-none items-center justify-center rounded-lg text-muted hover:bg-panel hover:text-ink"
+          >
+            {collapsed ? <LuPanelLeftOpen size={17} /> : <LuPanelLeftClose size={17} />}
+          </button>
+        </div>
+
+        <div className={`flex items-center gap-3 border-b border-line-light px-6 py-6 ${collapsed ? 'justify-center px-3' : ''}`}>
           <div className="flex h-11 w-11 flex-none items-center justify-center rounded-2xl bg-ink text-base font-bold text-white shadow-lg shadow-ink/20">
             XO
           </div>
-          <div>
-            <div className="flex items-center gap-2 text-sm font-bold leading-tight text-ink">
-              Xclusive Oman
-              <span className="rounded-full border border-accent/40 bg-accent-soft px-2 py-0.5 text-[9px] font-semibold uppercase text-accent">
-                Admin
-              </span>
+          {!collapsed && (
+            <div>
+              <div className="flex items-center gap-2 text-sm font-bold leading-tight text-ink">
+                Xclusive Oman
+                <span className="rounded-full border border-accent/40 bg-accent-soft px-2 py-0.5 text-[9px] font-semibold uppercase text-accent">
+                  Admin
+                </span>
+              </div>
+              <div className="text-xs text-muted">Admin Console</div>
             </div>
-            <div className="text-xs text-muted">Admin Console</div>
-          </div>
+          )}
         </div>
 
-        <nav className="flex-1 space-y-1 overflow-y-auto px-4 py-5">
+        <nav className="flex-1 space-y-1 overflow-y-auto overflow-x-hidden px-3 py-5">
           {NAV_ITEMS.map((item) => {
             if (!item.children) {
               const active = isActive(pathname, item.to);
@@ -124,38 +158,46 @@ export default function AdminLayout() {
                 <Link
                   key={item.key}
                   to={item.to}
-                  className={`flex items-center gap-3 rounded-lg border-l-[3px] px-3.5 py-2.5 text-sm font-semibold transition-colors ${
+                  title={collapsed ? item.label : undefined}
+                  className={`flex items-center gap-3 rounded-lg border-l-[3px] py-2.5 text-sm font-semibold transition-colors ${
+                    collapsed ? 'justify-center px-0' : 'px-3.5'
+                  } ${
                     active
                       ? 'border-accent bg-accent-soft/60 text-ink'
                       : 'border-transparent text-muted hover:bg-panel hover:text-ink'
                   }`}
                 >
                   <item.Icon className="flex-none" size={18} />
-                  {item.label}
+                  {!collapsed && item.label}
                 </Link>
               );
             }
 
-            const open = openGroups.includes(item.key);
+            const open = !collapsed && openGroups.includes(item.key);
             const hasActiveChild = groupHasActiveChild(pathname, item);
 
             return (
               <div key={item.key}>
                 <button
                   type="button"
-                  onClick={() => toggleGroup(item.key)}
-                  className={`flex w-full items-center gap-3 rounded-lg border-l-[3px] px-3.5 py-2.5 text-left text-sm font-semibold transition-colors ${
-                    hasActiveChild
-                      ? 'border-accent text-ink'
-                      : 'border-transparent text-muted hover:bg-panel hover:text-ink'
+                  onClick={() => handleGroupClick(item.key)}
+                  title={collapsed ? item.label : undefined}
+                  className={`flex w-full items-center gap-3 rounded-lg border-l-[3px] py-2.5 text-left text-sm font-semibold transition-colors ${
+                    collapsed ? 'justify-center px-0' : 'px-3.5'
+                  } ${
+                    hasActiveChild ? 'border-accent text-ink' : 'border-transparent text-muted hover:bg-panel hover:text-ink'
                   }`}
                 >
                   <item.Icon className="flex-none" size={18} />
-                  <span className="flex-1">{item.label}</span>
-                  <LuChevronDown
-                    size={14}
-                    className={`flex-none transition-transform ${open ? 'rotate-180' : ''}`}
-                  />
+                  {!collapsed && (
+                    <>
+                      <span className="flex-1">{item.label}</span>
+                      <LuChevronDown
+                        size={14}
+                        className={`flex-none transition-transform ${open ? 'rotate-180' : ''}`}
+                      />
+                    </>
+                  )}
                 </button>
                 <AnimatePresence initial={false}>
                   {open && (
@@ -191,22 +233,34 @@ export default function AdminLayout() {
           })}
         </nav>
 
-        <div className="space-y-3 border-t border-line-light px-4 py-5">
-          <div className="flex items-center gap-2.5 rounded-xl bg-panel px-3.5 py-2.5 text-xs">
+        <div className={`space-y-3 border-t border-line-light py-5 ${collapsed ? 'px-2' : 'px-4'}`}>
+          <div
+            className={`flex items-center gap-2.5 rounded-xl bg-panel py-2.5 text-xs ${
+              collapsed ? 'justify-center px-0' : 'px-3.5'
+            }`}
+          >
             <span
               className={`h-2.5 w-2.5 flex-none rounded-full ${
                 socketConnected ? 'bg-[#2f7d32] shadow-[0_0_0_4px_rgba(47,125,50,0.15)]' : 'bg-[#ccc]'
               }`}
             />
-            <span className="text-muted">{socketConnected ? 'Live connection active' : 'Connecting…'}</span>
+            {!collapsed && (
+              <span className="text-muted">{socketConnected ? 'Live connection active' : 'Connecting…'}</span>
+            )}
           </div>
-          <div className="px-1 text-xs">
-            <div className="font-semibold text-ink">{user?.fullName}</div>
-            <div className="text-muted">{user?.role}</div>
-          </div>
-          <Button onClick={logout} className="w-full justify-center gap-2">
+          {!collapsed && (
+            <div className="px-1 text-xs">
+              <div className="font-semibold text-ink">{user?.fullName}</div>
+              <div className="text-muted">{user?.role}</div>
+            </div>
+          )}
+          <Button
+            onClick={logout}
+            title={collapsed ? 'Log out' : undefined}
+            className={`w-full justify-center gap-2 ${collapsed ? 'px-0' : ''}`}
+          >
             <LuLogOut size={16} />
-            Log out
+            {!collapsed && 'Log out'}
           </Button>
         </div>
       </motion.aside>

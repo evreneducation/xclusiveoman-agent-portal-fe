@@ -169,7 +169,7 @@ function HotelPicker({ hotelId, onChange }) {
   );
 }
 
-function BasicsForm({ form, update, packageId, images, onImagesChange }) {
+function BasicsForm({ form, update, packageId }) {
   return (
     <Card label="Basics" className="border-white">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -193,7 +193,12 @@ function BasicsForm({ form, update, packageId, images, onImagesChange }) {
         </div>
         <HotelPicker hotelId={form.hotelId} onChange={(id) => update('hotelId', id)} />
         <HeroImageUpload packageId={packageId} value={form.heroImageUrl} onUploaded={(url) => update('heroImageUrl', url)} />
-        <CarouselImagesUpload packageId={packageId} images={images} onChange={onImagesChange} />
+        {/* images (carousel) now lives in `form` like every other field —
+            previously it had its own parallel `images` state that never
+            synced back into `form`, so clicking Save/Publish afterward sent
+            a stale `form.images` in the PATCH body and silently overwrote
+            the images the upload endpoint had already saved to the DB. */}
+        <CarouselImagesUpload packageId={packageId} images={form.images || []} onChange={(imgs) => update('images', imgs)} />
         <div className="sm:col-span-2">
           <FieldLabel>Short description</FieldLabel>
           <TextInput value={form.shortDescription || ''} onChange={(e) => update('shortDescription', e.target.value)} />
@@ -472,7 +477,6 @@ export default function FdPackageEditor() {
   const [itinerary, setItinerary] = useState([]);
   const [addons, setAddons] = useState([]);
   const [addonsEnabled, setAddonsEnabled] = useState(false);
-  const [images, setImages] = useState([]);
   const [submitting, setSubmitting] = useState('');
 
   useEffect(() => {
@@ -498,7 +502,6 @@ export default function FdPackageEditor() {
       setItinerary(fdPackage.itinerary || []);
       setAddons(fdPackage.addons || []);
       setAddonsEnabled((fdPackage.addons || []).length > 0);
-      setImages(fdPackage.images || []);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, isNew]);
@@ -535,7 +538,7 @@ export default function FdPackageEditor() {
         </button>
         <h2 className="text-3xl font-bold">{isNew ? 'Add FD Package' : `Edit — ${form.title || ''}`}</h2>
 
-        <BasicsForm form={form} update={update} packageId={packageId} images={images} onImagesChange={setImages} />
+        <BasicsForm form={form} update={update} packageId={packageId} />
         <PricingForm form={form} update={update} />
         <MerchandisingForm form={form} update={update} addonsEnabled={addonsEnabled} onToggleAddons={setAddonsEnabled} />
 
