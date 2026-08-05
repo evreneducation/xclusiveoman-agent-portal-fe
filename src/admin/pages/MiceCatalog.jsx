@@ -17,7 +17,7 @@ const ENTITY_FIELDS = {
     { key: 'name', label: 'Name', type: 'text', required: true },
     { key: 'city', label: 'City', type: 'text', required: true },
     { key: 'duration', label: 'Duration', type: 'text' },
-    { key: 'pricePerPax', label: 'Price per pax (OMR)', type: 'number' },
+    { key: 'pricePerPax', label: 'Price per pax (INR)', type: 'number' },
     { key: 'description', label: 'Description', type: 'text' },
   ],
   transfers: [

@@ -53,7 +53,7 @@ export default function TransactionLedger() {
                 <td className="px-3 py-2">{new Date(t.createdAt).toLocaleDateString()}</td>
                 <td className="px-3 py-2 font-semibold">{t.agencyName}</td>
                 <td className="px-3 py-2 font-mono text-[10px]">{t.bookingId.slice(0, 8)}</td>
-                <td className="px-3 py-2">OMR {t.amount}</td>
+                <td className="px-3 py-2">₹{t.amount}</td>
                 <td className="px-3 py-2 uppercase">{t.method}</td>
                 <td className="px-3 py-2">
                   <Badge tone={STATUS_TONE[t.status] || 'grey'}>{t.status}</Badge>
