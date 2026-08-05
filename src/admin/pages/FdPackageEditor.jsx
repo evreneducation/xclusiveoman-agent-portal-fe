@@ -528,7 +528,7 @@ export default function FdPackageEditor() {
   }
 
   return (
-    <div className="min-h-screen bg-[#eef1ef]">
+    <div className="min-h-screen bg-[#eef1f7]">
       <div className="mx-auto max-w-4xl space-y-4 p-6 lg:p-10">
         <button onClick={() => navigate('/admin/catalog')} className="text-xs text-muted hover:text-ink">
           ← Back to catalog
