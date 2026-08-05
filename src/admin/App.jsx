@@ -4,6 +4,7 @@ import { AuthProvider } from './context/AuthContext.jsx';
 import ProtectedRoute from './routes/ProtectedRoute.jsx';
 import AdminLayout from './components/AdminLayout.jsx';
 import Login from './pages/Login.jsx';
+import Dashboard from './pages/Dashboard.jsx';
 import AgentApprovals from './pages/AgentApprovals.jsx';
 import ProductCatalog from './pages/ProductCatalog.jsx';
 import FdPackageEditor from './pages/FdPackageEditor.jsx';
@@ -16,6 +17,10 @@ import QuoteInboxDetail from './pages/QuoteInboxDetail.jsx';
 import RelationshipManagers from './pages/RelationshipManagers.jsx';
 import SalesManagers from './pages/SalesManagers.jsx';
 import TransactionLedger from './pages/TransactionLedger.jsx';
+import BookingsDocuments from './pages/BookingsDocuments.jsx';
+import Marketing from './pages/Marketing.jsx';
+import Analytics from './pages/Analytics.jsx';
+import Support from './pages/Support.jsx';
 
 export default function App() {
   return (
@@ -25,6 +30,7 @@ export default function App() {
           <Route path="login" element={<Login />} />
           <Route element={<ProtectedRoute />}>
             <Route element={<AdminLayout />}>
+              <Route path="dashboard" element={<Dashboard />} />
               <Route path="approvals" element={<AgentApprovals />} />
               <Route path="relationship-managers" element={<RelationshipManagers />} />
               <Route path="sales-managers" element={<SalesManagers />} />
@@ -37,10 +43,14 @@ export default function App() {
               <Route path="quote-inbox/:id" element={<QuoteInboxDetail />} />
               <Route path="neft-verification" element={<NeftVerification />} />
               <Route path="transactions" element={<TransactionLedger />} />
+              <Route path="bookings-documents" element={<BookingsDocuments />} />
+              <Route path="marketing" element={<Marketing />} />
+              <Route path="analytics" element={<Analytics />} />
+              <Route path="support" element={<Support />} />
             </Route>
           </Route>
-          <Route index element={<Navigate to="approvals" replace />} />
-          <Route path="*" element={<Navigate to="approvals" replace />} />
+          <Route index element={<Navigate to="dashboard" replace />} />
+          <Route path="*" element={<Navigate to="dashboard" replace />} />
         </Routes>
       </AuthProvider>
     </ToastProvider>

@@ -90,7 +90,7 @@ export default function QuoteInbox() {
   }, [search, status, destination, submittedDate, page]);
 
   return (
-    <div className="min-h-screen bg-[#eef1ef]">
+    <div className="min-h-screen bg-[#eef1f7]">
       <div className="mx-auto max-w-6xl p-6 lg:p-10">
         <h2 className="mb-1 text-3xl font-bold">Quote Inbox — Custom FIT</h2>
         <p className="mb-5 text-sm text-muted">

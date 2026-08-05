@@ -191,7 +191,7 @@ export default function RelationshipManagers() {
   }
 
   return (
-    <div className="min-h-screen bg-[#eef1ef]">
+    <div className="min-h-screen bg-[#eef1f7]">
       <div className="flex flex-col lg:flex-row">
         <div className="w-full flex-none border-b border-line-light bg-white/90 p-6 lg:min-h-screen lg:w-[26rem] lg:border-b-0 lg:border-r">
           <div className="mb-6 flex items-end justify-between gap-3">

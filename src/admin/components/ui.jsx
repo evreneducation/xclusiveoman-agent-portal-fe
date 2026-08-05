@@ -2,24 +2,10 @@
 // (.btn, .field, .wf-box, .badge, .tag classes in Xclusive-Oman-Wireframes.html).
 import { motion } from 'framer-motion';
 
-export function Button({ variant = 'default', className = '', ...props }) {
-  const base = 'inline-flex items-center justify-center rounded-md border px-5 py-2.5 text-xs font-semibold shadow-sm transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-accent/25 disabled:cursor-not-allowed disabled:opacity-50';
-  const variants = {
-    default: 'border-line-light bg-white text-ink hover:border-ink hover:bg-panel',
-    solid: 'border-ink bg-ink text-white hover:bg-[#171717]',
-    accent: 'border-accent bg-accent text-white hover:bg-[#9f4224]',
-    danger: 'border-[#d9a0aa] bg-[#fff7f8] text-[#a5162d] hover:border-[#a5162d] hover:bg-[#fdecef]',
-  };
-  return (
-    <motion.button
-      whileHover={props.disabled ? undefined : { scale: 1.015 }}
-      whileTap={props.disabled ? undefined : { scale: 0.985 }}
-      transition={{ duration: 0.12 }}
-      className={`${base} ${variants[variant]} ${className}`}
-      {...props}
-    />
-  );
-}
+// Button is now the shadcn/ui component (src/components/ui/button.jsx) —
+// re-exported here so every existing `import { Button } from '../components/ui.jsx'`
+// across the admin pages keeps working unchanged.
+export { Button } from '../../components/ui/button.jsx';
 
 export function FieldLabel({ children }) {
   return <div className="mb-1.5 text-[11px] font-semibold uppercase text-muted">{children}</div>;

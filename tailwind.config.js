@@ -4,17 +4,21 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Pulled from the wireframe's CSS variables (Xclusive-Oman-Wireframes.html :root)
-        // — used by the Admin Console only (src/admin/**). Do not repurpose these
-        // for the Agent Portal; it has its own `agent-*` palette below so the two
-        // portals stay visually distinct per-portal without a second Tailwind build.
-        ink: '#2b2b2b',
-        line: '#9a9a9a',
-        'line-light': '#c9c9c9',
-        panel: '#f4f4f2',
-        accent: '#b9502c',
-        'accent-soft': '#f0d9cd',
-        muted: '#8a8a8a',
+        // Admin Console palette — used only by src/admin/**. Retinted from the
+        // original wireframe's flat black/grey to the deep-navy brand color
+        // used in the master documentation (title/table-header navy), paired
+        // with a warmer accent — while keeping the same token names so every
+        // existing admin component re-themes without further edits. The Agent
+        // Portal has its own separate `agent-*` palette so the two portals
+        // stay visually distinct per-portal without a second Tailwind build.
+        ink: '#16233f',
+        'ink-dark': '#0d1626',
+        line: '#94a0b8',
+        'line-light': '#dce1ec',
+        panel: '#f2f4f9',
+        accent: '#d1642f',
+        'accent-soft': '#fbe1cf',
+        muted: '#69728a',
 
         // Agent Portal — a travel-themed "ocean + sand + gold" identity, kept
         // deliberately distinct from the Admin Console's charcoal/terracotta
