@@ -48,7 +48,7 @@ function PendingSlip({ payment, onDecided }) {
         </div>
         <div className="space-y-2 text-sm">
           <div>
-            Expected amount — <b>OMR {payment.amount}</b>
+            Expected amount — <b>₹{payment.amount}</b>
           </div>
           <div>Slip reference — {payment.neftReference || '—'}</div>
           <div>

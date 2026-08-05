@@ -1,9 +1,24 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api/client.js';
+import { useToast } from '../../shared/components/ToastProvider.jsx';
 import { Button, Card, Checkbox, ErrorText, FieldLabel, Select, Tag, Table, TextInput } from '../components/ui.jsx';
+import { FD_THEMES } from '../../shared/fdPackage/index.js';
 
-const THEMES = ['Culture', 'Adventure', 'Nature'];
+// The backend's validateBody() middleware already returns a human-readable
+// `message` (e.g. "Rate gold must be a valid number"). This is a fallback for
+// endpoints/errors that only carry the raw zod { fieldErrors } shape, so the
+// admin never just sees "Request failed (400)".
+function describeApiError(err) {
+  if (err.message) return err.message;
+  const fieldErrors = err.data?.details?.fieldErrors;
+  if (fieldErrors && Object.keys(fieldErrors).length) {
+    return Object.entries(fieldErrors)
+      .map(([field, messages]) => `${field}: ${messages[0]}`)
+      .join('; ');
+  }
+  return 'Something went wrong. Please try again.';
+}
 
 function HeroImageUpload({ packageId, value, onUploaded }) {
   const [error, setError] = useState('');
@@ -169,7 +184,7 @@ function BasicsForm({ form, update, packageId, images, onImagesChange }) {
         <div>
           <FieldLabel>Theme</FieldLabel>
           <div className="flex flex-wrap gap-1.5">
-            {THEMES.map((t) => (
+            {FD_THEMES.map((t) => (
               <button key={t} type="button" onClick={() => update('theme', t)}>
                 <Tag active={form.theme === t}>{t}</Tag>
               </button>
@@ -209,7 +224,7 @@ function PricingForm({ form, update }) {
           <TextInput type="number" value={form.rateBronze || ''} onChange={(e) => update('rateBronze', Number(e.target.value))} />
         </div>
         <div>
-          <FieldLabel>Deposit (OMR)</FieldLabel>
+          <FieldLabel>Deposit (INR)</FieldLabel>
           <TextInput type="number" value={form.depositAmount || ''} onChange={(e) => update('depositAmount', Number(e.target.value))} />
         </div>
         <div>
@@ -241,14 +256,34 @@ function MerchandisingForm({ form, update, addonsEnabled, onToggleAddons }) {
 }
 
 function DepartureDatesManager({ fdPackageId, dates, onChange }) {
+  const toast = useToast();
   const [date, setDate] = useState('');
   const [seatsTotal, setSeatsTotal] = useState(20);
+  const [location, setLocation] = useState('');
+  const [locations, setLocations] = useState([]);
+
+  useEffect(() => {
+    api.get('/departure-locations').then((d) => setLocations(d.locations || []));
+  }, []);
 
   async function add() {
     if (!date) return;
-    const { departureDate } = await api.post(`/admin/fd-packages/${fdPackageId}/departure-dates`, { date, seatsTotal });
-    onChange([...dates, departureDate]);
-    setDate('');
+    if (!location) {
+      toast.error('Select a location for this departure date.');
+      return;
+    }
+    try {
+      const { departureDate } = await api.post(`/admin/fd-packages/${fdPackageId}/departure-dates`, {
+        date,
+        seatsTotal,
+        location,
+      });
+      onChange([...dates, departureDate]);
+      setDate('');
+      setLocation('');
+    } catch (err) {
+      toast.error(err.message || 'Unable to add departure date');
+    }
   }
 
   async function remove(id) {
@@ -259,11 +294,12 @@ function DepartureDatesManager({ fdPackageId, dates, onChange }) {
   return (
     <Card label="Departure dates & inventory" className="border-white">
       <Table
-        columns={['Date', 'Seats', '']}
+        columns={['Date', 'Location', 'Seats', '']}
         rows={dates}
         renderRow={(d) => (
           <tr key={d.id} className="border-b border-line-light last:border-0">
             <td className="px-3 py-2">{new Date(d.date).toLocaleDateString()}</td>
+            <td className="px-3 py-2">{d.location || '—'}</td>
             <td className="px-3 py-2">
               {d.seats_booked ?? d.seatsBooked ?? 0} / {d.seats_total ?? d.seatsTotal}
             </td>
@@ -275,16 +311,29 @@ function DepartureDatesManager({ fdPackageId, dates, onChange }) {
           </tr>
         )}
       />
-      <div className="mt-3 flex items-end gap-2">
+      <div className="mt-3 flex flex-wrap items-end gap-2">
         <div>
           <FieldLabel>Date</FieldLabel>
           <TextInput type="date" value={date} onChange={(e) => setDate(e.target.value)} />
         </div>
         <div>
+          <FieldLabel>Location *</FieldLabel>
+          <Select value={location} onChange={(e) => setLocation(e.target.value)}>
+            <option value="">Select location…</option>
+            {locations.map((loc) => (
+              <option key={loc.id} value={loc.name}>
+                {loc.name}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div>
           <FieldLabel>Seats</FieldLabel>
           <TextInput type="number" value={seatsTotal} onChange={(e) => setSeatsTotal(Number(e.target.value))} />
         </div>
-        <Button onClick={add}>+ Add departure date</Button>
+        <Button onClick={add} disabled={!date || !location}>
+          + Add departure date
+        </Button>
       </div>
     </Card>
   );
@@ -371,7 +420,7 @@ function AddonsManager({ fdPackageId, addons, onChange }) {
           <tr key={a.id} className="border-b border-line-light last:border-0">
             <td className="px-3 py-2">{a.name}</td>
             <td className="px-3 py-2">{a.location || '—'}</td>
-            <td className="px-3 py-2">OMR {a.pricePerPax}</td>
+            <td className="px-3 py-2">₹{a.pricePerPax}</td>
             <td className="px-3 py-2 text-right">
               <button onClick={() => remove(a.id)} className="text-[#a5162d] hover:underline">
                 Remove
@@ -414,6 +463,7 @@ function AddonsManager({ fdPackageId, addons, onChange }) {
 export default function FdPackageEditor() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const toast = useToast();
   const isNew = id === 'new';
 
   const [form, setForm] = useState({ balanceDueDaysBefore: 30 });
@@ -423,7 +473,6 @@ export default function FdPackageEditor() {
   const [addons, setAddons] = useState([]);
   const [addonsEnabled, setAddonsEnabled] = useState(false);
   const [images, setImages] = useState([]);
-  const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState('');
 
   useEffect(() => {
@@ -432,11 +481,14 @@ export default function FdPackageEditor() {
       // explicit "Save as Draft" click, so hero image / carousel images /
       // departure dates / itinerary / add-ons are usable right away instead
       // of being gated behind a manual save first.
-      api.post('/admin/fd-packages', { title: 'New FD Package', status: 'draft' }).then(({ fdPackage }) => {
-        setForm(fdPackage);
-        setPackageId(fdPackage.id);
-        navigate(`/admin/catalog/fd-packages/${fdPackage.id}`, { replace: true });
-      });
+      api
+        .post('/admin/fd-packages', { title: 'New FD Package', status: 'draft' })
+        .then(({ fdPackage }) => {
+          setForm(fdPackage);
+          setPackageId(fdPackage.id);
+          navigate(`/admin/catalog/fd-packages/${fdPackage.id}`, { replace: true });
+        })
+        .catch((err) => toast.error(err.message || 'Unable to start a new FD package'));
       return;
     }
     api.get(`/admin/fd-packages/${id}`).then(({ fdPackage }) => {
@@ -456,7 +508,6 @@ export default function FdPackageEditor() {
   }
 
   async function handleSave(status) {
-    setError('');
     setSubmitting(status);
     try {
       const payload = { ...form, status };
@@ -468,8 +519,9 @@ export default function FdPackageEditor() {
         const { fdPackage } = await api.patch(`/admin/fd-packages/${packageId}`, payload);
         setForm(fdPackage);
       }
+      toast.success(status === 'published' ? 'FD package published' : 'Draft saved');
     } catch (err) {
-      setError(err.message || 'Unable to save');
+      toast.error(describeApiError(err));
     } finally {
       setSubmitting('');
     }
@@ -496,7 +548,6 @@ export default function FdPackageEditor() {
         )}
         {!packageId && <p className="text-xs text-muted">Setting up…</p>}
 
-        <ErrorText>{error}</ErrorText>
         <div className="flex justify-end gap-2">
           <Button disabled={!!submitting} onClick={() => handleSave('draft')}>
             {submitting === 'draft' ? 'Saving…' : 'Save as Draft'}

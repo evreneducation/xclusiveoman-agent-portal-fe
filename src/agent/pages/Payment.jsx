@@ -40,12 +40,12 @@ function CardPanel({ booking }) {
 
   return (
     <Card label="Option A — Payment Gateway" className="border-white">
-      <p className="mb-3 text-xs text-muted">
+      <p className="mb-3 text-xs text-agent-muted">
         You'll be redirected to Cashfree's secure checkout to complete card payment.
       </p>
       <ErrorText>{error}</ErrorText>
       <Button variant="accent" className="w-full" disabled={submitting} onClick={handlePay}>
-        {submitting ? 'Starting checkout…' : `Pay OMR ${booking.balanceDue} Now`}
+        {submitting ? 'Starting checkout…' : `Pay ₹${booking.balanceDue} Now`}
       </Button>
     </Card>
   );
@@ -84,7 +84,7 @@ function NeftPanel({ booking }) {
     return (
       <Card label="Option B — NEFT / Bank Transfer" className="border-white">
         <p className="text-sm font-semibold text-[#227647]">Slip submitted for verification.</p>
-        <p className="mt-1 text-xs text-muted">Booking confirms once admin verifies the slip.</p>
+        <p className="mt-1 text-xs text-agent-muted">Booking confirms once admin verifies the slip.</p>
       </Card>
     );
   }
@@ -107,7 +107,7 @@ function NeftPanel({ booking }) {
           type="file"
           accept="image/jpeg,image/png,image/webp,application/pdf"
           onChange={(e) => setFile(e.target.files?.[0] || null)}
-          className="w-full rounded-md border border-line-light bg-white px-3 py-2 text-xs"
+          className="w-full rounded-md border border-agent-line-light bg-white px-3 py-2 text-xs"
         />
         <ErrorText>{error}</ErrorText>
         <Button variant="accent" type="submit" className="w-full" disabled={submitting}>
@@ -139,36 +139,34 @@ export default function Payment() {
     );
   }
   if (!booking) {
-    return <div className="p-8 text-sm text-muted">Loading…</div>;
+    return <div className="p-8 text-sm text-agent-muted">Loading…</div>;
   }
 
   return (
-    <div className="min-h-screen bg-[#eef1ef]">
-      <div className="mx-auto max-w-xl p-5 lg:p-8">
-        <Link to="/agent/dashboard" className="mb-4 inline-block text-xs text-muted hover:text-ink">
-          ← Back to dashboard
-        </Link>
-        <h2 className="mb-4 text-xl font-bold">Payment</h2>
+    <div className="mx-auto max-w-xl p-5 lg:p-8">
+      <Link to="/agent/dashboard" className="mb-4 inline-block text-xs text-agent-muted hover:text-agent-ink">
+        ← Back to dashboard
+      </Link>
+      <h2 className="mb-4 text-xl font-bold text-agent-ink">Payment</h2>
 
-        <Card label="Amount due" className="mb-4 border-white">
-          <div className="flex justify-between text-sm">
-            <span>Deposit due now</span>
-            <b>OMR {booking.balanceDue}</b>
-          </div>
-          <div className="mt-1 text-xs text-muted">Total booking value: OMR {booking.totalPrice}</div>
-        </Card>
-
-        <div className="mb-4 flex gap-2">
-          <button onClick={() => setMethod('card')}>
-            <Tag active={method === 'card'}>Pay by Card</Tag>
-          </button>
-          <button onClick={() => setMethod('neft')}>
-            <Tag active={method === 'neft'}>Pay via NEFT</Tag>
-          </button>
+      <Card label="Amount due" className="mb-4 border-white">
+        <div className="flex justify-between text-sm">
+          <span>Deposit due now</span>
+          <b>₹{booking.balanceDue}</b>
         </div>
+        <div className="mt-1 text-xs text-agent-muted">Total booking value: ₹{booking.totalPrice}</div>
+      </Card>
 
-        {method === 'card' ? <CardPanel booking={booking} /> : <NeftPanel booking={booking} />}
+      <div className="mb-4 flex gap-2">
+        <button onClick={() => setMethod('card')}>
+          <Tag active={method === 'card'}>Pay by Card</Tag>
+        </button>
+        <button onClick={() => setMethod('neft')}>
+          <Tag active={method === 'neft'}>Pay via NEFT</Tag>
+        </button>
       </div>
+
+      {method === 'card' ? <CardPanel booking={booking} /> : <NeftPanel booking={booking} />}
     </div>
   );
 }

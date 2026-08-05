@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { Button, Card, Checkbox, ErrorText, FieldLabel, TextInput } from '../components/ui.jsx';
 
@@ -22,10 +22,10 @@ function StepIndicator({ step }) {
           key={s.n}
           className={`rounded-full border px-3 py-1.5 font-mono text-[10px] font-semibold ${
             s.n === step
-              ? 'border-accent bg-accent text-white'
+              ? 'border-agent-accent bg-agent-accent text-white'
               : s.n < step
-                ? 'border-ink bg-ink text-white'
-                : 'border-line-light bg-white text-[#666]'
+                ? 'border-agent-ink bg-agent-ink text-white'
+                : 'border-agent-line-light bg-white text-[#666]'
           }`}
         >
           {s.n} {s.label}
@@ -37,9 +37,9 @@ function StepIndicator({ step }) {
 
 function CatalogImage({ url }) {
   return url ? (
-    <img src={url} alt="" className="h-28 w-full rounded-md border border-line-light object-cover" />
+    <img src={url} alt="" className="h-28 w-full rounded-md border border-agent-line-light object-cover" />
   ) : (
-    <div className="flex h-28 w-full items-center justify-center rounded-md border border-dashed border-line-light font-mono text-[9px] text-muted">
+    <div className="flex h-28 w-full items-center justify-center rounded-md border border-dashed border-agent-line-light font-mono text-[9px] text-agent-muted">
       No image
     </div>
   );
@@ -86,7 +86,7 @@ function HotelsStep({ hotels, cityFilter, setCityFilter, selectedHotelId, setSel
   return (
     <Card label="Select a hotel" className="border-white">
       <TextInput className="mb-4 max-w-xs" placeholder="Filter by city…" value={cityFilter} onChange={(e) => setCityFilter(e.target.value)} />
-      {filtered.length === 0 && <p className="text-sm text-muted">No hotels available{cityFilter ? ' for that city' : ''}.</p>}
+      {filtered.length === 0 && <p className="text-sm text-agent-muted">No hotels available{cityFilter ? ' for that city' : ''}.</p>}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {filtered.map((h) => {
           const selected = h.id === selectedHotelId;
@@ -96,16 +96,16 @@ function HotelsStep({ hotels, cityFilter, setCityFilter, selectedHotelId, setSel
               key={h.id}
               onClick={() => setSelectedHotelId(selected ? '' : h.id)}
               className={`rounded-lg border p-3 text-left shadow-sm transition ${
-                selected ? 'border-accent ring-2 ring-accent/25' : 'border-line-light hover:border-ink'
+                selected ? 'border-agent-accent ring-2 ring-agent-accent/25' : 'border-agent-line-light hover:border-agent-ink'
               }`}
             >
               <CatalogImage url={h.images?.[0]} />
               <div className="mt-2 text-sm font-bold">{h.name}</div>
-              <div className="text-xs text-muted">
+              <div className="text-xs text-agent-muted">
                 {h.city || '—'} {h.category ? `· ${h.category}★` : ''}
               </div>
-              {h.description && <p className="mt-1 line-clamp-2 text-xs text-muted">{h.description}</p>}
-              {selected && <div className="mt-2 text-[10px] font-semibold uppercase text-accent">Selected</div>}
+              {h.description && <p className="mt-1 line-clamp-2 text-xs text-agent-muted">{h.description}</p>}
+              {selected && <div className="mt-2 text-[10px] font-semibold uppercase text-agent-accent">Selected</div>}
             </button>
           );
         })}
@@ -123,16 +123,16 @@ function ToursStep({ tours, cityFilter, setCityFilter, selectedTourIds, toggleTo
   return (
     <Card label="Select tours (optional, multiple allowed)" className="border-white">
       <TextInput className="mb-4 max-w-xs" placeholder="Filter by city…" value={cityFilter} onChange={(e) => setCityFilter(e.target.value)} />
-      {filtered.length === 0 && <p className="text-sm text-muted">No tours available{cityFilter ? ' for that city' : ''}.</p>}
+      {filtered.length === 0 && <p className="text-sm text-agent-muted">No tours available{cityFilter ? ' for that city' : ''}.</p>}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {filtered.map((t) => (
-          <div key={t.id} className="rounded-lg border border-line-light p-3 shadow-sm">
+          <div key={t.id} className="rounded-lg border border-agent-line-light p-3 shadow-sm">
             <CatalogImage url={t.images?.[0]} />
             <div className="mt-2 text-sm font-bold">{t.name}</div>
-            <div className="text-xs text-muted">
+            <div className="text-xs text-agent-muted">
               {t.city || '—'} {t.category ? `· ${t.category}` : ''} {t.duration ? `· ${t.duration}` : ''}
             </div>
-            {t.description && <p className="mt-1 line-clamp-2 text-xs text-muted">{t.description}</p>}
+            {t.description && <p className="mt-1 line-clamp-2 text-xs text-agent-muted">{t.description}</p>}
             <div className="mt-2">
               <Checkbox checked={selectedTourIds.includes(t.id)} onChange={() => toggleTour(t.id)} label="Include this tour" />
             </div>
@@ -147,15 +147,15 @@ function ToursStep({ tours, cityFilter, setCityFilter, selectedTourIds, toggleTo
 function TransfersStep({ transfers, selectedTransferIds, toggleTransfer }) {
   return (
     <Card label="Select transfers (optional, multiple allowed)" className="border-white">
-      {transfers.length === 0 && <p className="text-sm text-muted">No transfers available.</p>}
+      {transfers.length === 0 && <p className="text-sm text-agent-muted">No transfers available.</p>}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {transfers.map((tr) => (
-          <div key={tr.id} className="rounded-lg border border-line-light p-3 shadow-sm">
+          <div key={tr.id} className="rounded-lg border border-agent-line-light p-3 shadow-sm">
             <div className="text-sm font-bold">{tr.name}</div>
-            <div className="text-xs text-muted">
+            <div className="text-xs text-agent-muted">
               {tr.type ? tr.type.replace(/_/g, ' ') : '—'} {tr.vehicleClass ? `· ${tr.vehicleClass}` : ''} {tr.city ? `· ${tr.city}` : ''}
             </div>
-            {tr.description && <p className="mt-1 text-xs text-muted">{tr.description}</p>}
+            {tr.description && <p className="mt-1 text-xs text-agent-muted">{tr.description}</p>}
             <div className="mt-2">
               <Checkbox checked={selectedTransferIds.includes(tr.id)} onChange={() => toggleTransfer(tr.id)} label="Include this transfer" />
             </div>
@@ -171,16 +171,16 @@ function TransfersStep({ transfers, selectedTransferIds, toggleTransfer }) {
 function ExtrasStep({ activities, selectedActivityIds, toggleActivity }) {
   return (
     <Card label="Select extras / add-ons (optional, multiple allowed)" className="border-white">
-      {activities.length === 0 && <p className="text-sm text-muted">No extras available.</p>}
+      {activities.length === 0 && <p className="text-sm text-agent-muted">No extras available.</p>}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {activities.map((a) => (
-          <div key={a.id} className="rounded-lg border border-line-light p-3 shadow-sm">
+          <div key={a.id} className="rounded-lg border border-agent-line-light p-3 shadow-sm">
             <CatalogImage url={a.images?.[0]} />
             <div className="mt-2 text-sm font-bold">{a.name}</div>
-            <div className="text-xs text-muted">
+            <div className="text-xs text-agent-muted">
               {a.city || '—'} {a.duration ? `· ${a.duration}` : ''}
             </div>
-            {a.description && <p className="mt-1 line-clamp-2 text-xs text-muted">{a.description}</p>}
+            {a.description && <p className="mt-1 line-clamp-2 text-xs text-agent-muted">{a.description}</p>}
             <div className="mt-2">
               <Checkbox checked={selectedActivityIds.includes(a.id)} onChange={() => toggleActivity(a.id)} label="Include this extra" />
             </div>
@@ -237,21 +237,21 @@ function ReviewStep({ form, selectedHotel, selectedTours, selectedTransfers, sel
       <Card label="Trip summary" className="border-white">
         <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
           <div>
-            <dt className="text-[10px] font-semibold uppercase text-muted">Destination</dt>
+            <dt className="text-[10px] font-semibold uppercase text-agent-muted">Destination</dt>
             <dd>{form.destination || '—'}</dd>
           </div>
           <div>
-            <dt className="text-[10px] font-semibold uppercase text-muted">Travel dates</dt>
+            <dt className="text-[10px] font-semibold uppercase text-agent-muted">Travel dates</dt>
             <dd>
               {form.dateFrom || '—'} → {form.dateTo || '—'}
             </dd>
           </div>
           <div>
-            <dt className="text-[10px] font-semibold uppercase text-muted">Adults</dt>
+            <dt className="text-[10px] font-semibold uppercase text-agent-muted">Adults</dt>
             <dd>{form.paxAdults || 0}</dd>
           </div>
           <div>
-            <dt className="text-[10px] font-semibold uppercase text-muted">Children</dt>
+            <dt className="text-[10px] font-semibold uppercase text-agent-muted">Children</dt>
             <dd>{form.paxChildren || 0}</dd>
           </div>
         </dl>
@@ -264,13 +264,13 @@ function ReviewStep({ form, selectedHotel, selectedTours, selectedTransfers, sel
             {selectedHotel.category ? ` · ${selectedHotel.category}★` : ''}
           </div>
         ) : (
-          <p className="text-sm text-muted">No hotel selected.</p>
+          <p className="text-sm text-agent-muted">No hotel selected.</p>
         )}
       </Card>
 
       <Card label="Selected tours" className="border-white">
         {selectedTours.length === 0 ? (
-          <p className="text-sm text-muted">No tours selected.</p>
+          <p className="text-sm text-agent-muted">No tours selected.</p>
         ) : (
           <ul className="list-disc space-y-1 pl-5 text-sm">
             {selectedTours.map((t) => (
@@ -284,7 +284,7 @@ function ReviewStep({ form, selectedHotel, selectedTours, selectedTransfers, sel
 
       <Card label="Selected transfers" className="border-white">
         {selectedTransfers.length === 0 ? (
-          <p className="text-sm text-muted">No transfers selected.</p>
+          <p className="text-sm text-agent-muted">No transfers selected.</p>
         ) : (
           <ul className="list-disc space-y-1 pl-5 text-sm">
             {selectedTransfers.map((t) => (
@@ -296,7 +296,7 @@ function ReviewStep({ form, selectedHotel, selectedTours, selectedTransfers, sel
 
       <Card label="Selected extras" className="border-white">
         {selectedActivities.length === 0 ? (
-          <p className="text-sm text-muted">No extras selected.</p>
+          <p className="text-sm text-agent-muted">No extras selected.</p>
         ) : (
           <ul className="list-disc space-y-1 pl-5 text-sm">
             {selectedActivities.map((a) => (
@@ -434,96 +434,85 @@ export default function PackageBuilder() {
   const selectedActivities = activities.filter((a) => selectedActivityIds.includes(a.id));
 
   return (
-    <div className="min-h-screen bg-[#eef1ef]">
-      <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line-light bg-white/95 px-5 py-3 shadow-sm backdrop-blur">
-        <Link to="/agent/dashboard" className="text-sm font-bold text-ink">
-          ← Xclusive Oman
-        </Link>
-        <Link to="/agent/dashboard">
-          <Button>Dashboard</Button>
-        </Link>
-      </div>
+    <div className="mx-auto max-w-5xl p-5 lg:p-8">
+      <h2 className="mb-1 text-2xl font-bold text-agent-ink">Custom FIT Package Builder</h2>
+      <p className="mb-5 text-sm text-agent-muted">
+        Build a personalised package for your client. Pricing is handled by Xclusive Oman once you submit
+        — no cost or price is shown anywhere in this builder.
+      </p>
 
-      <div className="mx-auto max-w-5xl p-5 lg:p-8">
-        <h2 className="mb-1 text-2xl font-bold">Custom FIT Package Builder</h2>
-        <p className="mb-5 text-sm text-muted">
-          Build a personalised package for your client. Pricing is handled by Xclusive Oman once you submit
-          — no cost or price is shown anywhere in this builder.
-        </p>
+      {submittedId ? (
+        <Card label="Request submitted" className="border-white">
+          <p className="text-sm text-agent-ink">
+            Your Custom FIT request has been submitted and is now with our team for pricing. You'll be
+            notified once a quote is ready.
+          </p>
+          <p className="mt-2 font-mono text-xs text-agent-muted">Reference: {submittedId}</p>
+          <Button className="mt-4" variant="accent" onClick={() => navigate('/agent/dashboard')}>
+            Back to Dashboard
+          </Button>
+        </Card>
+      ) : catalogLoading ? (
+        <p className="text-sm text-agent-muted">Loading catalog…</p>
+      ) : (
+        <>
+          <StepIndicator step={step} />
 
-        {submittedId ? (
-          <Card label="Request submitted" className="border-white">
-            <p className="text-sm">
-              Your Custom FIT request has been submitted and is now with our team for pricing. You'll be
-              notified once a quote is ready.
-            </p>
-            <p className="mt-2 font-mono text-xs text-muted">Reference: {submittedId}</p>
-            <Button className="mt-4" variant="accent" onClick={() => navigate('/agent/dashboard')}>
-              Back to Dashboard
+          {step === 1 && <TripDetailsStep form={form} update={update} />}
+          {step === 2 && (
+            <HotelsStep
+              hotels={hotels}
+              cityFilter={hotelCityFilter}
+              setCityFilter={setHotelCityFilter}
+              selectedHotelId={selectedHotelId}
+              setSelectedHotelId={setSelectedHotelId}
+            />
+          )}
+          {step === 3 && (
+            <ToursStep
+              tours={tours}
+              cityFilter={tourCityFilter}
+              setCityFilter={setTourCityFilter}
+              selectedTourIds={selectedTourIds}
+              toggleTour={toggleTour}
+            />
+          )}
+          {step === 4 && (
+            <TransfersStep transfers={transfers} selectedTransferIds={selectedTransferIds} toggleTransfer={toggleTransfer} />
+          )}
+          {step === 5 && (
+            <ExtrasStep activities={activities} selectedActivityIds={selectedActivityIds} toggleActivity={toggleActivity} />
+          )}
+          {step === 6 && (
+            <ReviewStep
+              form={form}
+              selectedHotel={selectedHotel}
+              selectedTours={selectedTours}
+              selectedTransfers={selectedTransfers}
+              selectedActivities={selectedActivities}
+              travelers={travelers}
+              setTravelers={setTravelers}
+            />
+          )}
+
+          <ErrorText>{error}</ErrorText>
+
+          <div className="mt-4 flex justify-between">
+            <Button onClick={goBack} disabled={step === 1}>
+              Back
             </Button>
-          </Card>
-        ) : catalogLoading ? (
-          <p className="text-sm text-muted">Loading catalog…</p>
-        ) : (
-          <>
-            <StepIndicator step={step} />
-
-            {step === 1 && <TripDetailsStep form={form} update={update} />}
-            {step === 2 && (
-              <HotelsStep
-                hotels={hotels}
-                cityFilter={hotelCityFilter}
-                setCityFilter={setHotelCityFilter}
-                selectedHotelId={selectedHotelId}
-                setSelectedHotelId={setSelectedHotelId}
-              />
-            )}
-            {step === 3 && (
-              <ToursStep
-                tours={tours}
-                cityFilter={tourCityFilter}
-                setCityFilter={setTourCityFilter}
-                selectedTourIds={selectedTourIds}
-                toggleTour={toggleTour}
-              />
-            )}
-            {step === 4 && (
-              <TransfersStep transfers={transfers} selectedTransferIds={selectedTransferIds} toggleTransfer={toggleTransfer} />
-            )}
-            {step === 5 && (
-              <ExtrasStep activities={activities} selectedActivityIds={selectedActivityIds} toggleActivity={toggleActivity} />
-            )}
-            {step === 6 && (
-              <ReviewStep
-                form={form}
-                selectedHotel={selectedHotel}
-                selectedTours={selectedTours}
-                selectedTransfers={selectedTransfers}
-                selectedActivities={selectedActivities}
-                travelers={travelers}
-                setTravelers={setTravelers}
-              />
-            )}
-
-            <ErrorText>{error}</ErrorText>
-
-            <div className="mt-4 flex justify-between">
-              <Button onClick={goBack} disabled={step === 1}>
-                Back
+            {step < STEPS.length ? (
+              <Button variant="accent" onClick={goNext}>
+                Next
               </Button>
-              {step < STEPS.length ? (
-                <Button variant="accent" onClick={goNext}>
-                  Next
-                </Button>
-              ) : (
-                <Button variant="accent" onClick={handleSubmit} disabled={submitting}>
-                  {submitting ? 'Submitting…' : 'Submit Request'}
-                </Button>
-              )}
-            </div>
-          </>
-        )}
-      </div>
+            ) : (
+              <Button variant="accent" onClick={handleSubmit} disabled={submitting}>
+                {submitting ? 'Submitting…' : 'Submit Request'}
+              </Button>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }
