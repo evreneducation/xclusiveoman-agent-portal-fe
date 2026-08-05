@@ -1,68 +1,69 @@
 import { useEffect, useState } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
+import {
+  LuBriefcase,
+  LuBuilding2,
+  LuChartColumn,
+  LuChevronDown,
+  LuClipboardCheck,
+  LuContact,
+  LuHeadset,
+  LuInbox,
+  LuLandmark,
+  LuLayoutDashboard,
+  LuLayoutGrid,
+  LuLogOut,
+  LuMegaphone,
+  LuPresentation,
+  LuReceipt,
+  LuUserCheck,
+  LuWallet,
+} from 'react-icons/lu';
 import { useAuth } from '../context/AuthContext.jsx';
 import { Button } from './ui.jsx';
-import {
-  AnalyticsIcon,
-  ApprovalsIcon,
-  BookingsDocsIcon,
-  CatalogIcon,
-  ChevronDownIcon,
-  DashboardIcon,
-  FinanceIcon,
-  LogoutIcon,
-  MarketingIcon,
-  MiceCatalogIcon,
-  NeftIcon,
-  QuoteInboxIcon,
-  RelationshipManagerIcon,
-  SalesManagerIcon,
-  SupportIcon,
-  TeamIcon,
-  TransactionsIcon,
-} from './icons.jsx';
 
 // Grouped, task-oriented sidebar — 9 top-level entries. Items that used to
 // be separate top-level links (Agent Approvals, Relationship Managers,
 // Sales Managers, Product Catalog, MICE Catalog, NEFT Verification,
 // Transaction Ledger) now live as sub-items under a parent group; none of
-// those routes or their page components changed.
+// those routes or their page components changed. Icons are react-icons
+// (Lucide set) rather than hand-rolled SVGs.
 const NAV_ITEMS = [
-  { key: 'dashboard', to: '/admin/dashboard', label: 'Dashboard', Icon: DashboardIcon },
+  { key: 'dashboard', to: '/admin/dashboard', label: 'Dashboard', Icon: LuLayoutDashboard },
   {
     key: 'agencies-team',
     label: 'Agencies & Team',
-    Icon: TeamIcon,
+    Icon: LuBuilding2,
     children: [
-      { to: '/admin/approvals', label: 'Agent Approvals', Icon: ApprovalsIcon },
-      { to: '/admin/relationship-managers', label: 'Relationship Managers', Icon: RelationshipManagerIcon },
-      { to: '/admin/sales-managers', label: 'Sales Managers', Icon: SalesManagerIcon },
+      { to: '/admin/approvals', label: 'Agent Approvals', Icon: LuUserCheck },
+      { to: '/admin/relationship-managers', label: 'Relationship Managers', Icon: LuContact },
+      { to: '/admin/sales-managers', label: 'Sales Managers', Icon: LuBriefcase },
     ],
   },
   {
     key: 'catalog',
     label: 'Catalog',
-    Icon: CatalogIcon,
+    Icon: LuLayoutGrid,
     children: [
-      { to: '/admin/catalog', label: 'Product Catalog', Icon: CatalogIcon },
-      { to: '/admin/mice-catalog', label: 'MICE Catalog', Icon: MiceCatalogIcon },
+      { to: '/admin/catalog', label: 'Product Catalog', Icon: LuLayoutGrid },
+      { to: '/admin/mice-catalog', label: 'MICE Catalog', Icon: LuPresentation },
     ],
   },
-  { key: 'quotes-pricing', to: '/admin/quote-inbox', label: 'Quotes & Pricing', Icon: QuoteInboxIcon },
-  { key: 'bookings-documents', to: '/admin/bookings-documents', label: 'Bookings & Documents', Icon: BookingsDocsIcon },
+  { key: 'quotes-pricing', to: '/admin/quote-inbox', label: 'Quotes & Pricing', Icon: LuInbox },
+  { key: 'bookings-documents', to: '/admin/bookings-documents', label: 'Bookings & Documents', Icon: LuClipboardCheck },
   {
     key: 'finance',
     label: 'Finance',
-    Icon: FinanceIcon,
+    Icon: LuWallet,
     children: [
-      { to: '/admin/neft-verification', label: 'NEFT Verification', Icon: NeftIcon },
-      { to: '/admin/transactions', label: 'Transaction Ledger', Icon: TransactionsIcon },
+      { to: '/admin/neft-verification', label: 'NEFT Verification', Icon: LuLandmark },
+      { to: '/admin/transactions', label: 'Transaction Ledger', Icon: LuReceipt },
     ],
   },
-  { key: 'marketing', to: '/admin/marketing', label: 'Marketing', Icon: MarketingIcon },
-  { key: 'analytics', to: '/admin/analytics', label: 'Analytics', Icon: AnalyticsIcon },
-  { key: 'support', to: '/admin/support', label: 'Support', Icon: SupportIcon },
+  { key: 'marketing', to: '/admin/marketing', label: 'Marketing', Icon: LuMegaphone },
+  { key: 'analytics', to: '/admin/analytics', label: 'Analytics', Icon: LuChartColumn },
+  { key: 'support', to: '/admin/support', label: 'Support', Icon: LuHeadset },
 ];
 
 function isActive(pathname, to) {
@@ -129,7 +130,7 @@ export default function AdminLayout() {
                       : 'border-transparent text-muted hover:bg-panel hover:text-ink'
                   }`}
                 >
-                  <item.Icon className="flex-none" width={18} height={18} />
+                  <item.Icon className="flex-none" size={18} />
                   {item.label}
                 </Link>
               );
@@ -149,11 +150,10 @@ export default function AdminLayout() {
                       : 'border-transparent text-muted hover:bg-panel hover:text-ink'
                   }`}
                 >
-                  <item.Icon className="flex-none" width={18} height={18} />
+                  <item.Icon className="flex-none" size={18} />
                   <span className="flex-1">{item.label}</span>
-                  <ChevronDownIcon
-                    width={14}
-                    height={14}
+                  <LuChevronDown
+                    size={14}
                     className={`flex-none transition-transform ${open ? 'rotate-180' : ''}`}
                   />
                 </button>
@@ -177,7 +177,7 @@ export default function AdminLayout() {
                                 active ? 'bg-ink text-white shadow-sm' : 'text-muted hover:bg-panel hover:text-ink'
                               }`}
                             >
-                              <child.Icon className="flex-none" width={15} height={15} />
+                              <child.Icon className="flex-none" size={15} />
                               {child.label}
                             </Link>
                           );
@@ -205,7 +205,7 @@ export default function AdminLayout() {
             <div className="text-muted">{user?.role}</div>
           </div>
           <Button onClick={logout} className="w-full justify-center gap-2">
-            <LogoutIcon width={16} height={16} />
+            <LuLogOut size={16} />
             Log out
           </Button>
         </div>
