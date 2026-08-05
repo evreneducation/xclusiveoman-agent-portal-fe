@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { api } from '../api/client.js';
 import { Badge, Button, Card, Checkbox, ErrorText, Select, Table, TextInput } from '../components/ui.jsx';
+import { FD_STATUS_TONE, formatCurrency, formatDateRange, getFdBadges, getStartingRate } from '../../shared/fdPackage/index.js';
 
 const ENTITY_FIELDS = {
   activities: [
     { key: 'name', label: 'Name', type: 'text', required: true },
     { key: 'city', label: 'City', type: 'text', required: true },
     { key: 'duration', label: 'Duration', type: 'text' },
-    { key: 'pricePerPax', label: 'Price per pax (OMR)', type: 'number' },
+    { key: 'pricePerPax', label: 'Price per pax (INR)', type: 'number' },
     { key: 'description', label: 'Description', type: 'text' },
     { key: 'isBestseller', label: 'Bestseller', type: 'checkbox' },
   ],
@@ -35,7 +37,81 @@ const TABS = [
   { key: 'transfers', label: 'Transfers' },
 ];
 
-const STATUS_TONE = { published: 'green', draft: 'grey', closed: 'red' };
+function FdPackageCard({ pkg }) {
+  const seatsTotal = pkg.seatsTotal ?? 0;
+  const seatsBooked = pkg.seatsBooked ?? 0;
+  const seatsLeft = Math.max(seatsTotal - seatsBooked, 0);
+  const bookedPct = seatsTotal > 0 ? Math.min((seatsBooked / seatsTotal) * 100, 100) : 0;
+  const dateRange = formatDateRange(pkg.firstDepartureDate, pkg.lastDepartureDate);
+  const rate = getStartingRate(pkg);
+  const badges = getFdBadges(pkg);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25, ease: 'easeOut' }}
+      className="flex h-full flex-col overflow-hidden rounded-lg border border-line-light bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+    >
+      <div className="relative h-40 flex-none bg-panel">
+        {pkg.heroImageUrl ? (
+          <img src={pkg.heroImageUrl} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center font-mono text-[10px] text-muted">No hero image</div>
+        )}
+        <div className="absolute left-2.5 top-2.5 flex flex-wrap gap-1.5">
+          <Badge tone={FD_STATUS_TONE[pkg.status] || 'grey'}>{pkg.status}</Badge>
+          {badges.map((b) => (
+            <Badge key={b.label} tone={b.tone}>
+              {b.label}
+            </Badge>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex flex-1 flex-col p-4">
+        {pkg.hotelName && <div className="text-[11px] font-semibold uppercase text-accent">{pkg.hotelName}</div>}
+        <div className="mt-0.5 text-sm font-bold leading-snug">{pkg.title}</div>
+        <div className="mt-1 text-xs text-muted">
+          {[pkg.duration, pkg.theme].filter(Boolean).join(' · ') || '—'}
+        </div>
+
+        {dateRange && (
+          <div className="mt-2 flex items-center gap-1.5 text-[11px] text-muted">
+            <span>📅</span>
+            {dateRange}
+          </div>
+        )}
+
+        <div className="mt-3">
+          {seatsTotal > 0 ? (
+            <>
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-panel">
+                <div className="h-full rounded-full bg-[#a5162d]" style={{ width: `${bookedPct}%` }} />
+              </div>
+              <div className="mt-1 flex items-center justify-between text-[11px]">
+                <span className="font-semibold text-[#a5162d]">{seatsLeft} seats left</span>
+                <span className="text-muted">{seatsTotal} total</span>
+              </div>
+            </>
+          ) : (
+            <p className="text-[11px] text-muted">No departure dates yet</p>
+          )}
+        </div>
+
+        <div className="mt-3 flex flex-1 items-end justify-between gap-2">
+          <div>
+            <div className="text-[10px] text-muted">Starting at</div>
+            <div className="text-base font-bold">{formatCurrency(rate)}</div>
+          </div>
+          <Link to={`/admin/catalog/fd-packages/${pkg.id}`}>
+            <Button variant="accent">Edit</Button>
+          </Link>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
 
 function FdPackagesTab() {
   const [items, setItems] = useState([]);
@@ -53,7 +129,7 @@ function FdPackagesTab() {
 
   return (
     <div>
-      <div className="mb-3 flex items-center justify-between gap-3">
+      <div className="mb-4 flex items-center justify-between gap-3">
         <TextInput className="max-w-xs" placeholder="Search FD packages…" value={search} onChange={(e) => setSearch(e.target.value)} />
         <Link to="/admin/catalog/fd-packages/new">
           <Button variant="accent">+ Add New FD Package</Button>
@@ -61,26 +137,14 @@ function FdPackagesTab() {
       </div>
       {loading ? (
         <p className="text-xs text-muted">Loading…</p>
+      ) : filtered.length === 0 ? (
+        <p className="text-xs text-muted">No FD packages match that search.</p>
       ) : (
-        <Table
-          columns={['Package', 'Theme', 'Duration', 'Status', '']}
-          rows={filtered}
-          renderRow={(pkg) => (
-            <tr key={pkg.id} className="border-b border-line-light last:border-0">
-              <td className="px-3 py-2 font-semibold">{pkg.title}</td>
-              <td className="px-3 py-2">{pkg.theme || '—'}</td>
-              <td className="px-3 py-2">{pkg.duration || '—'}</td>
-              <td className="px-3 py-2">
-                <Badge tone={STATUS_TONE[pkg.status] || 'grey'}>{pkg.status}</Badge>
-              </td>
-              <td className="px-3 py-2 text-right">
-                <Link to={`/admin/catalog/fd-packages/${pkg.id}`} className="text-accent hover:underline">
-                  Edit
-                </Link>
-              </td>
-            </tr>
-          )}
-        />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {filtered.map((pkg) => (
+            <FdPackageCard key={pkg.id} pkg={pkg} />
+          ))}
+        </div>
       )}
     </div>
   );

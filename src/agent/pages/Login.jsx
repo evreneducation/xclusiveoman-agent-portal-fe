@@ -170,11 +170,11 @@ function RegisterPanel() {
 
 export default function Login() {
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,#f7d8c6_0,#f6eee9_28%,#edf1f0_58%,#e7e5e0_100%)] px-4 py-10">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,#faf0da_0,#f5f0e4_28%,#eaf2f0_58%,#f7f4ec_100%)] px-4 py-10">
       <div className="mx-auto grid w-full max-w-5xl gap-6 lg:grid-cols-[0.9fr_1.1fr]">
-        <div className="flex flex-col justify-between rounded-2xl bg-ink p-8 text-white shadow-xl shadow-black/15">
+        <div className="flex flex-col justify-between rounded-2xl bg-agent-ink p-8 text-white shadow-xl shadow-black/15">
           <div>
-            <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-lg font-bold text-ink shadow-lg shadow-black/10">
+            <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-lg font-bold text-agent-ink shadow-lg shadow-black/10">
               XO
             </div>
             <h1 className="text-3xl font-bold">Xclusive Oman</h1>

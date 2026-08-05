@@ -67,7 +67,7 @@ function DecisionPanel({ agency, onDecided }) {
           </div>
         </div>
         <div>
-          <FieldLabel>Credit limit (OMR)</FieldLabel>
+          <FieldLabel>Credit limit (INR)</FieldLabel>
           <TextInput
             type="number"
             min="0"
