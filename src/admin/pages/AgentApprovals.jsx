@@ -20,6 +20,34 @@ const STATUS_BADGE = {
   suspended: 'grey',
 };
 
+// What the panel actually lets an admin *do* next depends entirely on the
+// agency's current status — a pending agency gets the tier/credit + Approve/
+// Reject decision; an already-approved one only gets Deactivate; a suspended
+// one only gets Reactivate; a rejected one has no further action here. Each
+// status renders its own single, unambiguous action instead of always
+// showing the pending-decision form (which is what made an already-approved
+// agency still show an "Approve Agency" button).
+const DECISION_COPY = {
+  approved: {
+    hint: 'This agency is active and can sign in, browse, and book. Deactivating suspends their access without deleting their data — their tier and credit limit are kept for when they\'re reactivated.',
+    actionLabel: 'Deactivate Agency',
+    actionLabelBusy: 'Deactivating…',
+    nextStatus: 'suspended',
+    actionVariant: 'danger',
+  },
+  suspended: {
+    hint: 'This agency is suspended and cannot sign in. Reactivating restores their previous tier and credit limit.',
+    actionLabel: 'Reactivate Agency',
+    actionLabelBusy: 'Reactivating…',
+    nextStatus: 'approved',
+    actionVariant: 'accent',
+  },
+  rejected: {
+    hint: 'This registration was rejected. No further action is available here.',
+    actionLabel: null,
+  },
+};
+
 function DecisionPanel({ agency, onDecided }) {
   const [tier, setTier] = useState(agency.tier || 'gold');
   const [creditLimit, setCreditLimit] = useState(agency.creditLimit ?? '');
@@ -53,44 +81,60 @@ function DecisionPanel({ agency, onDecided }) {
     }
   }
 
+  const isPending = agency.status === 'pending';
+  const decisionCopy = DECISION_COPY[agency.status];
+
   return (
     <Card label="Decision" className="border-white shadow-sm">
       <div className="space-y-4 text-sm">
-        <div>
-          <FieldLabel>Assign tier</FieldLabel>
-          <div className="flex flex-wrap gap-2">
-            {TIERS.map((t) => (
-              <button key={t} type="button" onClick={() => setTier(t)}>
-                <Tag active={tier === t}>{t[0].toUpperCase() + t.slice(1)}</Tag>
-              </button>
-            ))}
-          </div>
-        </div>
-        <div>
-          <FieldLabel>Credit limit (INR)</FieldLabel>
-          <TextInput
-            type="number"
-            min="0"
-            value={creditLimit}
-            onChange={(e) => setCreditLimit(e.target.value)}
-            placeholder="e.g. 5000"
-          />
-        </div>
-        {agency.status === 'pending' && (
-          <p className="rounded-md bg-panel px-3 py-2 text-xs text-muted">
-            A Relationship Manager is assigned automatically (round-robin) on approval — no need to pick one.
-          </p>
+        {isPending && (
+          <>
+            <div>
+              <FieldLabel>Assign tier</FieldLabel>
+              <div className="flex flex-wrap gap-2">
+                {TIERS.map((t) => (
+                  <button key={t} type="button" onClick={() => setTier(t)}>
+                    <Tag active={tier === t}>{t[0].toUpperCase() + t.slice(1)}</Tag>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <FieldLabel>Credit limit (INR)</FieldLabel>
+              <TextInput
+                type="number"
+                min="0"
+                value={creditLimit}
+                onChange={(e) => setCreditLimit(e.target.value)}
+                placeholder="e.g. 5000"
+              />
+            </div>
+            <p className="rounded-md bg-panel px-3 py-2 text-xs text-muted">
+              A Relationship Manager is assigned automatically (round-robin) on approval — no need to pick one.
+            </p>
+          </>
         )}
+
+        {decisionCopy && <p className="rounded-md bg-panel px-3 py-2 text-xs text-muted">{decisionCopy.hint}</p>}
 
         <ErrorText>{error}</ErrorText>
 
         <div className="flex flex-wrap gap-2 pt-1">
-          <Button variant="accent" className="flex-1 sm:flex-none" disabled={!!submitting} onClick={() => decide('approved')}>
-            {submitting === 'approved' ? 'Approving…' : 'Approve Agency'}
-          </Button>
-          <Button variant="danger" disabled={!!submitting} onClick={() => decide('rejected')}>
-            {submitting === 'rejected' ? 'Rejecting…' : 'Reject'}
-          </Button>
+          {isPending && (
+            <>
+              <Button variant="accent" className="flex-1 sm:flex-none" disabled={!!submitting} onClick={() => decide('approved')}>
+                {submitting === 'approved' ? 'Approving…' : 'Approve Agency'}
+              </Button>
+              <Button variant="danger" disabled={!!submitting} onClick={() => decide('rejected')}>
+                {submitting === 'rejected' ? 'Rejecting…' : 'Reject'}
+              </Button>
+            </>
+          )}
+          {decisionCopy?.actionLabel && (
+            <Button variant={decisionCopy.actionVariant} disabled={!!submitting} onClick={() => decide(decisionCopy.nextStatus)}>
+              {submitting === decisionCopy.nextStatus ? decisionCopy.actionLabelBusy : decisionCopy.actionLabel}
+            </Button>
+          )}
         </div>
       </div>
     </Card>
@@ -101,6 +145,7 @@ export default function AgentApprovals() {
   const { isSuperAdmin } = useAuth();
   const [statusFilter, setStatusFilter] = useState('pending');
   const [agencies, setAgencies] = useState([]);
+  const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -125,6 +170,18 @@ export default function AgentApprovals() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter]);
 
+  // Client-side — the status tabs already round-trip to the API, and this
+  // list is a single admin's agency roster (never paginated), so filtering
+  // the already-fetched page by name/country/license is enough without a
+  // second network round-trip per keystroke.
+  const filteredAgencies = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return agencies;
+    return agencies.filter((a) =>
+      [a.name, a.country, a.licenseNumber].some((field) => field && field.toLowerCase().includes(q))
+    );
+  }, [agencies, search]);
+
   const selected = useMemo(() => agencies.find((a) => a.id === selectedId) || null, [agencies, selectedId]);
 
   function handleDecided(updatedAgency) {
@@ -144,7 +201,14 @@ export default function AgentApprovals() {
               <h2 className="text-2xl font-bold">Agent Approvals</h2>
               <p className="mt-1.5 text-sm text-muted">Review agency registrations and account status.</p>
             </div>
-            <Badge tone="grey">{agencies.length}</Badge>
+            <Badge tone="grey">{filteredAgencies.length}</Badge>
+          </div>
+          <div className="mb-3">
+            <TextInput
+              placeholder="Search by agency, country, or license no…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
           </div>
           <div className="mb-5 flex flex-wrap gap-2">
             {STATUS_TABS.map((tab) => (
@@ -160,9 +224,12 @@ export default function AgentApprovals() {
           {!loading && agencies.length === 0 && (
             <p className="rounded-lg border border-line-light bg-panel px-3 py-3 text-xs text-muted">No agencies in this view.</p>
           )}
+          {!loading && agencies.length > 0 && filteredAgencies.length === 0 && (
+            <p className="rounded-lg border border-line-light bg-panel px-3 py-3 text-xs text-muted">No agencies match that search.</p>
+          )}
 
           <div className="space-y-3">
-            {agencies.map((agency) => (
+            {filteredAgencies.map((agency) => (
               <button
                 key={agency.id}
                 type="button"
@@ -221,16 +288,18 @@ export default function AgentApprovals() {
                     <div className="text-[10px] font-semibold uppercase text-muted">License / IATA no.</div>
                     <div>{selected.licenseNumber || '—'}</div>
                   </div>
-                  <div className="rounded-md bg-panel px-3 py-2">
-                    <div className="text-[10px] font-semibold uppercase text-muted">Current status</div>
-                    <div className="mt-1">
-                      <Badge tone={STATUS_BADGE[selected.status] || 'grey'}>{selected.status}</Badge>
-                    </div>
-                  </div>
+                  {/* Current status is already shown as the badge in the header above —
+                      repeating it here just duplicated it and made the grid feel cluttered. */}
                   {selected.tier && (
                     <div className="rounded-md bg-panel px-3 py-2">
                       <div className="text-[10px] font-semibold uppercase text-muted">Current tier</div>
-                      <div>{selected.tier}</div>
+                      <div className="capitalize">{selected.tier}</div>
+                    </div>
+                  )}
+                  {selected.creditLimit != null && (
+                    <div className="rounded-md bg-panel px-3 py-2">
+                      <div className="text-[10px] font-semibold uppercase text-muted">Credit limit</div>
+                      <div>₹{Number(selected.creditLimit).toLocaleString('en-IN')}</div>
                     </div>
                   )}
                   {selected.rmUserId && (
