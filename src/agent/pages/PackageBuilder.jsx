@@ -191,47 +191,63 @@ function ExtrasStep({ activities, selectedActivityIds, toggleActivity }) {
   );
 }
 
-function TravelersEditor({ travelers, setTravelers }) {
-  function updateTraveler(idx, field, value) {
-    setTravelers((list) => list.map((t, i) => (i === idx ? { ...t, [field]: value } : t)));
-  }
-  function addTraveler() {
-    setTravelers((list) => [...list, { name: '', passportNo: '' }]);
-  }
-  function removeTraveler(idx) {
-    setTravelers((list) => list.filter((_, i) => i !== idx));
+// Traveller Details rows are entirely derived from Trip Details' adult/child
+// counts (no manual add/remove) — passport only ever applies to adults, so
+// each row carries a `type` rather than relying on array position.
+function TravelersEditor({ travelers, updateTraveler }) {
+  const indexed = travelers.map((t, idx) => ({ ...t, idx }));
+  const adults = indexed.filter((t) => t.type === 'adult');
+  const children = indexed.filter((t) => t.type === 'child');
+
+  function renderRow(t) {
+    return (
+      <div key={t.idx} className="flex flex-wrap items-end gap-2">
+        <div className="flex-1 min-w-[160px]">
+          <FieldLabel>Name *</FieldLabel>
+          <TextInput value={t.name} onChange={(e) => updateTraveler(t.idx, 'name', e.target.value)} />
+        </div>
+        {t.type === 'adult' ? (
+          <div className="flex-1 min-w-[160px]">
+            <FieldLabel>Passport no. *</FieldLabel>
+            <TextInput value={t.passportNo || ''} onChange={(e) => updateTraveler(t.idx, 'passportNo', e.target.value)} />
+          </div>
+        ) : (
+          <span className="mb-2.5 text-[11px] text-agent-muted">Passport not required for children</span>
+        )}
+      </div>
+    );
   }
 
   return (
     <Card label="Traveller details" className="border-white">
-      <div className="space-y-2">
-        {travelers.map((t, idx) => (
-          <div key={idx} className="flex flex-wrap items-end gap-2">
-            <div className="flex-1 min-w-[160px]">
-              <FieldLabel>Name *</FieldLabel>
-              <TextInput value={t.name} onChange={(e) => updateTraveler(idx, 'name', e.target.value)} />
+      <p className="mb-3 text-xs text-agent-muted">
+        One row per traveller, matching the adult/child count from Trip details. Name is required for everyone —
+        passport number is required for adults only.
+      </p>
+      {adults.length === 0 && children.length === 0 ? (
+        <p className="text-sm text-agent-muted">Set the number of adults/children in Trip details to add traveller rows.</p>
+      ) : (
+        <div className="space-y-4">
+          {adults.length > 0 && (
+            <div>
+              <div className="mb-2 text-[10px] font-semibold uppercase text-agent-muted">Adults ({adults.length})</div>
+              <div className="space-y-2">{adults.map(renderRow)}</div>
             </div>
-            <div className="flex-1 min-w-[160px]">
-              <FieldLabel>Passport no.</FieldLabel>
-              <TextInput value={t.passportNo || ''} onChange={(e) => updateTraveler(idx, 'passportNo', e.target.value)} />
+          )}
+          {children.length > 0 && (
+            <div>
+              <div className="mb-2 text-[10px] font-semibold uppercase text-agent-muted">Children ({children.length})</div>
+              <div className="space-y-2">{children.map(renderRow)}</div>
             </div>
-            {travelers.length > 1 && (
-              <button type="button" onClick={() => removeTraveler(idx)} className="mb-0.5 text-xs text-[#a5162d] hover:underline">
-                Remove
-              </button>
-            )}
-          </div>
-        ))}
-      </div>
-      <Button className="mt-3" onClick={addTraveler}>
-        + Add traveller
-      </Button>
+          )}
+        </div>
+      )}
     </Card>
   );
 }
 
 // Step 6 — review & submit. No price/cost/markup fields anywhere (FIT-6).
-function ReviewStep({ form, selectedHotel, selectedTours, selectedTransfers, selectedActivities, travelers, setTravelers }) {
+function ReviewStep({ form, selectedHotel, selectedTours, selectedTransfers, selectedActivities, travelers, updateTraveler }) {
   return (
     <div className="space-y-4">
       <Card label="Trip summary" className="border-white">
@@ -306,7 +322,7 @@ function ReviewStep({ form, selectedHotel, selectedTours, selectedTransfers, sel
         )}
       </Card>
 
-      <TravelersEditor travelers={travelers} setTravelers={setTravelers} />
+      <TravelersEditor travelers={travelers} updateTraveler={updateTraveler} />
     </div>
   );
 }
@@ -324,10 +340,24 @@ function validateStep(step, { form, selectedHotelId, travelers }) {
     return '';
   }
   if (step === 6) {
-    if (travelers.filter((t) => t.name.trim()).length === 0) return 'Add at least one traveller.';
+    if (travelers.some((t) => !t.name.trim())) return 'Enter a name for every traveller.';
+    if (travelers.some((t) => t.type === 'adult' && !(t.passportNo || '').trim())) {
+      return 'Enter a passport number for every adult traveller.';
+    }
     return '';
   }
   return '';
+}
+
+// Traveller Details rows are derived from Trip Details' adult/child counts,
+// not manually added/removed — this resizes one type's group to match,
+// keeping already-entered rows (by position within that type) and only
+// adding/dropping from the end when the count changes.
+function resizeTravelerGroup(list, count, type) {
+  if (list.length === count) return list;
+  if (list.length > count) return list.slice(0, count);
+  const additions = Array.from({ length: count - list.length }, () => ({ name: '', passportNo: '', type }));
+  return [...list, ...additions];
 }
 
 export default function PackageBuilder() {
@@ -350,7 +380,9 @@ export default function PackageBuilder() {
   const [selectedTourIds, setSelectedTourIds] = useState([]);
   const [selectedTransferIds, setSelectedTransferIds] = useState([]);
   const [selectedActivityIds, setSelectedActivityIds] = useState([]);
-  const [travelers, setTravelers] = useState([{ name: '', passportNo: '' }]);
+  // Rows are derived from form.paxAdults/paxChildren (see the sync effect
+  // below) rather than started with a hardcoded default row.
+  const [travelers, setTravelers] = useState([]);
 
   // Draft Quotes (item 1) — "Continue Editing" opens /agent/package-builder/:id;
   // draftId then tracks which row "Save Draft" and "Submit Request" write to.
@@ -398,17 +430,42 @@ export default function PackageBuilder() {
         setSelectedTourIds(pr.tours.map((t) => t.id));
         setSelectedTransferIds(pr.transfers.map((t) => t.id));
         setSelectedActivityIds(pr.activities.map((a) => a.id));
-        if (pr.travelers.length > 0) {
-          setTravelers(pr.travelers.map((t) => ({ name: t.name, passportNo: t.passportNo || '' })));
-        }
+        // Bucket by isChild rather than array position — DB order isn't
+        // guaranteed to match adults-then-children (see migration 0023).
+        const loadedAdults = pr.travelers
+          .filter((t) => !t.isChild)
+          .map((t) => ({ name: t.name, passportNo: t.passportNo || '', type: 'adult' }));
+        const loadedChildren = pr.travelers
+          .filter((t) => t.isChild)
+          .map((t) => ({ name: t.name, passportNo: t.passportNo || '', type: 'child' }));
+        setTravelers([
+          ...resizeTravelerGroup(loadedAdults, pr.paxAdults || 0, 'adult'),
+          ...resizeTravelerGroup(loadedChildren, pr.paxChildren || 0, 'child'),
+        ]);
       })
       .catch((err) => setError(err.message || 'Unable to load this draft'))
       .finally(() => setDraftLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draftIdParam]);
 
+  // Traveller Details rows always match Trip Details' adult/child counts —
+  // grows/shrinks each group independently as those fields change, keeping
+  // whatever the agent already typed in the rows that remain.
+  useEffect(() => {
+    const adultsCount = Math.max(0, Number(form.paxAdults) || 0);
+    const childrenCount = Math.max(0, Number(form.paxChildren) || 0);
+    setTravelers((current) => [
+      ...resizeTravelerGroup(current.filter((t) => t.type === 'adult'), adultsCount, 'adult'),
+      ...resizeTravelerGroup(current.filter((t) => t.type === 'child'), childrenCount, 'child'),
+    ]);
+  }, [form.paxAdults, form.paxChildren]);
+
   function update(key, value) {
     setForm((f) => ({ ...f, [key]: value }));
+  }
+
+  function updateTraveler(idx, field, value) {
+    setTravelers((list) => list.map((t, i) => (i === idx ? { ...t, [field]: value } : t)));
   }
 
   // Item 1 — "Save Draft"/"Continue Editing" autosave. Deliberately skips
@@ -425,7 +482,7 @@ export default function PackageBuilder() {
       tourIds: selectedTourIds,
       transferIds: selectedTransferIds,
       activityIds: selectedActivityIds,
-      travelers: travelers.map((t) => ({ name: t.name, passportNo: t.passportNo || undefined })),
+      travelers: travelers.map((t) => ({ name: t.name, passportNo: t.passportNo || undefined, isChild: t.type === 'child' })),
     };
   }
 
@@ -492,9 +549,9 @@ export default function PackageBuilder() {
         tourIds: selectedTourIds,
         transferIds: selectedTransferIds,
         activityIds: selectedActivityIds,
-        travelers: travelers
-          .filter((t) => t.name.trim())
-          .map((t) => ({ name: t.name, passportNo: t.passportNo || undefined })),
+        // Unfiltered — validateStep(6) above already guarantees every row
+        // has a name (and adults have a passport), so all rows are real.
+        travelers: travelers.map((t) => ({ name: t.name, passportNo: t.passportNo || undefined, isChild: t.type === 'child' })),
       };
       // A draft opened via "Continue Editing" submits through its own row
       // (validated the same way — createPackageRequestSchema — just against
@@ -576,7 +633,7 @@ export default function PackageBuilder() {
               selectedTransfers={selectedTransfers}
               selectedActivities={selectedActivities}
               travelers={travelers}
-              setTravelers={setTravelers}
+              updateTraveler={updateTraveler}
             />
           )}
 
