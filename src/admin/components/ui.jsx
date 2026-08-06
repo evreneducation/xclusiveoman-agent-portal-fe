@@ -20,6 +20,15 @@ export function TextInput({ className = '', ...props }) {
   );
 }
 
+export function Textarea({ className = '', ...props }) {
+  return (
+    <textarea
+      className={`w-full rounded-md border border-line-light bg-white px-3.5 py-3 text-sm text-ink shadow-sm placeholder:text-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/15 ${className}`}
+      {...props}
+    />
+  );
+}
+
 export function Select({ className = '', children, ...props }) {
   return (
     <select

@@ -38,6 +38,21 @@ export function formatDateRange(fromIso, toIso) {
   return from === to ? from : `${from} – ${to}`;
 }
 
+// "7N/8D", "3 Days / 2 Nights", "10 Days" -> 8, 3, 10 — the trip's total day
+// count, i.e. how many sections the Day-by-Day Itinerary Builder should have.
+// Matches a digit run immediately (allowing whitespace) followed by a
+// "D"/"Day"/"Days" token, so it works with either the nights-first ("7N/8D")
+// or days-first ("3 Days / 2 Nights") convention used across the wireframes.
+// Returns null when the duration text has no recognizable day count, so
+// callers know to leave the itinerary structure untouched rather than reset it.
+export function parseDurationDays(duration) {
+  if (!duration) return null;
+  const match = String(duration).match(/(\d+)\s*d(?:ay)?s?\b/i);
+  if (!match) return null;
+  const days = Number(match[1]);
+  return Number.isFinite(days) && days > 0 ? days : null;
+}
+
 // The cheapest tier is the headline "Starting at" price on admin's catalog card.
 export function getStartingRate(pkg) {
   const rates = [pkg.rateGold, pkg.rateSilver, pkg.rateBronze].filter((r) => r != null);

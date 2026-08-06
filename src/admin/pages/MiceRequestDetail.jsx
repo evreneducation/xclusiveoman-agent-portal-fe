@@ -1,16 +1,18 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api/client.js';
-import { Badge, Button, Card, ErrorText, FieldLabel, Select, Table, Tag, TextInput, Textarea } from '../components/ui.jsx';
+import { Badge, Card, ErrorText, FieldLabel, Select, Button, Tag, TextInput, Textarea } from '../components/ui.jsx';
 import { formatCurrency } from '../../shared/fdPackage/index.js';
 
 const STATUS_TONE = {
   submitted: 'amber',
-  assigned: 'grey',
+  rfp_dispatched: 'grey',
+  supplier_responses_pending: 'grey',
+  supplier_responses_received: 'grey',
   costed: 'grey',
   published: 'green',
   accepted: 'green',
-  revision_requested: 'amber',
+  negotiating: 'amber',
   declined: 'red',
   expired: 'red',
   converted: 'green',
@@ -20,6 +22,8 @@ function formatStatus(status) {
   return status.replace(/_/g, ' ');
 }
 
+// Same shape as Quote Details' CatalogGrid (QuoteInboxDetail.jsx) — kept as
+// its own copy rather than a shared import since neither page exports one.
 function CatalogGrid({ label, items, empty, renderMeta }) {
   return (
     <Card label={label} className="border-white">
@@ -47,28 +51,32 @@ function CatalogGrid({ label, items, empty, renderMeta }) {
   );
 }
 
-function LeadManagerAssignment({ packageRequest, onUpdated }) {
+// Same shape/behaviour as Quote Details' LeadManagerAssignment
+// (QuoteInboxDetail.jsx) — the doc's mice_rfqs pipeline has no 'assigned'
+// status (assignment happens alongside costing, MICE-10), so unlike Custom
+// FIT this never changes `status`, only `leadManager`.
+function LeadManagerAssignment({ miceRfq, onUpdated }) {
   const [candidates, setCandidates] = useState([]);
-  const [selected, setSelected] = useState(packageRequest.leadManager?.id || '');
+  const [selected, setSelected] = useState(miceRfq.leadManager?.id || '');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     api
-      .get('/admin/package-requests/lead-manager-candidates')
+      .get('/admin/mice-rfqs/lead-manager-candidates')
       .then(({ staff }) => setCandidates(staff))
       .catch((err) => setError(err.message || 'Unable to load staff'));
   }, []);
 
   useEffect(() => {
-    setSelected(packageRequest.leadManager?.id || '');
-  }, [packageRequest.leadManager]);
+    setSelected(miceRfq.leadManager?.id || '');
+  }, [miceRfq.leadManager]);
 
   async function handleAssign() {
     setError('');
     setSubmitting(true);
     try {
-      const { packageRequest: updated } = await api.patch(`/admin/package-requests/${packageRequest.id}/lead-manager`, {
+      const { miceRfq: updated } = await api.patch(`/admin/mice-rfqs/${miceRfq.id}/lead-manager`, {
         leadManagerUserId: selected || null,
       });
       onUpdated(updated);
@@ -97,10 +105,10 @@ function LeadManagerAssignment({ packageRequest, onUpdated }) {
           {submitting ? 'Saving…' : 'Save Assignment'}
         </Button>
       </div>
-      {packageRequest.leadManager && (
+      {miceRfq.leadManager && (
         <p className="mt-3 text-xs text-muted">
-          Currently assigned to <span className="font-semibold text-ink">{packageRequest.leadManager.fullName}</span> (
-          {packageRequest.leadManager.email})
+          Currently assigned to <span className="font-semibold text-ink">{miceRfq.leadManager.fullName}</span> (
+          {miceRfq.leadManager.email})
         </p>
       )}
       <ErrorText>{error}</ErrorText>
@@ -113,9 +121,10 @@ function sumPrices(items, key) {
 }
 
 // One Landing Cost Breakdown row: the Product Catalog auto total for this
-// component, an editable override, and the effective total (override if
-// set, otherwise auto) — matches item 2's "Auto: ₹60,000 / Editable: ₹58,500"
-// example. An empty override input means "use the auto total".
+// component (0 for Venue/Miscellaneous — no catalog source), an editable
+// override, and the effective total. Same shape as Quote Details'
+// CostComponentField (QuoteInboxDetail.jsx). An empty override input means
+// "use the auto total".
 function CostComponentField({ label, auto, value, onChange }) {
   const total = value !== '' ? Number(value) : auto;
   return (
@@ -147,48 +156,50 @@ const MARKUP_TYPES = [
   { value: 'fixed', label: 'Fixed Amount' },
 ];
 
-// Landing Cost Breakdown, Editable Costing, Pricing & Markup, Quote Summary,
-// Internal Notes, and Save Draft / Publish Quote (items 1-6) — one component
-// since they all share the same live-recalculated figures and the same save.
-function CostingAndPublishing({ packageRequest, onUpdated }) {
-  const [hotelCost, setHotelCost] = useState(packageRequest.costing?.hotels?.override ?? '');
-  const [tourCost, setTourCost] = useState(packageRequest.costing?.tours?.override ?? '');
-  const [transferCost, setTransferCost] = useState(packageRequest.costing?.transfers?.override ?? '');
-  const [extraCost, setExtraCost] = useState(packageRequest.costing?.extras?.override ?? '');
-  const [markupType, setMarkupType] = useState(packageRequest.markupType || 'percentage');
-  const [markupValue, setMarkupValue] = useState(packageRequest.markupValue ?? '');
-  const [internalNotes, setInternalNotes] = useState(packageRequest.internalNotes || '');
+// Landing Cost Breakdown, Editable Costing, Markup section, Quote Summary,
+// Internal Notes, and Save Draft / Publish Proposal (items 1-7) — one
+// component since they all share the same live-recalculated figures and the
+// same save, mirroring Quote Details' CostingAndPublishing.
+function CostingAndPublishing({ miceRfq, onUpdated }) {
+  const [hotelCost, setHotelCost] = useState(miceRfq.costing?.hotels?.override ?? '');
+  const [toursActivitiesCost, setToursActivitiesCost] = useState(miceRfq.costing?.toursActivities?.override ?? '');
+  const [transferCost, setTransferCost] = useState(miceRfq.costing?.transfers?.override ?? '');
+  const [venueCost, setVenueCost] = useState(miceRfq.costing?.venue?.override ?? '');
+  const [miscellaneousCost, setMiscellaneousCost] = useState(miceRfq.costing?.miscellaneous?.override ?? '');
+  const [markupType, setMarkupType] = useState(miceRfq.markupType || 'percentage');
+  const [markupValue, setMarkupValue] = useState(miceRfq.markupValue ?? '');
+  const [internalNotes, setInternalNotes] = useState(miceRfq.internalNotes || '');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState('');
 
   // Computed straight from the Product Catalog prices already on
-  // packageRequest.hotels/tours/transfers/activities — recalculates on every
+  // miceRfq.hotels/tours/transfers/activities — recalculates on every
   // keystroke without a round trip, then persisted verbatim by the backend
   // (same formula) on save so the two never drift.
-  const totalPax = (packageRequest.paxAdults || 0) + (packageRequest.paxChildren || 0);
-  const hotelAuto = sumPrices(packageRequest.hotels, 'pricePerNight');
-  const tourAuto = sumPrices(packageRequest.tours, 'price');
-  const transferAuto = sumPrices(packageRequest.transfers, 'price');
-  const extraAuto = sumPrices(packageRequest.activities, 'pricePerPax') * Math.max(totalPax, 1);
+  const hotelAuto = sumPrices(miceRfq.hotels, 'pricePerNight');
+  const toursActivitiesAuto = sumPrices(miceRfq.tours, 'price') + sumPrices(miceRfq.activities, 'pricePerPax') * Math.max(miceRfq.groupSize || 0, 1);
+  const transferAuto = sumPrices(miceRfq.transfers, 'price');
 
   const hotelTotal = hotelCost !== '' ? Number(hotelCost) : hotelAuto;
-  const tourTotal = tourCost !== '' ? Number(tourCost) : tourAuto;
+  const toursActivitiesTotal = toursActivitiesCost !== '' ? Number(toursActivitiesCost) : toursActivitiesAuto;
   const transferTotal = transferCost !== '' ? Number(transferCost) : transferAuto;
-  const extraTotal = extraCost !== '' ? Number(extraCost) : extraAuto;
-  const landingCost = hotelTotal + tourTotal + transferTotal + extraTotal;
+  const venueTotal = venueCost !== '' ? Number(venueCost) : 0;
+  const miscTotal = miscellaneousCost !== '' ? Number(miscellaneousCost) : 0;
+  const landingCost = hotelTotal + toursActivitiesTotal + transferTotal + venueTotal + miscTotal;
 
   const markupNumber = Number(markupValue) || 0;
   const markupAmount = markupType === 'percentage' ? (landingCost * markupNumber) / 100 : markupNumber;
   const sellPrice = landingCost + markupAmount;
 
-  const isPublished = ['published', 'accepted', 'declined', 'expired', 'converted'].includes(packageRequest.status);
+  const isPublished = ['published', 'accepted', 'negotiating', 'declined', 'expired', 'converted'].includes(miceRfq.status);
 
   function buildPayload() {
     return {
       hotelCost: hotelCost === '' ? null : Number(hotelCost),
-      tourCost: tourCost === '' ? null : Number(tourCost),
+      toursActivitiesCost: toursActivitiesCost === '' ? null : Number(toursActivitiesCost),
       transferCost: transferCost === '' ? null : Number(transferCost),
-      extraCost: extraCost === '' ? null : Number(extraCost),
+      venueCost: venueCost === '' ? null : Number(venueCost),
+      miscellaneousCost: miscellaneousCost === '' ? null : Number(miscellaneousCost),
       markupType,
       markupValue: markupNumber,
       internalNotes,
@@ -199,7 +210,7 @@ function CostingAndPublishing({ packageRequest, onUpdated }) {
     setError('');
     setSubmitting('draft');
     try {
-      const { packageRequest: updated } = await api.patch(`/admin/package-requests/${packageRequest.id}/costing`, buildPayload());
+      const { miceRfq: updated } = await api.patch(`/admin/mice-rfqs/${miceRfq.id}/costing`, buildPayload());
       onUpdated(updated);
     } catch (err) {
       setError(err.message || 'Unable to save costing');
@@ -210,26 +221,26 @@ function CostingAndPublishing({ packageRequest, onUpdated }) {
 
   // Item 9: block obviously-invalid publishes before the round trip, but the
   // backend re-validates against what actually got saved either way.
-  async function publishQuote() {
+  async function publishProposal() {
     setError('');
-    if (!packageRequest.leadManager) {
+    if (!miceRfq.leadManager) {
       setError('Assign a Lead Manager before publishing.');
       return;
     }
-    if (!(landingCost > 0)) {
-      setError('Landing Cost must be greater than zero before publishing.');
+    if (!(sellPrice > 0)) {
+      setError('Final Selling Price is invalid — check the costing and markup.');
       return;
     }
     setSubmitting('publish');
     try {
       // Save first so costing/markup/notes are persisted even if the publish
       // step below fails validation — nothing the admin just typed is lost.
-      const { packageRequest: saved } = await api.patch(`/admin/package-requests/${packageRequest.id}/costing`, buildPayload());
+      const { miceRfq: saved } = await api.patch(`/admin/mice-rfqs/${miceRfq.id}/costing`, buildPayload());
       onUpdated(saved);
-      const { packageRequest: published } = await api.post(`/admin/package-requests/${packageRequest.id}/publish`);
+      const { miceRfq: published } = await api.post(`/admin/mice-rfqs/${miceRfq.id}/publish`);
       onUpdated(published);
     } catch (err) {
-      setError(err.message || 'Unable to publish quote');
+      setError(err.message || 'Unable to publish proposal');
     } finally {
       setSubmitting('');
     }
@@ -239,14 +250,21 @@ function CostingAndPublishing({ packageRequest, onUpdated }) {
     <>
       <Card label="Landing Cost Breakdown" className="border-white">
         <p className="mb-3 text-xs text-muted">
-          Auto-calculated from the selected items' Product Catalog prices. Override any component below — Landing
-          Cost recalculates immediately.
+          Hotels, Tours/Activities and Transfers are auto-calculated from the selected items' Product Catalog
+          prices where possible; Venue and Miscellaneous have no catalog source and are entered manually.
+          Override any component below — Landing Cost recalculates immediately.
         </p>
         <div className="space-y-3">
           <CostComponentField label="Hotels" auto={hotelAuto} value={hotelCost} onChange={setHotelCost} />
-          <CostComponentField label="Tours" auto={tourAuto} value={tourCost} onChange={setTourCost} />
+          <CostComponentField
+            label="Activities / Tours"
+            auto={toursActivitiesAuto}
+            value={toursActivitiesCost}
+            onChange={setToursActivitiesCost}
+          />
           <CostComponentField label="Transfers" auto={transferAuto} value={transferCost} onChange={setTransferCost} />
-          <CostComponentField label="Extras" auto={extraAuto} value={extraCost} onChange={setExtraCost} />
+          <CostComponentField label="Conference / Venue" auto={0} value={venueCost} onChange={setVenueCost} />
+          <CostComponentField label="Miscellaneous" auto={0} value={miscellaneousCost} onChange={setMiscellaneousCost} />
         </div>
         <div className="mt-4 flex items-center justify-between rounded-md bg-panel px-4 py-3">
           <span className="text-sm font-semibold">Landing Cost</span>
@@ -269,7 +287,7 @@ function CostingAndPublishing({ packageRequest, onUpdated }) {
             type="number"
             min="0"
             step={markupType === 'percentage' ? '0.1' : '1'}
-            placeholder={markupType === 'percentage' ? 'e.g. 15' : 'e.g. 10000'}
+            placeholder={markupType === 'percentage' ? 'e.g. 18' : 'e.g. 50000'}
             value={markupValue}
             onChange={(e) => setMarkupValue(e.target.value)}
           />
@@ -302,7 +320,7 @@ function CostingAndPublishing({ packageRequest, onUpdated }) {
       <Card label="Internal notes — admin only, never shown to the agent" className="border-white">
         <Textarea
           rows={4}
-          placeholder="Notes for the ops/finance team about this quote…"
+          placeholder="Notes for the ops/finance team about this proposal…"
           value={internalNotes}
           onChange={(e) => setInternalNotes(e.target.value)}
         />
@@ -314,13 +332,13 @@ function CostingAndPublishing({ packageRequest, onUpdated }) {
         <Button disabled={!!submitting} onClick={saveDraft}>
           {submitting === 'draft' ? 'Saving…' : 'Save Draft'}
         </Button>
-        <Button variant="accent" disabled={!!submitting || isPublished} onClick={publishQuote}>
-          {submitting === 'publish' ? 'Publishing…' : isPublished ? 'Published' : 'Publish Quote'}
+        <Button variant="accent" disabled={!!submitting || isPublished} onClick={publishProposal}>
+          {submitting === 'publish' ? 'Publishing…' : isPublished ? 'Published' : 'Publish Proposal'}
         </Button>
-        {packageRequest.publishedAt && (
+        {miceRfq.publishedAt && (
           <span className="text-xs text-muted">
-            Published {new Date(packageRequest.publishedAt).toLocaleString()}
-            {packageRequest.publishedBy?.fullName ? ` by ${packageRequest.publishedBy.fullName}` : ''}
+            Published {new Date(miceRfq.publishedAt).toLocaleString()}
+            {miceRfq.publishedBy?.fullName ? ` by ${miceRfq.publishedBy.fullName}` : ''}
           </span>
         )}
       </div>
@@ -330,7 +348,7 @@ function CostingAndPublishing({ packageRequest, onUpdated }) {
 
 function ActivityHistory({ history }) {
   return (
-    <Card label="Activity history" className="border-white">
+    <Card label="Activity timeline" className="border-white">
       {!history || history.length === 0 ? (
         <p className="text-sm text-muted">No activity yet.</p>
       ) : (
@@ -351,11 +369,11 @@ function ActivityHistory({ history }) {
   );
 }
 
-export default function QuoteInboxDetail() {
+export default function MiceRequestDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
 
-  const [packageRequest, setPackageRequest] = useState(null);
+  const [miceRfq, setMiceRfq] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -363,8 +381,8 @@ export default function QuoteInboxDetail() {
     setLoading(true);
     setError('');
     api
-      .get(`/admin/package-requests/${id}`)
-      .then(({ packageRequest: pr }) => setPackageRequest(pr))
+      .get(`/admin/mice-rfqs/${id}`)
+      .then(({ miceRfq: mr }) => setMiceRfq(mr))
       .catch((err) => setError(err.message || 'Unable to load request'))
       .finally(() => setLoading(false));
   }
@@ -374,108 +392,110 @@ export default function QuoteInboxDetail() {
   return (
     <div className="min-h-screen bg-[#eef1f7]">
       <div className="mx-auto max-w-5xl space-y-4 p-6 lg:p-10">
-        <button onClick={() => navigate('/admin/quote-inbox')} className="text-xs text-muted hover:text-ink">
-          ← Back to Quote Inbox
+        <button onClick={() => navigate('/admin/mice-requests')} className="text-xs text-muted hover:text-ink">
+          ← Back to MICE Requests
         </button>
 
         {loading && <p className="text-sm text-muted">Loading…</p>}
         <ErrorText>{error}</ErrorText>
 
-        {packageRequest && (
+        {miceRfq && (
           <>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h2 className="text-2xl font-bold">Custom FIT Request</h2>
-                <p className="font-mono text-xs text-muted">Quote ID: {packageRequest.id}</p>
+                <h2 className="text-2xl font-bold">MICE Request</h2>
+                <p className="font-mono text-xs text-muted">Quote ID: {miceRfq.id}</p>
               </div>
-              <Badge tone={STATUS_TONE[packageRequest.status] || 'grey'}>{formatStatus(packageRequest.status)}</Badge>
+              <Badge tone={STATUS_TONE[miceRfq.status] || 'grey'}>{formatStatus(miceRfq.status)}</Badge>
             </div>
 
-            <Card label="Trip information" className="border-white">
+            <Card label="Company & event information" className="border-white">
               <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
                 <div>
-                  <dt className="text-[10px] font-semibold uppercase text-muted">Agency</dt>
-                  <dd>{packageRequest.agencyName}</dd>
+                  <dt className="text-[10px] font-semibold uppercase text-muted">Company / Client</dt>
+                  <dd>{miceRfq.agencyName}</dd>
                 </div>
                 <div>
-                  <dt className="text-[10px] font-semibold uppercase text-muted">Agent</dt>
+                  <dt className="text-[10px] font-semibold uppercase text-muted">Contact</dt>
                   <dd>
-                    {packageRequest.agentName}
-                    <div className="text-xs text-muted">{packageRequest.agentEmail}</div>
+                    {miceRfq.agentName}
+                    <div className="text-xs text-muted">{miceRfq.agentEmail}</div>
                   </dd>
                 </div>
                 <div>
                   <dt className="text-[10px] font-semibold uppercase text-muted">Submitted</dt>
-                  <dd>{new Date(packageRequest.submittedAt).toLocaleString()}</dd>
+                  <dd>{new Date(miceRfq.submittedAt).toLocaleString()}</dd>
                 </div>
                 <div>
                   <dt className="text-[10px] font-semibold uppercase text-muted">Destination</dt>
-                  <dd>{packageRequest.destination}</dd>
+                  <dd>{miceRfq.destination}</dd>
                 </div>
                 <div>
-                  <dt className="text-[10px] font-semibold uppercase text-muted">Travel dates</dt>
+                  <dt className="text-[10px] font-semibold uppercase text-muted">Event dates</dt>
                   <dd>
-                    {new Date(packageRequest.dateFrom).toLocaleDateString()} – {new Date(packageRequest.dateTo).toLocaleDateString()}
+                    {new Date(miceRfq.eventDateFrom).toLocaleDateString()} – {new Date(miceRfq.eventDateTo).toLocaleDateString()}
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-[10px] font-semibold uppercase text-muted">Pax</dt>
-                  <dd>
-                    {packageRequest.paxAdults} adult{packageRequest.paxAdults === 1 ? '' : 's'}
-                    {packageRequest.paxChildren ? `, ${packageRequest.paxChildren} child${packageRequest.paxChildren === 1 ? '' : 'ren'}` : ''}
-                  </dd>
+                  <dt className="text-[10px] font-semibold uppercase text-muted">Group size</dt>
+                  <dd>{miceRfq.groupSize} pax</dd>
                 </div>
+                {miceRfq.hallCapacityNeeded != null && (
+                  <div>
+                    <dt className="text-[10px] font-semibold uppercase text-muted">Hall capacity needed</dt>
+                    <dd>{miceRfq.hallCapacityNeeded}</dd>
+                  </div>
+                )}
+                {miceRfq.seatingStyle && (
+                  <div>
+                    <dt className="text-[10px] font-semibold uppercase text-muted">Seating style</dt>
+                    <dd>{miceRfq.seatingStyle}</dd>
+                  </div>
+                )}
               </dl>
-            </Card>
-
-            <LeadManagerAssignment packageRequest={packageRequest} onUpdated={setPackageRequest} />
-
-            <Card label="Traveller details" className="border-white">
-              {packageRequest.travelers.length === 0 ? (
-                <p className="text-sm text-muted">No traveller details captured.</p>
-              ) : (
-                <Table
-                  columns={['Name', 'Passport No.', 'DOB', 'Room share']}
-                  rows={packageRequest.travelers}
-                  renderRow={(t) => (
-                    <tr key={t.id} className="border-b border-line-light last:border-0">
-                      <td className="px-3 py-2 font-semibold">{t.name}</td>
-                      <td className="px-3 py-2">{t.passportNo || '—'}</td>
-                      <td className="px-3 py-2">{t.dob ? new Date(t.dob).toLocaleDateString() : '—'}</td>
-                      <td className="px-3 py-2">{t.roomShareGroup || '—'}</td>
-                    </tr>
-                  )}
-                />
+              {miceRfq.avNeeds && (
+                <div className="mt-3">
+                  <dt className="text-[10px] font-semibold uppercase text-muted">AV / event needs</dt>
+                  <dd className="text-sm">{miceRfq.avNeeds}</dd>
+                </div>
+              )}
+              {miceRfq.otherRequirements && (
+                <div className="mt-3">
+                  <dt className="text-[10px] font-semibold uppercase text-muted">Other requirements</dt>
+                  <dd className="text-sm">{miceRfq.otherRequirements}</dd>
+                </div>
               )}
             </Card>
 
+            <LeadManagerAssignment miceRfq={miceRfq} onUpdated={setMiceRfq} />
+
             <CatalogGrid
-              label="Selected hotel(s)"
-              items={packageRequest.hotels}
-              empty="No hotel selected."
+              label={`Selected hotel(s) — ${miceRfq.hotels.length} of 3`}
+              items={miceRfq.hotels}
+              empty="No hotels selected."
               renderMeta={(h) => `${h.city || '—'}${h.category ? ` · ${h.category}★` : ''}`}
             />
             <CatalogGrid
               label="Selected tour(s)"
-              items={packageRequest.tours}
+              items={miceRfq.tours}
               empty="No tours selected."
               renderMeta={(t) => `${t.city || '—'}${t.category ? ` · ${t.category}` : ''}${t.duration ? ` · ${t.duration}` : ''}`}
             />
             <CatalogGrid
               label="Selected transfer(s)"
-              items={packageRequest.transfers}
+              items={miceRfq.transfers}
               empty="No transfers selected."
               renderMeta={(t) => `${t.type ? t.type.replace(/_/g, ' ') : '—'}${t.vehicleClass ? ` · ${t.vehicleClass}` : ''}${t.city ? ` · ${t.city}` : ''}`}
             />
             <CatalogGrid
-              label="Selected extras"
-              items={packageRequest.activities}
-              empty="No extras selected."
+              label="Selected activities"
+              items={miceRfq.activities}
+              empty="No activities selected."
               renderMeta={(a) => `${a.city || '—'}${a.duration ? ` · ${a.duration}` : ''}`}
             />
 
-            <CostingAndPublishing packageRequest={packageRequest} onUpdated={setPackageRequest} />
-            <ActivityHistory history={packageRequest.activityHistory} />
+            <CostingAndPublishing miceRfq={miceRfq} onUpdated={setMiceRfq} />
+            <ActivityHistory history={miceRfq.activityHistory} />
           </>
         )}
       </div>

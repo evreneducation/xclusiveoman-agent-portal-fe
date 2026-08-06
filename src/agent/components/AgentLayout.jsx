@@ -1,7 +1,10 @@
 import { useState } from 'react';
-import { Link, Outlet, useLocation } from 'react-router-dom';
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAuth } from '../context/AuthContext.jsx';
+import { api } from '../api/client.js';
+import { getSocket } from '../lib/socket.js';
+import { NotificationBell } from '../../shared/components/NotificationBell.jsx';
 import { Button } from './ui.jsx';
 import {
   BookingsIcon,
@@ -25,12 +28,31 @@ const NAV_ITEMS = [
   { to: '/agent/departures', label: 'Fixed Group Departures', Icon: DeparturesIcon },
   { to: '/agent/package-builder', label: 'Custom FIT Package Builder', Icon: BuilderIcon },
   { to: '/agent/fit-requests', label: 'My FIT Requests / Quotes', Icon: QuotesIcon },
+  { to: '/agent/mice-builder', label: 'MICE Curation', Icon: BuilderIcon },
+  { to: '/agent/mice-requests', label: 'My MICE Requests', Icon: QuotesIcon },
   { to: '/agent/bookings', label: 'My Bookings', Icon: BookingsIcon },
   { to: '/agent/transactions', label: 'Payment & Transactions', Icon: PaymentsIcon },
   { to: '/agent/notifications', label: 'Notifications', Icon: NotificationsIcon },
   { to: '/agent/support', label: 'Support', Icon: SupportIcon },
   { to: '/agent/profile', label: 'Profile', Icon: ProfileIcon },
 ];
+
+// Agent Notification UI (Task 2) — maps a notification's referenceType to an
+// in-portal detail route (doc §11.8's related_entity_type, using the same
+// entity strings already written into audit_logs by miceRfqs.controller.js
+// / packageRequests.controller.js). No business module creates notifications
+// yet, but the routing needs to be ready for when they do. Only entities
+// with an existing detail route are listed — e.g. bookings has no
+// /agent/bookings/:id route yet, so it's deliberately left out for now.
+const REFERENCE_ROUTES = {
+  mice_rfq: (id) => `/agent/mice-requests/${id}`,
+  package_request: (id) => `/agent/fit-requests/${id}`,
+};
+
+function resolveNotificationPath(referenceType, referenceId) {
+  if (!referenceType || !referenceId) return null;
+  return REFERENCE_ROUTES[referenceType]?.(referenceId) || null;
+}
 
 const EXPANDED_WIDTH = 288; // w-72
 const COLLAPSED_WIDTH = 76;
@@ -121,6 +143,8 @@ function SidebarContent({ onNavigate, collapsed = false }) {
 
 export default function AgentLayout() {
   const { pathname } = useLocation();
+  const navigate = useNavigate();
+  const { socketConnected } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
   // Desktop rail starts collapsed (icon-only) to leave more room for page
   // content — click the panel toggle to pin it open; click again to collapse.
@@ -195,12 +219,17 @@ export default function AgentLayout() {
             <span className="h-1.5 w-1.5 rounded-full bg-agent-accent" />
             {activeItem?.label || 'Agent Portal'}
           </div>
-          <Link
-            to="/agent/notifications"
-            className="ml-auto flex h-9 w-9 items-center justify-center rounded-full bg-agent-accent-soft text-agent-accent-dark hover:bg-agent-accent hover:text-white"
-          >
-            <NotificationsIcon width={16} height={16} />
-          </Link>
+          <div className="ml-auto">
+            <NotificationBell
+              api={api}
+              getSocket={getSocket}
+              socketConnected={socketConnected}
+              resolvePath={resolveNotificationPath}
+              onNavigate={navigate}
+              icon={NotificationsIcon}
+              buttonClassName="h-9 w-9 rounded-full bg-agent-accent-soft text-agent-accent-dark hover:bg-agent-accent hover:text-white"
+            />
+          </div>
         </div>
 
         <AnimatePresence mode="wait">
