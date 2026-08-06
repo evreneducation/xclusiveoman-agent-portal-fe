@@ -3,6 +3,7 @@ import { AuthProvider } from './context/AuthContext.jsx';
 import ProtectedRoute from './routes/ProtectedRoute.jsx';
 import AgentLayout from './components/AgentLayout.jsx';
 import Login from './pages/Login.jsx';
+import Register from './pages/Register.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import Departures from './pages/Departures.jsx';
 import DepartureDetail from './pages/DepartureDetail.jsx';
@@ -24,6 +25,7 @@ export default function App() {
     <AuthProvider>
       <Routes>
         <Route path="login" element={<Login />} />
+        <Route path="register" element={<Register />} />
         <Route element={<ProtectedRoute />}>
           <Route element={<AgentLayout />}>
             <Route path="dashboard" element={<Dashboard />} />
