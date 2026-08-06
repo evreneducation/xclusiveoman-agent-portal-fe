@@ -7,28 +7,35 @@ import { Badge, Button, Card, ErrorText } from '../components/ui.jsx';
 const STATUS_TONE = {
   draft: 'grey',
   submitted: 'amber',
-  assigned: 'amber',
+  rfp_dispatched: 'amber',
+  supplier_responses_pending: 'amber',
+  supplier_responses_received: 'amber',
   costed: 'amber',
   published: 'teal',
   accepted: 'green',
   revision_requested: 'amber',
+  negotiating: 'amber',
   declined: 'red',
   expired: 'red',
   converted: 'green',
 };
 
-// Item 8 — dashboard sections. revision_requested sits in Active Requests
-// (it's back with our team, same as submitted/assigned/costed); converted
-// reads as Completed alongside accepted (FIT-13: an accepted+paid quote
-// converts to a booking, but is still "done" from the agent's perspective).
+// Item 2/8-style dashboard sections, mirroring "My FIT Requests / Quotes"
+// (FitRequests.jsx): revision_requested/negotiating sit in Active Requests
+// (still back with our team); converted reads as Completed alongside
+// accepted (MICE-14: an accepted+paid RFQ converts to a booking, but is
+// still "done" from the agent's perspective).
 const SECTIONS = [
   { key: 'drafts', title: 'Drafts', match: (r) => r.status === 'draft' },
   {
     key: 'active',
     title: 'Active Requests',
-    match: (r) => ['submitted', 'assigned', 'costed', 'revision_requested'].includes(r.status),
+    match: (r) =>
+      ['submitted', 'rfp_dispatched', 'supplier_responses_pending', 'supplier_responses_received', 'costed', 'revision_requested', 'negotiating'].includes(
+        r.status
+      ),
   },
-  { key: 'published', title: 'Published Quotes', match: (r) => r.status === 'published' },
+  { key: 'published', title: 'Published Proposals', match: (r) => r.status === 'published' },
   { key: 'completed', title: 'Completed', match: (r) => ['accepted', 'converted'].includes(r.status) },
   { key: 'declined', title: 'Declined', match: (r) => ['declined', 'expired'].includes(r.status) },
 ];
@@ -40,20 +47,20 @@ function formatDateRange(dateFrom, dateTo) {
   return fmt(dateFrom || dateTo);
 }
 
-// Item 1 — Draft card: Draft badge, Last Updated, Destination, Travel Dates
-// (if available), Continue Editing / Delete Draft.
-function DraftCard({ request, onDeleted }) {
+// Item 1 — Draft card: Draft badge, Last Updated, Company Name, Destination,
+// Event Dates, Continue Editing / Delete Draft.
+function DraftCard({ request, companyName, onDeleted }) {
   const navigate = useNavigate();
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState('');
-  const dateRange = formatDateRange(request.dateFrom, request.dateTo);
+  const dateRange = formatDateRange(request.eventDateFrom, request.eventDateTo);
 
   async function handleDelete() {
     if (!window.confirm('Delete this draft? This cannot be undone.')) return;
     setError('');
     setDeleting(true);
     try {
-      await api.del(`/package-requests/${request.id}`);
+      await api.del(`/mice/rfqs/${request.id}`);
       onDeleted(request.id);
     } catch (err) {
       setError(err.message || 'Unable to delete draft');
@@ -65,15 +72,16 @@ function DraftCard({ request, onDeleted }) {
     <div className="rounded-lg border border-agent-line-light bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between gap-2">
         <div>
+          <div className="text-[10px] font-semibold uppercase text-agent-muted">{companyName}</div>
           <div className="text-sm font-bold text-agent-ink">{request.destination || 'Untitled destination'}</div>
-          <div className="mt-1 text-xs text-agent-muted">{dateRange || 'Travel dates not set yet'}</div>
+          <div className="mt-1 text-xs text-agent-muted">{dateRange || 'Event dates not set yet'}</div>
         </div>
         <Badge tone="grey">Draft</Badge>
       </div>
       <div className="mt-2 text-[11px] text-agent-muted">Last updated {new Date(request.updatedAt).toLocaleString()}</div>
       <ErrorText>{error}</ErrorText>
       <div className="mt-3 flex flex-wrap gap-2">
-        <Button variant="accent" onClick={() => navigate(`/agent/package-builder/${request.id}`)}>
+        <Button variant="accent" onClick={() => navigate(`/agent/mice-builder/${request.id}`)}>
           Continue Editing
         </Button>
         <Button variant="danger" disabled={deleting} onClick={handleDelete}>
@@ -84,25 +92,26 @@ function DraftCard({ request, onDeleted }) {
   );
 }
 
-// Item 2 — Submitted/priced/published/etc. card: Quote ID, Destination,
-// Travel Dates, Submission Date, Current Status, Lead Manager, Last Updated.
-function RequestCard({ request }) {
-  const dateRange = formatDateRange(request.dateFrom, request.dateTo);
+// Item 2 — Submitted/priced/published/etc. card: Quote ID, Company Name,
+// Destination, Event Dates, Group Size, Status, Lead Manager, Last Updated.
+function RequestCard({ request, companyName }) {
+  const dateRange = formatDateRange(request.eventDateFrom, request.eventDateTo);
   return (
     <Link
-      to={`/agent/fit-requests/${request.id}`}
+      to={`/agent/mice-requests/${request.id}`}
       className="block rounded-lg border border-agent-line-light bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-agent-ink hover:shadow-md"
     >
       <div className="flex items-start justify-between gap-2">
         <div>
+          <div className="text-[10px] font-semibold uppercase text-agent-muted">{companyName}</div>
           <div className="text-sm font-bold text-agent-ink">{request.destination || 'Untitled destination'}</div>
-          <div className="mt-1 text-xs text-agent-muted">{dateRange || 'Travel dates not set'}</div>
+          <div className="mt-1 text-xs text-agent-muted">{dateRange || 'Event dates not set'}</div>
         </div>
         <Badge tone={STATUS_TONE[request.status] || 'grey'}>{request.statusLabel}</Badge>
       </div>
       <div className="mt-2 font-mono text-[10px] text-agent-muted">Quote ID: {request.id}</div>
       <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-agent-muted">
-        <span>Submitted {new Date(request.createdAt).toLocaleDateString()}</span>
+        <span>{request.groupSize ? `${request.groupSize} pax` : 'Group size —'}</span>
         <span>· Updated {new Date(request.updatedAt).toLocaleDateString()}</span>
         {request.leadManager && (
           <span>
@@ -114,7 +123,7 @@ function RequestCard({ request }) {
   );
 }
 
-function Section({ title, requests, onDraftDeleted }) {
+function Section({ title, requests, companyName, onDraftDeleted }) {
   if (requests.length === 0) return null;
   return (
     <div>
@@ -124,9 +133,9 @@ function Section({ title, requests, onDraftDeleted }) {
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {requests.map((r) =>
           r.status === 'draft' ? (
-            <DraftCard key={r.id} request={r} onDeleted={onDraftDeleted} />
+            <DraftCard key={r.id} request={r} companyName={companyName} onDeleted={onDraftDeleted} />
           ) : (
-            <RequestCard key={r.id} request={r} />
+            <RequestCard key={r.id} request={r} companyName={companyName} />
           )
         )}
       </div>
@@ -134,24 +143,27 @@ function Section({ title, requests, onDraftDeleted }) {
   );
 }
 
-export default function FitRequests() {
+export default function MyMiceRequests() {
   const [requests, setRequests] = useState([]);
+  const [companyName, setCompanyName] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   function load() {
     setLoading(true);
     setError('');
-    api
-      .get('/package-requests')
-      .then(({ packageRequests }) => setRequests(packageRequests))
-      .catch((err) => setError(err.message || 'Unable to load your FIT requests'))
+    Promise.all([api.get('/mice/rfqs'), api.get('/agencies/me')])
+      .then(([{ miceRfqs }, { agency }]) => {
+        setRequests(miceRfqs);
+        setCompanyName(agency?.name || '');
+      })
+      .catch((err) => setError(err.message || 'Unable to load your MICE requests'))
       .finally(() => setLoading(false));
   }
 
   useEffect(load, []);
 
-  // Item 7 — live status updates (Lead Manager assigned, quote published,
+  // Item 7 — live status updates (Lead Manager assigned, proposal published,
   // admin responding to a revision) reuse the same socket connection/room
   // every agent page already joins on login; no new notification plumbing.
   useEffect(() => {
@@ -169,11 +181,11 @@ export default function FitRequests() {
     <div className="mx-auto max-w-6xl space-y-6 p-5 lg:p-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="mb-1 text-2xl font-bold text-agent-ink">My FIT Requests / Quotes</h2>
-          <p className="text-sm text-agent-muted">Track every Custom FIT request from draft through to a published quote.</p>
+          <h2 className="mb-1 text-2xl font-bold text-agent-ink">My MICE Requests</h2>
+          <p className="text-sm text-agent-muted">Track every MICE request from draft through to a published proposal.</p>
         </div>
-        <Link to="/agent/package-builder">
-          <Button variant="accent">+ Start a new FIT request</Button>
+        <Link to="/agent/mice-builder">
+          <Button variant="accent">+ Start a new MICE request</Button>
         </Link>
       </div>
 
@@ -182,10 +194,10 @@ export default function FitRequests() {
 
       {!loading && requests.length === 0 && (
         <Card className="border-white text-center">
-          <p className="text-sm text-agent-muted">You haven't started a Custom FIT request yet.</p>
-          <Link to="/agent/package-builder">
+          <p className="text-sm text-agent-muted">You haven't started a MICE request yet.</p>
+          <Link to="/agent/mice-builder">
             <Button variant="accent" className="mt-3">
-              Start a new FIT request
+              Start a new MICE request
             </Button>
           </Link>
         </Card>
@@ -197,6 +209,7 @@ export default function FitRequests() {
             key={section.key}
             title={section.title}
             requests={requests.filter(section.match)}
+            companyName={companyName}
             onDraftDeleted={handleDraftDeleted}
           />
         ))}

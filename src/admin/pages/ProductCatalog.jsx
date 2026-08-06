@@ -25,6 +25,9 @@ const ENTITY_FIELDS = {
     },
     { key: 'vehicleClass', label: 'Vehicle class', type: 'text' },
     { key: 'city', label: 'City', type: 'text' },
+    // Feeds Quote Details' "Landing Cost Breakdown" auto-calculation, same
+    // as hotels' price_per_night / tours' price / activities' pricePerPax.
+    { key: 'price', label: 'Price (INR)', type: 'number' },
     { key: 'description', label: 'Description', type: 'text' },
   ],
 };

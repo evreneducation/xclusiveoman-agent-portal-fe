@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { useToast } from '../../shared/components/ToastProvider.jsx';
 import { Button, Card, Checkbox, ErrorText, FieldLabel, Select, Tag, Table, TextInput } from '../components/ui.jsx';
-import { FD_THEMES } from '../../shared/fdPackage/index.js';
+import { FD_THEMES, parseDurationDays } from '../../shared/fdPackage/index.js';
 
 // The backend's validateBody() middleware already returns a human-readable
 // `message` (e.g. "Rate gold must be a valid number"). This is a fallback for
@@ -344,36 +344,110 @@ function DepartureDatesManager({ fdPackageId, dates, onChange }) {
   );
 }
 
-function ItineraryManager({ fdPackageId, itinerary, onChange }) {
+// Renumbers every row 1..N in array order — used after any add/remove so
+// dayNumber always matches position, regardless of how the rows got there
+// (loaded from the DB, grown/trimmed to match Duration, or manually added).
+function withSequentialDayNumbers(list) {
+  return list.map((day, idx) => ({ ...day, dayNumber: idx + 1 }));
+}
+
+// How long to wait after the admin stops changing Duration before syncing the
+// day sections. Debounced (rather than reacting to every keystroke) so typing
+// "10 Days" doesn't briefly reconcile against "1 Day" and pop a confirmation.
+const DURATION_SYNC_DELAY_MS = 600;
+
+function ItineraryManager({ fdPackageId, itinerary, duration, onChange }) {
   const [days, setDays] = useState(itinerary.length ? itinerary : [{ dayNumber: 1, description: '' }]);
+  const [saving, setSaving] = useState(false);
+  // Tracks the day count this component last generated the structure for, so
+  // we don't re-run on every render and don't touch a freshly loaded/saved
+  // itinerary just because its length happens to differ from the current
+  // Duration text (e.g. a legacy package edited before this field existed).
+  const lastSyncedDays = useRef(parseDurationDays(duration));
+
+  // Reload from the DB whenever the parent hands us a freshly fetched (or
+  // just-saved) itinerary — e.g. opening the editor for an existing package.
+  useEffect(() => {
+    if (itinerary.length) setDays(withSequentialDayNumbers(itinerary));
+  }, [itinerary]);
+
+  // Auto-generate/trim day sections to match the selected package duration.
+  useEffect(() => {
+    const targetDays = parseDurationDays(duration);
+    if (!targetDays || targetDays === lastSyncedDays.current) return;
+
+    const timer = setTimeout(() => {
+      setDays((current) => {
+        if (targetDays === current.length) {
+          lastSyncedDays.current = targetDays;
+          return current;
+        }
+        if (targetDays > current.length) {
+          const added = [];
+          for (let n = current.length + 1; n <= targetDays; n++) added.push({ dayNumber: n, description: '' });
+          lastSyncedDays.current = targetDays;
+          return withSequentialDayNumbers([...current, ...added]);
+        }
+        // Duration shrank — only prompt when a day actually being removed has content.
+        const removedDays = current.slice(targetDays);
+        const hasContent = removedDays.some((d) => (d.description || '').trim());
+        if (hasContent) {
+          const label =
+            removedDays.length > 1 ? `Day ${targetDays + 1} through Day ${current.length}` : `Day ${current.length}`;
+          const ok = window.confirm(
+            `Reducing the duration removes ${label}, which already has itinerary content. Remove it?`
+          );
+          if (!ok) return current; // leave as-is; lastSyncedDays stays unset so this is retried later
+        }
+        lastSyncedDays.current = targetDays;
+        return withSequentialDayNumbers(current.slice(0, targetDays));
+      });
+    }, DURATION_SYNC_DELAY_MS);
+
+    return () => clearTimeout(timer);
+  }, [duration]);
 
   function updateDay(idx, description) {
     setDays((d) => d.map((day, i) => (i === idx ? { ...day, description } : day)));
   }
 
+  // Manual fallback for when Duration hasn't been set to a recognizable day
+  // count yet — once it is, day sections are generated automatically above.
   function addDay() {
-    setDays((d) => [...d, { dayNumber: d.length + 1, description: '' }]);
+    setDays((d) => withSequentialDayNumbers([...d, { dayNumber: d.length + 1, description: '' }]));
   }
 
   async function save() {
-    const { itinerary: saved } = await api.put(`/admin/fd-packages/${fdPackageId}/itinerary`, { days });
-    onChange(saved);
+    setSaving(true);
+    try {
+      const { itinerary: saved } = await api.put(`/admin/fd-packages/${fdPackageId}/itinerary`, { days });
+      onChange(saved);
+    } finally {
+      setSaving(false);
+    }
   }
+
+  const targetDays = parseDurationDays(duration);
 
   return (
     <Card label="Day-by-day itinerary builder" className="border-white">
+      <p className="mb-3 text-[10px] text-muted">
+        {targetDays
+          ? `Day sections are generated automatically from Duration (${targetDays} day${targetDays === 1 ? '' : 's'}). Changing Duration above adds or removes days here — removing a day with content asks for confirmation first.`
+          : 'Set a Duration above (e.g. "7N/8D") to auto-generate day sections, or add days manually below.'}
+      </p>
       <div className="space-y-2">
         {days.map((day, idx) => (
-          <div key={idx} className="flex items-center gap-2">
+          <div key={day.id || idx} className="flex items-center gap-2">
             <span className="w-14 flex-none text-xs text-muted">Day {day.dayNumber}</span>
             <TextInput value={day.description} onChange={(e) => updateDay(idx, e.target.value)} />
           </div>
         ))}
       </div>
       <div className="mt-3 flex gap-2">
-        <Button onClick={addDay}>+ Add Day</Button>
-        <Button variant="accent" onClick={save}>
-          Save Itinerary
+        {!targetDays && <Button onClick={addDay}>+ Add Day</Button>}
+        <Button variant="accent" disabled={saving} onClick={save}>
+          {saving ? 'Saving…' : 'Save Itinerary'}
         </Button>
       </div>
     </Card>
@@ -510,7 +584,29 @@ export default function FdPackageEditor() {
     setForm((f) => ({ ...f, [key]: value }));
   }
 
+  // Blind pricing aside, the itinerary is the one thing PRD explicitly
+  // requires before a package goes live (FGD-2 / ADM-6 catalog screens both
+  // show the full day-by-day plan). Checked against `itinerary` — the last
+  // saved state from "Save Itinerary" above — not any unsaved in-progress edit.
+  function findItineraryPublishError() {
+    if (!itinerary.length) return 'Add the day-by-day itinerary before publishing.';
+    const targetDays = parseDurationDays(form.duration);
+    if (targetDays && itinerary.length !== targetDays) {
+      return `The saved itinerary has ${itinerary.length} day(s) but Duration implies ${targetDays}. Open "Day-by-day itinerary builder" and click Save Itinerary to sync it, then publish.`;
+    }
+    const missingDay = itinerary.find((d) => !(d.description || '').trim());
+    if (missingDay) return `Day ${missingDay.dayNumber} is missing itinerary details. Fill in every day before publishing.`;
+    return null;
+  }
+
   async function handleSave(status) {
+    if (status === 'published') {
+      const itineraryError = findItineraryPublishError();
+      if (itineraryError) {
+        toast.error(itineraryError);
+        return;
+      }
+    }
     setSubmitting(status);
     try {
       const payload = { ...form, status };
@@ -545,7 +641,7 @@ export default function FdPackageEditor() {
         {packageId && (
           <>
             <DepartureDatesManager fdPackageId={packageId} dates={dates} onChange={setDates} />
-            <ItineraryManager fdPackageId={packageId} itinerary={itinerary} onChange={setItinerary} />
+            <ItineraryManager fdPackageId={packageId} itinerary={itinerary} duration={form.duration} onChange={setItinerary} />
             {addonsEnabled && <AddonsManager fdPackageId={packageId} addons={addons} onChange={setAddons} />}
           </>
         )}

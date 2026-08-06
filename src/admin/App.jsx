@@ -14,6 +14,8 @@ import MiceCatalog from './pages/MiceCatalog.jsx';
 import NeftVerification from './pages/NeftVerification.jsx';
 import QuoteInbox from './pages/QuoteInbox.jsx';
 import QuoteInboxDetail from './pages/QuoteInboxDetail.jsx';
+import MiceRequests from './pages/MiceRequests.jsx';
+import MiceRequestDetail from './pages/MiceRequestDetail.jsx';
 import RelationshipManagers from './pages/RelationshipManagers.jsx';
 import SalesManagers from './pages/SalesManagers.jsx';
 import TransactionLedger from './pages/TransactionLedger.jsx';
@@ -41,6 +43,8 @@ export default function App() {
               <Route path="mice-catalog" element={<MiceCatalog />} />
               <Route path="quote-inbox" element={<QuoteInbox />} />
               <Route path="quote-inbox/:id" element={<QuoteInboxDetail />} />
+              <Route path="mice-requests" element={<MiceRequests />} />
+              <Route path="mice-requests/:id" element={<MiceRequestDetail />} />
               <Route path="neft-verification" element={<NeftVerification />} />
               <Route path="transactions" element={<TransactionLedger />} />
               <Route path="bookings-documents" element={<BookingsDocuments />} />

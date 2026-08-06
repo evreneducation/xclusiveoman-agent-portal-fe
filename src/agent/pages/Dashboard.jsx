@@ -3,8 +3,25 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { Badge, Button, Card } from '../components/ui.jsx';
+import { formatCurrency } from '../../shared/fdPackage/index.js';
 
 const TIER_LABEL = { gold: 'Gold', silver: 'Silver', bronze: 'Bronze' };
+
+// A request is "open" once it's left Draft and hasn't reached a terminal
+// outcome yet; "awaiting pricing" narrows that to before the admin has
+// costed/published it. Both FIT (packageRequests.controller.js) and MICE
+// (miceRfqs.controller.js) already compute an agent-facing `statusLabel`
+// with these exact values, so no raw DB status/enum needs to leak in here.
+const TERMINAL_LABELS = new Set(['Accepted', 'Declined', 'Expired']);
+const AWAITING_PRICING_LABELS = new Set(['Submitted', 'Under Review']);
+
+// "Confirmed" bookings — anything actually locked in, as opposed to still
+// waiting on payment or cancelled/waitlisted (bookings.controller.js status
+// enum: pending_payment/deposit_paid/confirmed/balance_due/fully_paid/
+// amendment_requested/cancellation_requested/cancelled/completed/waitlisted).
+const CONFIRMED_BOOKING_STATUSES = new Set([
+  'deposit_paid', 'confirmed', 'balance_due', 'fully_paid', 'amendment_requested', 'completed',
+]);
 
 function RelationshipManagerCard({ rm }) {
   if (!rm) {
@@ -47,14 +64,43 @@ function RelationshipManagerCard({ rm }) {
 export default function Dashboard() {
   const { user } = useAuth();
   const [agency, setAgency] = useState(null);
+  const [stats, setStats] = useState(null);
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api
-      .get('/agencies/me')
-      .then(({ agency: a }) => setAgency(a))
-      .catch((err) => setError(err.message));
+    Promise.all([
+      api.get('/agencies/me'),
+      api.get('/package-requests'),
+      api.get('/mice/rfqs'),
+      api.get('/bookings'),
+    ])
+      .then(([{ agency: a }, { packageRequests }, { miceRfqs }, { bookings }]) => {
+        setAgency(a);
+
+        const openQuotes = [...packageRequests, ...miceRfqs].filter(
+          (r) => r.statusLabel !== 'Draft' && !TERMINAL_LABELS.has(r.statusLabel)
+        ).length;
+        const awaitingPricing = [...packageRequests, ...miceRfqs].filter((r) =>
+          AWAITING_PRICING_LABELS.has(r.statusLabel)
+        ).length;
+        const confirmedBookings = bookings.filter((b) => CONFIRMED_BOOKING_STATUSES.has(b.status)).length;
+        const balanceDue = bookings.reduce((sum, b) => sum + Number(b.balanceDue || 0), 0);
+
+        setStats({ openQuotes, awaitingPricing, confirmedBookings, balanceDue });
+      })
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
   }, []);
+
+  const STAT_CARDS = stats
+    ? [
+        { label: 'Open Quotes', value: stats.openQuotes, hint: 'FIT + MICE, in progress' },
+        { label: 'Awaiting Pricing', value: stats.awaitingPricing, hint: 'submitted, not yet priced' },
+        { label: 'Confirmed Bookings', value: stats.confirmedBookings, hint: 'across all sources' },
+        { label: 'Balance Due', value: formatCurrency(stats.balanceDue), hint: 'outstanding across bookings' },
+      ]
+    : [];
 
   return (
     <div className="mx-auto max-w-6xl p-5 lg:p-8">
@@ -87,12 +133,19 @@ export default function Dashboard() {
       <RelationshipManagerCard rm={agency?.relationshipManager} />
 
       <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {['Open Quotes', 'Awaiting Pricing', 'Confirmed Bookings', 'Balance Due'].map((label) => (
-          <Card key={label} label={label} className="min-h-28 border-white">
-            <div className="text-2xl font-bold text-agent-muted">—</div>
-            <div className="mt-2 text-xs text-agent-muted">coming soon</div>
-          </Card>
-        ))}
+        {loading
+          ? ['Open Quotes', 'Awaiting Pricing', 'Confirmed Bookings', 'Balance Due'].map((label) => (
+              <Card key={label} label={label} className="min-h-28 border-white">
+                <div className="text-2xl font-bold text-agent-muted">—</div>
+                <div className="mt-2 text-xs text-agent-muted">Loading…</div>
+              </Card>
+            ))
+          : STAT_CARDS.map(({ label, value, hint }) => (
+              <Card key={label} label={label} className="min-h-28 border-white">
+                <div className="text-2xl font-bold text-agent-ink">{value}</div>
+                <div className="mt-2 text-xs text-agent-muted">{hint}</div>
+              </Card>
+            ))}
       </div>
 
       <Card label="Account status" className="border-white">

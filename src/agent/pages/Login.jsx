@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
-import { Button, Card, ErrorText, FieldLabel, Select, Tag, TextInput } from '../components/ui.jsx';
+import { Button, ErrorText, FieldLabel, PasswordInput, TextInput } from '../components/ui.jsx';
+import AuthShell from '../components/AuthShell.jsx';
 
-const COUNTRIES = ['Oman', 'India', 'UAE', 'Saudi Arabia', 'Qatar', 'Kuwait', 'Bahrain', 'Other'];
+const CITIES = ['Muscat', 'Nizwa', 'Salalah'];
 
-function SignInPanel() {
+export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
@@ -28,169 +29,58 @@ function SignInPanel() {
   }
 
   return (
-    <Card label="Sign in" className="border-white shadow-sm">
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <FieldLabel>Email address</FieldLabel>
-          <TextInput
-            type="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@agency.com"
-          />
-        </div>
-        <div>
-          <FieldLabel>Password</FieldLabel>
-          <TextInput
-            type="password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="••••••••"
-          />
-        </div>
-        <ErrorText>{error}</ErrorText>
-        <Button variant="solid" type="submit" className="w-full py-2.5 text-center" disabled={submitting}>
-          {submitting ? 'Signing in…' : 'Sign In'}
-        </Button>
-      </form>
-    </Card>
-  );
-}
-
-function RegisterPanel() {
-  const { register } = useAuth();
-  const [form, setForm] = useState({
-    agencyName: '',
-    agencyType: 'travel_agent',
-    licenseNumber: '',
-    country: 'Oman',
-    ownerFullName: '',
-    email: '',
-    phone: '',
-    password: '',
-  });
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-
-  function update(field, value) {
-    setForm((f) => ({ ...f, [field]: value }));
-  }
-
-  async function handleSubmit(e) {
-    e.preventDefault();
-    setError('');
-    setSubmitting(true);
-    try {
-      await register(form);
-      setSuccess(true);
-    } catch (err) {
-      setError(err.message || 'Unable to submit registration');
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  if (success) {
-    return (
-      <Card label="New agency? Register" className="border-white shadow-sm">
-        <p className="text-sm leading-relaxed">
-          Thanks — your registration has been submitted. Your account is now{' '}
-          <span className="font-semibold">Pending Approval</span>. A Super Admin will review it,
-          assign your tier, and you'll be able to sign in once approved.
-        </p>
-      </Card>
-    );
-  }
-
-  return (
-    <Card label="New agency? Register" className="border-white shadow-sm">
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <FieldLabel>Company name</FieldLabel>
-          <TextInput required value={form.agencyName} onChange={(e) => update('agencyName', e.target.value)} />
-        </div>
-        <div>
-          <FieldLabel>Agency type</FieldLabel>
-          <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => update('agencyType', 'travel_agent')}>
-              <Tag active={form.agencyType === 'travel_agent'}>Travel Agent</Tag>
-            </button>
-            <button type="button" onClick={() => update('agencyType', 'mice_company')}>
-              <Tag active={form.agencyType === 'mice_company'}>MICE Company</Tag>
-            </button>
-          </div>
-        </div>
-        <div>
-          <FieldLabel>IATA / License No. (optional)</FieldLabel>
-          <TextInput value={form.licenseNumber} onChange={(e) => update('licenseNumber', e.target.value)} />
-        </div>
-        <div>
-          <FieldLabel>Country</FieldLabel>
-          <Select value={form.country} onChange={(e) => update('country', e.target.value)}>
-            {COUNTRIES.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </Select>
-        </div>
-        <div>
-          <FieldLabel>Owner full name</FieldLabel>
-          <TextInput required value={form.ownerFullName} onChange={(e) => update('ownerFullName', e.target.value)} />
-        </div>
-        <div>
-          <FieldLabel>Email address</FieldLabel>
-          <TextInput type="email" required value={form.email} onChange={(e) => update('email', e.target.value)} />
-        </div>
-        <div>
-          <FieldLabel>Phone</FieldLabel>
-          <TextInput required value={form.phone} onChange={(e) => update('phone', e.target.value)} />
-        </div>
-        <div>
-          <FieldLabel>Password</FieldLabel>
-          <TextInput
-            type="password"
-            required
-            minLength={8}
-            value={form.password}
-            onChange={(e) => update('password', e.target.value)}
-          />
-        </div>
-        <ErrorText>{error}</ErrorText>
-        <Button variant="accent" type="submit" className="mt-1 w-full py-2.5 text-center" disabled={submitting}>
-          {submitting ? 'Submitting…' : 'Submit for Approval'}
-        </Button>
-      </form>
-    </Card>
-  );
-}
-
-export default function Login() {
-  return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,#faf0da_0,#f5f0e4_28%,#eaf2f0_58%,#f7f4ec_100%)] px-4 py-10">
-      <div className="mx-auto grid w-full max-w-5xl gap-6 lg:grid-cols-[0.9fr_1.1fr]">
-        <div className="flex flex-col justify-between rounded-2xl bg-agent-ink p-8 text-white shadow-xl shadow-black/15">
-          <div>
-            <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-lg font-bold text-agent-ink shadow-lg shadow-black/10">
-              XO
+    <AuthShell
+      eyebrow="Welcome back"
+      heading="Sign in to manage your quotes, bookings & departures"
+      tagline="Track FIT and MICE requests, message your Relationship Manager, and stay on top of every payment — all in one place."
+      panelFooter={
+        <div className="grid grid-cols-3 gap-3 text-sm text-white/75">
+          {CITIES.map((c) => (
+            <div key={c} className="rounded-lg border border-white/10 bg-white/5 px-3 py-3 text-center">
+              {c}
             </div>
-            <h1 className="text-3xl font-bold">Xclusive Oman</h1>
-            <div className="mt-2 text-sm text-white/70">B2B &amp; MICE Trade Portal</div>
-          </div>
-          <div className="mt-12 grid gap-3 text-sm text-white/75">
-            <div className="rounded-lg border border-white/10 bg-white/5 px-4 py-3">Muscat</div>
-            <div className="rounded-lg border border-white/10 bg-white/5 px-4 py-3">Nizwa</div>
-            <div className="rounded-lg border border-white/10 bg-white/5 px-4 py-3">Salalah</div>
-          </div>
+          ))}
         </div>
-        <div className="space-y-5">
-          <SignInPanel />
-          <RegisterPanel />
-        </div>
+      }
+    >
+      <div className="mx-auto w-full max-w-md rounded-2xl border border-agent-line-light bg-white/95 p-7 shadow-xl shadow-black/5 sm:p-8">
+        <h2 className="text-xl font-bold text-agent-ink">Sign in</h2>
+        <p className="mt-1 text-sm text-agent-muted">Enter your credentials to access your agent portal.</p>
+
+        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+          <div>
+            <FieldLabel>Email address</FieldLabel>
+            <TextInput
+              type="email"
+              required
+              autoFocus
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@agency.com"
+            />
+          </div>
+          <div>
+            <FieldLabel>Password</FieldLabel>
+            <PasswordInput
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+            />
+          </div>
+          <ErrorText>{error}</ErrorText>
+          <Button variant="solid" type="submit" className="w-full py-2.5 text-center text-sm" disabled={submitting}>
+            {submitting ? 'Signing in…' : 'Sign In'}
+          </Button>
+        </form>
+
+        <p className="mt-6 text-center text-sm text-agent-muted">
+          New to Xclusive Oman?{' '}
+          <Link to="/agent/register" className="font-semibold text-agent-accent-dark hover:underline">
+            Create an agency account
+          </Link>
+        </p>
       </div>
-    </div>
+    </AuthShell>
   );
 }

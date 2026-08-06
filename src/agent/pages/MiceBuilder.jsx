@@ -1,16 +1,19 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api/client.js';
-import { Button, Card, Checkbox, ErrorText, FieldLabel, TextInput } from '../components/ui.jsx';
+import { Button, Card, Checkbox, ErrorText, FieldLabel, TextInput, Textarea } from '../components/ui.jsx';
 
-// FIT-1: destination/dates/pax -> hotels -> tours -> transfers -> extras -> review,
-// matching the wireframe's step tags on Screen 05.
+// MICE-1..MICE-7: Oman overview/content hub browsing happens on the catalog
+// screens already reachable elsewhere in the portal — this wizard is the
+// curation + submit half (event details -> hotels -> tours -> transfers ->
+// activities -> review), matching the FIT Package Builder's step-wizard
+// shape (PackageBuilder.jsx) with no traveller step (not applicable to MICE).
 const STEPS = [
-  { n: 1, label: 'Trip Details' },
+  { n: 1, label: 'Event Details' },
   { n: 2, label: 'Hotels' },
   { n: 3, label: 'Tours' },
   { n: 4, label: 'Transfers' },
-  { n: 5, label: 'Extras' },
+  { n: 5, label: 'Activities' },
   { n: 6, label: 'Review & Submit' },
 ];
 
@@ -45,58 +48,80 @@ function CatalogImage({ url }) {
   );
 }
 
-// Step 1 — trip details (FIT-1: destination, dates, pax).
-function TripDetailsStep({ form, update }) {
+// Step 1 — event details (group size, event dates, hall capacity, seating
+// style, AV needs, other requirements — same fields Screen 08 captures).
+function EventDetailsStep({ form, update }) {
   return (
-    <Card label="Trip details" className="border-white">
+    <Card label="Event details" className="border-white">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="sm:col-span-2">
           <FieldLabel>Destination *</FieldLabel>
           <TextInput placeholder="e.g. Muscat, Oman" value={form.destination} onChange={(e) => update('destination', e.target.value)} />
         </div>
         <div>
-          <FieldLabel>Travel start date *</FieldLabel>
-          <TextInput type="date" value={form.dateFrom} onChange={(e) => update('dateFrom', e.target.value)} />
+          <FieldLabel>Event start date *</FieldLabel>
+          <TextInput type="date" value={form.eventDateFrom} onChange={(e) => update('eventDateFrom', e.target.value)} />
         </div>
         <div>
-          <FieldLabel>Travel end date *</FieldLabel>
-          <TextInput type="date" value={form.dateTo} onChange={(e) => update('dateTo', e.target.value)} />
+          <FieldLabel>Event end date *</FieldLabel>
+          <TextInput type="date" value={form.eventDateTo} onChange={(e) => update('eventDateTo', e.target.value)} />
         </div>
         <div>
-          <FieldLabel>Adults *</FieldLabel>
-          <TextInput type="number" min="1" value={form.paxAdults} onChange={(e) => update('paxAdults', e.target.value)} />
+          <FieldLabel>Group size *</FieldLabel>
+          <TextInput type="number" min="1" value={form.groupSize} onChange={(e) => update('groupSize', e.target.value)} />
         </div>
         <div>
-          <FieldLabel>Children</FieldLabel>
-          <TextInput type="number" min="0" value={form.paxChildren} onChange={(e) => update('paxChildren', e.target.value)} />
+          <FieldLabel>Hall capacity needed</FieldLabel>
+          <TextInput type="number" min="1" value={form.hallCapacityNeeded} onChange={(e) => update('hallCapacityNeeded', e.target.value)} />
+        </div>
+        <div>
+          <FieldLabel>Seating style</FieldLabel>
+          <TextInput placeholder="e.g. Theatre, Banquet" value={form.seatingStyle} onChange={(e) => update('seatingStyle', e.target.value)} />
+        </div>
+        <div className="sm:col-span-2">
+          <FieldLabel>AV / event needs</FieldLabel>
+          <Textarea rows={2} value={form.avNeeds} onChange={(e) => update('avNeeds', e.target.value)} />
+        </div>
+        <div className="sm:col-span-2">
+          <FieldLabel>Other requirements (optional)</FieldLabel>
+          <Textarea
+            rows={2}
+            placeholder="e.g. dietary restrictions, branding on-site, gala theme…"
+            value={form.otherRequirements}
+            onChange={(e) => update('otherRequirements', e.target.value)}
+          />
         </div>
       </div>
     </Card>
   );
 }
 
-// Step 2 — hotel selection (FIT-2). Single-select, matching the wireframe's
-// one "Selected" card and the priced-quote summary later showing one hotel
-// line item. No price is ever rendered here (FIT-6 blind pricing).
-function HotelsStep({ hotels, cityFilter, setCityFilter, selectedHotelId, setSelectedHotelId }) {
-  const filtered = cityFilter
-    ? hotels.filter((h) => (h.city || '').toLowerCase().includes(cityFilter.toLowerCase()))
-    : hotels;
+// Step 2 — hotels (MICE-2/MICE-7: up to 3, multi-select). No price is ever
+// rendered here — costing/markup is admin-only (blind pricing).
+function HotelsStep({ hotels, cityFilter, setCityFilter, selectedHotelIds, toggleHotel }) {
+  const filtered = cityFilter ? hotels.filter((h) => (h.city || '').toLowerCase().includes(cityFilter.toLowerCase())) : hotels;
+  const limitReached = selectedHotelIds.length >= 3;
 
   return (
-    <Card label="Select a hotel" className="border-white">
+    <Card label="Select hotels — up to 3" className="border-white">
       <TextInput className="mb-4 max-w-xs" placeholder="Filter by city…" value={cityFilter} onChange={(e) => setCityFilter(e.target.value)} />
       {filtered.length === 0 && <p className="text-sm text-agent-muted">No hotels available{cityFilter ? ' for that city' : ''}.</p>}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {filtered.map((h) => {
-          const selected = h.id === selectedHotelId;
+          const selected = selectedHotelIds.includes(h.id);
+          const disabled = !selected && limitReached;
           return (
             <button
               type="button"
               key={h.id}
-              onClick={() => setSelectedHotelId(selected ? '' : h.id)}
+              disabled={disabled}
+              onClick={() => toggleHotel(h.id)}
               className={`rounded-lg border p-3 text-left shadow-sm transition ${
-                selected ? 'border-agent-accent ring-2 ring-agent-accent/25' : 'border-agent-line-light hover:border-agent-ink'
+                selected
+                  ? 'border-agent-accent ring-2 ring-agent-accent/25'
+                  : disabled
+                    ? 'cursor-not-allowed border-agent-line-light opacity-50'
+                    : 'border-agent-line-light hover:border-agent-ink'
               }`}
             >
               <CatalogImage url={h.images?.[0]} />
@@ -106,6 +131,7 @@ function HotelsStep({ hotels, cityFilter, setCityFilter, selectedHotelId, setSel
               </div>
               {h.description && <p className="mt-1 line-clamp-2 text-xs text-agent-muted">{h.description}</p>}
               {selected && <div className="mt-2 text-[10px] font-semibold uppercase text-agent-accent">Selected</div>}
+              {disabled && <div className="mt-2 text-[10px] font-semibold uppercase text-agent-muted">Limit reached</div>}
             </button>
           );
         })}
@@ -114,11 +140,9 @@ function HotelsStep({ hotels, cityFilter, setCityFilter, selectedHotelId, setSel
   );
 }
 
-// Step 3 — tours (FIT-3: multi-select checkboxes, no price).
+// Step 3 — tours (MICE-3: multi-select checkboxes, no price).
 function ToursStep({ tours, cityFilter, setCityFilter, selectedTourIds, toggleTour }) {
-  const filtered = cityFilter
-    ? tours.filter((t) => (t.city || '').toLowerCase().includes(cityFilter.toLowerCase()))
-    : tours;
+  const filtered = cityFilter ? tours.filter((t) => (t.city || '').toLowerCase().includes(cityFilter.toLowerCase())) : tours;
 
   return (
     <Card label="Select tours (optional, multiple allowed)" className="border-white">
@@ -143,7 +167,7 @@ function ToursStep({ tours, cityFilter, setCityFilter, selectedTourIds, toggleTo
   );
 }
 
-// Step 4 — transfers (FIT-4: multi-select checkboxes, no price).
+// Step 4 — transfers (MICE-4: multi-select checkboxes, no price).
 function TransfersStep({ transfers, selectedTransferIds, toggleTransfer }) {
   return (
     <Card label="Select transfers (optional, multiple allowed)" className="border-white">
@@ -166,12 +190,12 @@ function TransfersStep({ transfers, selectedTransferIds, toggleTransfer }) {
   );
 }
 
-// Step 5 — extras. The admin's Activities catalog is the pool of short
-// add-on experiences (mirrors how FGD add-ons draw from activities/tours).
-function ExtrasStep({ activities, selectedActivityIds, toggleActivity }) {
+// Step 5 — activities (MICE-3/MICE-5-style extras — team-building, gala
+// themes, etc. — multi-select, no price).
+function ActivitiesStep({ activities, selectedActivityIds, toggleActivity }) {
   return (
-    <Card label="Select extras / add-ons (optional, multiple allowed)" className="border-white">
-      {activities.length === 0 && <p className="text-sm text-agent-muted">No extras available.</p>}
+    <Card label="Select activities (optional, multiple allowed)" className="border-white">
+      {activities.length === 0 && <p className="text-sm text-agent-muted">No activities available.</p>}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {activities.map((a) => (
           <div key={a.id} className="rounded-lg border border-agent-line-light p-3 shadow-sm">
@@ -182,7 +206,7 @@ function ExtrasStep({ activities, selectedActivityIds, toggleActivity }) {
             </div>
             {a.description && <p className="mt-1 line-clamp-2 text-xs text-agent-muted">{a.description}</p>}
             <div className="mt-2">
-              <Checkbox checked={selectedActivityIds.includes(a.id)} onChange={() => toggleActivity(a.id)} label="Include this extra" />
+              <Checkbox checked={selectedActivityIds.includes(a.id)} onChange={() => toggleActivity(a.id)} label="Include this activity" />
             </div>
           </div>
         ))}
@@ -191,96 +215,44 @@ function ExtrasStep({ activities, selectedActivityIds, toggleActivity }) {
   );
 }
 
-// Traveller Details rows are entirely derived from Trip Details' adult/child
-// counts (no manual add/remove) — passport only ever applies to adults, so
-// each row carries a `type` rather than relying on array position.
-function TravelersEditor({ travelers, updateTraveler }) {
-  const indexed = travelers.map((t, idx) => ({ ...t, idx }));
-  const adults = indexed.filter((t) => t.type === 'adult');
-  const children = indexed.filter((t) => t.type === 'child');
-
-  function renderRow(t) {
-    return (
-      <div key={t.idx} className="flex flex-wrap items-end gap-2">
-        <div className="flex-1 min-w-[160px]">
-          <FieldLabel>Name *</FieldLabel>
-          <TextInput value={t.name} onChange={(e) => updateTraveler(t.idx, 'name', e.target.value)} />
-        </div>
-        {t.type === 'adult' ? (
-          <div className="flex-1 min-w-[160px]">
-            <FieldLabel>Passport no. *</FieldLabel>
-            <TextInput value={t.passportNo || ''} onChange={(e) => updateTraveler(t.idx, 'passportNo', e.target.value)} />
-          </div>
-        ) : (
-          <span className="mb-2.5 text-[11px] text-agent-muted">Passport not required for children</span>
-        )}
-      </div>
-    );
-  }
-
-  return (
-    <Card label="Traveller details" className="border-white">
-      <p className="mb-3 text-xs text-agent-muted">
-        One row per traveller, matching the adult/child count from Trip details. Name is required for everyone —
-        passport number is required for adults only.
-      </p>
-      {adults.length === 0 && children.length === 0 ? (
-        <p className="text-sm text-agent-muted">Set the number of adults/children in Trip details to add traveller rows.</p>
-      ) : (
-        <div className="space-y-4">
-          {adults.length > 0 && (
-            <div>
-              <div className="mb-2 text-[10px] font-semibold uppercase text-agent-muted">Adults ({adults.length})</div>
-              <div className="space-y-2">{adults.map(renderRow)}</div>
-            </div>
-          )}
-          {children.length > 0 && (
-            <div>
-              <div className="mb-2 text-[10px] font-semibold uppercase text-agent-muted">Children ({children.length})</div>
-              <div className="space-y-2">{children.map(renderRow)}</div>
-            </div>
-          )}
-        </div>
-      )}
-    </Card>
-  );
-}
-
-// Step 6 — review & submit. No price/cost/markup fields anywhere (FIT-6).
-function ReviewStep({ form, selectedHotel, selectedTours, selectedTransfers, selectedActivities, travelers, updateTraveler }) {
+// Step 6 — review & submit. No price/cost/markup fields anywhere (blind pricing).
+function ReviewStep({ form, selectedHotels, selectedTours, selectedTransfers, selectedActivities }) {
   return (
     <div className="space-y-4">
-      <Card label="Trip summary" className="border-white">
+      <Card label="Event summary" className="border-white">
         <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
           <div>
             <dt className="text-[10px] font-semibold uppercase text-agent-muted">Destination</dt>
             <dd>{form.destination || '—'}</dd>
           </div>
           <div>
-            <dt className="text-[10px] font-semibold uppercase text-agent-muted">Travel dates</dt>
+            <dt className="text-[10px] font-semibold uppercase text-agent-muted">Event dates</dt>
             <dd>
-              {form.dateFrom || '—'} → {form.dateTo || '—'}
+              {form.eventDateFrom || '—'} → {form.eventDateTo || '—'}
             </dd>
           </div>
           <div>
-            <dt className="text-[10px] font-semibold uppercase text-agent-muted">Adults</dt>
-            <dd>{form.paxAdults || 0}</dd>
+            <dt className="text-[10px] font-semibold uppercase text-agent-muted">Group size</dt>
+            <dd>{form.groupSize || '—'}</dd>
           </div>
           <div>
-            <dt className="text-[10px] font-semibold uppercase text-agent-muted">Children</dt>
-            <dd>{form.paxChildren || 0}</dd>
+            <dt className="text-[10px] font-semibold uppercase text-agent-muted">Hall capacity</dt>
+            <dd>{form.hallCapacityNeeded || '—'}</dd>
           </div>
         </dl>
       </Card>
 
-      <Card label="Selected hotel" className="border-white">
-        {selectedHotel ? (
-          <div className="text-sm">
-            <span className="font-semibold">{selectedHotel.name}</span> — {selectedHotel.city}
-            {selectedHotel.category ? ` · ${selectedHotel.category}★` : ''}
-          </div>
+      <Card label={`Selected hotels — ${selectedHotels.length} of 3`} className="border-white">
+        {selectedHotels.length === 0 ? (
+          <p className="text-sm text-agent-muted">No hotels selected.</p>
         ) : (
-          <p className="text-sm text-agent-muted">No hotel selected.</p>
+          <ul className="list-disc space-y-1 pl-5 text-sm">
+            {selectedHotels.map((h) => (
+              <li key={h.id}>
+                {h.name} — {h.city}
+              </li>
+            ))}
+          </ul>
         )}
       </Card>
 
@@ -310,9 +282,9 @@ function ReviewStep({ form, selectedHotel, selectedTours, selectedTransfers, sel
         )}
       </Card>
 
-      <Card label="Selected extras" className="border-white">
+      <Card label="Selected activities" className="border-white">
         {selectedActivities.length === 0 ? (
-          <p className="text-sm text-agent-muted">No extras selected.</p>
+          <p className="text-sm text-agent-muted">No activities selected.</p>
         ) : (
           <ul className="list-disc space-y-1 pl-5 text-sm">
             {selectedActivities.map((a) => (
@@ -321,51 +293,34 @@ function ReviewStep({ form, selectedHotel, selectedTours, selectedTransfers, sel
           </ul>
         )}
       </Card>
-
-      <TravelersEditor travelers={travelers} updateTraveler={updateTraveler} />
     </div>
   );
 }
 
-function validateStep(step, { form, selectedHotelId, travelers }) {
+function validateStep(step, { form, selectedHotelIds }) {
   if (step === 1) {
     if (!form.destination.trim()) return 'Destination is required.';
-    if (!form.dateFrom || !form.dateTo) return 'Travel start and end dates are required.';
-    if (new Date(form.dateFrom) > new Date(form.dateTo)) return 'Travel end date must be on or after the start date.';
-    if (!form.paxAdults || Number(form.paxAdults) < 1) return 'At least one adult is required.';
+    if (!form.eventDateFrom || !form.eventDateTo) return 'Event start and end dates are required.';
+    if (new Date(form.eventDateFrom) > new Date(form.eventDateTo)) return 'Event end date must be on or after the start date.';
+    if (!form.groupSize || Number(form.groupSize) < 1) return 'Group size is required.';
     return '';
   }
   if (step === 2) {
-    if (!selectedHotelId) return 'Select a hotel to continue.';
-    return '';
-  }
-  if (step === 6) {
-    if (travelers.some((t) => !t.name.trim())) return 'Enter a name for every traveller.';
-    if (travelers.some((t) => t.type === 'adult' && !(t.passportNo || '').trim())) {
-      return 'Enter a passport number for every adult traveller.';
-    }
+    if (selectedHotelIds.length === 0) return 'Select at least one hotel to continue.';
     return '';
   }
   return '';
 }
 
-// Traveller Details rows are derived from Trip Details' adult/child counts,
-// not manually added/removed — this resizes one type's group to match,
-// keeping already-entered rows (by position within that type) and only
-// adding/dropping from the end when the count changes.
-function resizeTravelerGroup(list, count, type) {
-  if (list.length === count) return list;
-  if (list.length > count) return list.slice(0, count);
-  const additions = Array.from({ length: count - list.length }, () => ({ name: '', passportNo: '', type }));
-  return [...list, ...additions];
-}
-
-export default function PackageBuilder() {
+export default function MiceBuilder() {
   const navigate = useNavigate();
   const { id: draftIdParam } = useParams();
 
   const [step, setStep] = useState(1);
-  const [form, setForm] = useState({ destination: '', dateFrom: '', dateTo: '', paxAdults: 2, paxChildren: 0 });
+  const [form, setForm] = useState({
+    destination: '', eventDateFrom: '', eventDateTo: '', groupSize: '',
+    hallCapacityNeeded: '', seatingStyle: '', avNeeds: '', otherRequirements: '',
+  });
 
   const [hotels, setHotels] = useState([]);
   const [tours, setTours] = useState([]);
@@ -376,15 +331,12 @@ export default function PackageBuilder() {
   const [hotelCityFilter, setHotelCityFilter] = useState('');
   const [tourCityFilter, setTourCityFilter] = useState('');
 
-  const [selectedHotelId, setSelectedHotelId] = useState('');
+  const [selectedHotelIds, setSelectedHotelIds] = useState([]);
   const [selectedTourIds, setSelectedTourIds] = useState([]);
   const [selectedTransferIds, setSelectedTransferIds] = useState([]);
   const [selectedActivityIds, setSelectedActivityIds] = useState([]);
-  // Rows are derived from form.paxAdults/paxChildren (see the sync effect
-  // below) rather than started with a hardcoded default row.
-  const [travelers, setTravelers] = useState([]);
 
-  // Draft Quotes (item 1) — "Continue Editing" opens /agent/package-builder/:id;
+  // MICE Drafts (item 1) — "Continue Editing" opens /agent/mice-builder/:id;
   // draftId then tracks which row "Save Draft" and "Submit Request" write to.
   const [draftId, setDraftId] = useState(draftIdParam || '');
   const [draftLoading, setDraftLoading] = useState(!!draftIdParam);
@@ -396,7 +348,15 @@ export default function PackageBuilder() {
   const [submittedId, setSubmittedId] = useState('');
 
   useEffect(() => {
-    Promise.all([api.get('/hotels'), api.get('/tours'), api.get('/transfers'), api.get('/activities')])
+    // Only items curated into the MICE Catalog by Admin (is_mice_enabled)
+    // may appear here — never the full Product Catalog. Same `?mice=true`
+    // filter the Admin MICE Catalog Manager itself uses (MiceCatalog.jsx).
+    Promise.all([
+      api.get('/hotels?mice=true'),
+      api.get('/tours?mice=true'),
+      api.get('/transfers?mice=true'),
+      api.get('/activities?mice=true'),
+    ])
       .then(([h, t, tr, a]) => {
         setHotels(h.hotels || []);
         setTours(t.tours || []);
@@ -412,99 +372,44 @@ export default function PackageBuilder() {
   useEffect(() => {
     if (!draftIdParam) return;
     api
-      .get(`/package-requests/${draftIdParam}`)
-      .then(({ packageRequest: pr }) => {
-        if (pr.status !== 'draft') {
-          // Already submitted — this link is stale; the read-only quote view is the right place for it now.
-          navigate(`/agent/fit-requests/${pr.id}`, { replace: true });
+      .get(`/mice/rfqs/${draftIdParam}`)
+      .then(({ miceRfq: mr }) => {
+        if (mr.status !== 'draft') {
+          // Already submitted — this link is stale; the read-only proposal view is the right place for it now.
+          navigate(`/agent/mice-requests/${mr.id}`, { replace: true });
           return;
         }
         setForm({
-          destination: pr.destination || '',
-          dateFrom: pr.dateFrom ? pr.dateFrom.slice(0, 10) : '',
-          dateTo: pr.dateTo ? pr.dateTo.slice(0, 10) : '',
-          paxAdults: pr.paxAdults || 1,
-          paxChildren: pr.paxChildren || 0,
+          destination: mr.destination || '',
+          eventDateFrom: mr.eventDateFrom ? mr.eventDateFrom.slice(0, 10) : '',
+          eventDateTo: mr.eventDateTo ? mr.eventDateTo.slice(0, 10) : '',
+          groupSize: mr.groupSize || '',
+          hallCapacityNeeded: mr.hallCapacityNeeded || '',
+          seatingStyle: mr.seatingStyle || '',
+          avNeeds: mr.avNeeds || '',
+          otherRequirements: mr.otherRequirements || '',
         });
-        setSelectedHotelId(pr.hotels[0]?.id || '');
-        setSelectedTourIds(pr.tours.map((t) => t.id));
-        setSelectedTransferIds(pr.transfers.map((t) => t.id));
-        setSelectedActivityIds(pr.activities.map((a) => a.id));
-        // Bucket by isChild rather than array position — DB order isn't
-        // guaranteed to match adults-then-children (see migration 0023).
-        const loadedAdults = pr.travelers
-          .filter((t) => !t.isChild)
-          .map((t) => ({ name: t.name, passportNo: t.passportNo || '', type: 'adult' }));
-        const loadedChildren = pr.travelers
-          .filter((t) => t.isChild)
-          .map((t) => ({ name: t.name, passportNo: t.passportNo || '', type: 'child' }));
-        setTravelers([
-          ...resizeTravelerGroup(loadedAdults, pr.paxAdults || 0, 'adult'),
-          ...resizeTravelerGroup(loadedChildren, pr.paxChildren || 0, 'child'),
-        ]);
+        setSelectedHotelIds(mr.hotels.map((h) => h.id));
+        setSelectedTourIds(mr.tours.map((t) => t.id));
+        setSelectedTransferIds(mr.transfers.map((t) => t.id));
+        setSelectedActivityIds(mr.activities.map((a) => a.id));
       })
       .catch((err) => setError(err.message || 'Unable to load this draft'))
       .finally(() => setDraftLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draftIdParam]);
 
-  // Traveller Details rows always match Trip Details' adult/child counts —
-  // grows/shrinks each group independently as those fields change, keeping
-  // whatever the agent already typed in the rows that remain.
-  useEffect(() => {
-    const adultsCount = Math.max(0, Number(form.paxAdults) || 0);
-    const childrenCount = Math.max(0, Number(form.paxChildren) || 0);
-    setTravelers((current) => [
-      ...resizeTravelerGroup(current.filter((t) => t.type === 'adult'), adultsCount, 'adult'),
-      ...resizeTravelerGroup(current.filter((t) => t.type === 'child'), childrenCount, 'child'),
-    ]);
-  }, [form.paxAdults, form.paxChildren]);
-
   function update(key, value) {
     setForm((f) => ({ ...f, [key]: value }));
   }
 
-  function updateTraveler(idx, field, value) {
-    setTravelers((list) => list.map((t, i) => (i === idx ? { ...t, [field]: value } : t)));
+  function toggleHotel(id) {
+    setSelectedHotelIds((list) => {
+      if (list.includes(id)) return list.filter((x) => x !== id);
+      if (list.length >= 3) return list; // hard cap — MICE-2/MICE-7
+      return [...list, id];
+    });
   }
-
-  // Item 1 — "Save Draft"/"Continue Editing" autosave. Deliberately skips
-  // validateStep(): a half-built package (no destination yet, no hotel
-  // picked) must still save without being blocked by the strict Submit rules.
-  function buildDraftPayload() {
-    return {
-      destination: form.destination,
-      dateFrom: form.dateFrom || null,
-      dateTo: form.dateTo || null,
-      paxAdults: Number(form.paxAdults) || 1,
-      paxChildren: Number(form.paxChildren) || 0,
-      hotelIds: selectedHotelId ? [selectedHotelId] : [],
-      tourIds: selectedTourIds,
-      transferIds: selectedTransferIds,
-      activityIds: selectedActivityIds,
-      travelers: travelers.map((t) => ({ name: t.name, passportNo: t.passportNo || undefined, isChild: t.type === 'child' })),
-    };
-  }
-
-  async function saveDraft() {
-    setError('');
-    setSavingDraft(true);
-    try {
-      if (draftId) {
-        await api.patch(`/package-requests/${draftId}`, buildDraftPayload());
-      } else {
-        const { packageRequest } = await api.post('/package-requests/draft', buildDraftPayload());
-        setDraftId(packageRequest.id);
-        navigate(`/agent/package-builder/${packageRequest.id}`, { replace: true });
-      }
-      setDraftSavedAt(new Date());
-    } catch (err) {
-      setError(err.message || 'Unable to save draft');
-    } finally {
-      setSavingDraft(false);
-    }
-  }
-
   function toggleTour(id) {
     setSelectedTourIds((list) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]));
   }
@@ -515,8 +420,47 @@ export default function PackageBuilder() {
     setSelectedActivityIds((list) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]));
   }
 
+  // Item 1 — "Save Draft"/"Continue Editing" autosave. Deliberately skips
+  // validateStep(): a half-built RFQ (no destination yet, no hotel picked)
+  // must still save without being blocked by the strict Submit rules.
+  function buildDraftPayload() {
+    return {
+      destination: form.destination,
+      eventDateFrom: form.eventDateFrom || null,
+      eventDateTo: form.eventDateTo || null,
+      groupSize: form.groupSize ? Number(form.groupSize) : null,
+      hallCapacityNeeded: form.hallCapacityNeeded ? Number(form.hallCapacityNeeded) : null,
+      seatingStyle: form.seatingStyle || undefined,
+      avNeeds: form.avNeeds || undefined,
+      otherRequirements: form.otherRequirements || undefined,
+      hotelIds: selectedHotelIds,
+      tourIds: selectedTourIds,
+      transferIds: selectedTransferIds,
+      activityIds: selectedActivityIds,
+    };
+  }
+
+  async function saveDraft() {
+    setError('');
+    setSavingDraft(true);
+    try {
+      if (draftId) {
+        await api.patch(`/mice/rfqs/${draftId}`, buildDraftPayload());
+      } else {
+        const { miceRfq } = await api.post('/mice/rfqs/draft', buildDraftPayload());
+        setDraftId(miceRfq.id);
+        navigate(`/agent/mice-builder/${miceRfq.id}`, { replace: true });
+      }
+      setDraftSavedAt(new Date());
+    } catch (err) {
+      setError(err.message || 'Unable to save draft');
+    } finally {
+      setSavingDraft(false);
+    }
+  }
+
   function goNext() {
-    const validationError = validateStep(step, { form, selectedHotelId, travelers });
+    const validationError = validateStep(step, { form, selectedHotelIds });
     if (validationError) {
       setError(validationError);
       return;
@@ -531,7 +475,9 @@ export default function PackageBuilder() {
   }
 
   async function handleSubmit() {
-    const validationError = validateStep(6, { form, selectedHotelId, travelers });
+    const step1Error = validateStep(1, { form, selectedHotelIds });
+    const step2Error = validateStep(2, { form, selectedHotelIds });
+    const validationError = step1Error || step2Error;
     if (validationError) {
       setError(validationError);
       return;
@@ -541,25 +487,25 @@ export default function PackageBuilder() {
     try {
       const payload = {
         destination: form.destination,
-        dateFrom: form.dateFrom,
-        dateTo: form.dateTo,
-        paxAdults: Number(form.paxAdults),
-        paxChildren: Number(form.paxChildren) || 0,
-        hotelIds: [selectedHotelId],
+        eventDateFrom: form.eventDateFrom,
+        eventDateTo: form.eventDateTo,
+        groupSize: Number(form.groupSize),
+        hallCapacityNeeded: form.hallCapacityNeeded ? Number(form.hallCapacityNeeded) : undefined,
+        seatingStyle: form.seatingStyle || undefined,
+        avNeeds: form.avNeeds || undefined,
+        otherRequirements: form.otherRequirements || undefined,
+        hotelIds: selectedHotelIds,
         tourIds: selectedTourIds,
         transferIds: selectedTransferIds,
         activityIds: selectedActivityIds,
-        // Unfiltered — validateStep(6) above already guarantees every row
-        // has a name (and adults have a passport), so all rows are real.
-        travelers: travelers.map((t) => ({ name: t.name, passportNo: t.passportNo || undefined, isChild: t.type === 'child' })),
       };
       // A draft opened via "Continue Editing" submits through its own row
-      // (validated the same way — createPackageRequestSchema — just against
-      // an existing 'draft' instead of creating a new 'submitted' one).
-      const { packageRequest } = draftId
-        ? await api.post(`/package-requests/${draftId}/submit`, payload)
-        : await api.post('/package-requests', payload);
-      setSubmittedId(packageRequest.id);
+      // (validated the same way — createMiceRfqSchema — just against an
+      // existing 'draft' instead of creating a new 'submitted' one).
+      const { miceRfq } = draftId
+        ? await api.post(`/mice/rfqs/${draftId}/submit`, payload)
+        : await api.post('/mice/rfqs', payload);
+      setSubmittedId(miceRfq.id);
     } catch (err) {
       setError(err.message || 'Unable to submit request');
     } finally {
@@ -567,29 +513,29 @@ export default function PackageBuilder() {
     }
   }
 
-  const selectedHotel = hotels.find((h) => h.id === selectedHotelId) || null;
+  const selectedHotels = hotels.filter((h) => selectedHotelIds.includes(h.id));
   const selectedTours = tours.filter((t) => selectedTourIds.includes(t.id));
   const selectedTransfers = transfers.filter((t) => selectedTransferIds.includes(t.id));
   const selectedActivities = activities.filter((a) => selectedActivityIds.includes(a.id));
 
   return (
     <div className="mx-auto max-w-5xl p-5 lg:p-8">
-      <h2 className="mb-1 text-2xl font-bold text-agent-ink">Custom FIT Package Builder</h2>
+      <h2 className="mb-1 text-2xl font-bold text-agent-ink">MICE Curation</h2>
       <p className="mb-5 text-sm text-agent-muted">
-        Build a personalised package for your client. Pricing is handled by Xclusive Oman once you submit
-        — no cost or price is shown anywhere in this builder.
+        Curate a MICE proposal for your client. Pricing is handled by Xclusive Oman once you submit — no
+        cost or price is shown anywhere in this builder.
       </p>
 
       {submittedId ? (
         <Card label="Request submitted" className="border-white">
           <p className="text-sm text-agent-ink">
-            Your Custom FIT request has been submitted and is now with our team for pricing. You'll be
-            notified once a quote is ready.
+            Your MICE request has been submitted and is now with our team for pricing. You'll be notified
+            once a proposal is ready.
           </p>
           <p className="mt-2 font-mono text-xs text-agent-muted">Reference: {submittedId}</p>
           <div className="mt-4 flex flex-wrap gap-2">
-            <Button variant="accent" onClick={() => navigate('/agent/fit-requests')}>
-              View My FIT Requests
+            <Button variant="accent" onClick={() => navigate('/agent/mice-requests')}>
+              View My MICE Requests
             </Button>
             <Button onClick={() => navigate('/agent/dashboard')}>Back to Dashboard</Button>
           </div>
@@ -600,14 +546,14 @@ export default function PackageBuilder() {
         <>
           <StepIndicator step={step} />
 
-          {step === 1 && <TripDetailsStep form={form} update={update} />}
+          {step === 1 && <EventDetailsStep form={form} update={update} />}
           {step === 2 && (
             <HotelsStep
               hotels={hotels}
               cityFilter={hotelCityFilter}
               setCityFilter={setHotelCityFilter}
-              selectedHotelId={selectedHotelId}
-              setSelectedHotelId={setSelectedHotelId}
+              selectedHotelIds={selectedHotelIds}
+              toggleHotel={toggleHotel}
             />
           )}
           {step === 3 && (
@@ -623,17 +569,15 @@ export default function PackageBuilder() {
             <TransfersStep transfers={transfers} selectedTransferIds={selectedTransferIds} toggleTransfer={toggleTransfer} />
           )}
           {step === 5 && (
-            <ExtrasStep activities={activities} selectedActivityIds={selectedActivityIds} toggleActivity={toggleActivity} />
+            <ActivitiesStep activities={activities} selectedActivityIds={selectedActivityIds} toggleActivity={toggleActivity} />
           )}
           {step === 6 && (
             <ReviewStep
               form={form}
-              selectedHotel={selectedHotel}
+              selectedHotels={selectedHotels}
               selectedTours={selectedTours}
               selectedTransfers={selectedTransfers}
               selectedActivities={selectedActivities}
-              travelers={travelers}
-              updateTraveler={updateTraveler}
             />
           )}
 
