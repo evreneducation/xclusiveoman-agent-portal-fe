@@ -9,6 +9,9 @@ import DepartureDetail from './pages/DepartureDetail.jsx';
 import PackageBuilder from './pages/PackageBuilder.jsx';
 import FitRequests from './pages/FitRequests.jsx';
 import QuoteDetail from './pages/QuoteDetail.jsx';
+import MiceBuilder from './pages/MiceBuilder.jsx';
+import MyMiceRequests from './pages/MyMiceRequests.jsx';
+import MiceProposalDetail from './pages/MiceProposalDetail.jsx';
 import Bookings from './pages/Bookings.jsx';
 import Payment from './pages/Payment.jsx';
 import Transactions from './pages/Transactions.jsx';
@@ -30,6 +33,10 @@ export default function App() {
             <Route path="package-builder/:id" element={<PackageBuilder />} />
             <Route path="fit-requests" element={<FitRequests />} />
             <Route path="fit-requests/:id" element={<QuoteDetail />} />
+            <Route path="mice-builder" element={<MiceBuilder />} />
+            <Route path="mice-builder/:id" element={<MiceBuilder />} />
+            <Route path="mice-requests" element={<MyMiceRequests />} />
+            <Route path="mice-requests/:id" element={<MiceProposalDetail />} />
             <Route path="bookings" element={<Bookings />} />
             <Route path="payments/:bookingId" element={<Payment />} />
             <Route path="transactions" element={<Transactions />} />

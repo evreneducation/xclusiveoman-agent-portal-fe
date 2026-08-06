@@ -52,7 +52,15 @@ const NAV_ITEMS = [
       { to: '/admin/mice-catalog', label: 'MICE Catalog', Icon: LuPresentation },
     ],
   },
-  { key: 'quotes-pricing', to: '/admin/quote-inbox', label: 'Quotes & Pricing', Icon: LuInbox },
+  {
+    key: 'quotes-pricing',
+    label: 'Quotes & Pricing',
+    Icon: LuInbox,
+    children: [
+      { to: '/admin/quote-inbox', label: 'Custom FIT Quotes', Icon: LuInbox },
+      { to: '/admin/mice-requests', label: 'MICE Requests', Icon: LuPresentation },
+    ],
+  },
   { key: 'bookings-documents', to: '/admin/bookings-documents', label: 'Bookings & Documents', Icon: LuClipboardCheck },
   {
     key: 'finance',

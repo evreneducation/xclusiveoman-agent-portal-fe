@@ -25,6 +25,8 @@ const NAV_ITEMS = [
   { to: '/agent/departures', label: 'Fixed Group Departures', Icon: DeparturesIcon },
   { to: '/agent/package-builder', label: 'Custom FIT Package Builder', Icon: BuilderIcon },
   { to: '/agent/fit-requests', label: 'My FIT Requests / Quotes', Icon: QuotesIcon },
+  { to: '/agent/mice-builder', label: 'MICE Curation', Icon: BuilderIcon },
+  { to: '/agent/mice-requests', label: 'My MICE Requests', Icon: QuotesIcon },
   { to: '/agent/bookings', label: 'My Bookings', Icon: BookingsIcon },
   { to: '/agent/transactions', label: 'Payment & Transactions', Icon: PaymentsIcon },
   { to: '/agent/notifications', label: 'Notifications', Icon: NotificationsIcon },
