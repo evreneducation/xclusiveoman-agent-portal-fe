@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { Button, Card, Checkbox, ErrorText, FieldLabel, TextInput } from '../components/ui.jsx';
 
@@ -332,6 +332,7 @@ function validateStep(step, { form, selectedHotelId, travelers }) {
 
 export default function PackageBuilder() {
   const navigate = useNavigate();
+  const { id: draftIdParam } = useParams();
 
   const [step, setStep] = useState(1);
   const [form, setForm] = useState({ destination: '', dateFrom: '', dateTo: '', paxAdults: 2, paxChildren: 0 });
@@ -351,6 +352,13 @@ export default function PackageBuilder() {
   const [selectedActivityIds, setSelectedActivityIds] = useState([]);
   const [travelers, setTravelers] = useState([{ name: '', passportNo: '' }]);
 
+  // Draft Quotes (item 1) — "Continue Editing" opens /agent/package-builder/:id;
+  // draftId then tracks which row "Save Draft" and "Submit Request" write to.
+  const [draftId, setDraftId] = useState(draftIdParam || '');
+  const [draftLoading, setDraftLoading] = useState(!!draftIdParam);
+  const [savingDraft, setSavingDraft] = useState(false);
+  const [draftSavedAt, setDraftSavedAt] = useState(null);
+
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submittedId, setSubmittedId] = useState('');
@@ -367,8 +375,77 @@ export default function PackageBuilder() {
       .finally(() => setCatalogLoading(false));
   }, []);
 
+  // Loads a previously-saved draft's state into the wizard so "Continue
+  // Editing" resumes exactly where the agent left off.
+  useEffect(() => {
+    if (!draftIdParam) return;
+    api
+      .get(`/package-requests/${draftIdParam}`)
+      .then(({ packageRequest: pr }) => {
+        if (pr.status !== 'draft') {
+          // Already submitted — this link is stale; the read-only quote view is the right place for it now.
+          navigate(`/agent/fit-requests/${pr.id}`, { replace: true });
+          return;
+        }
+        setForm({
+          destination: pr.destination || '',
+          dateFrom: pr.dateFrom ? pr.dateFrom.slice(0, 10) : '',
+          dateTo: pr.dateTo ? pr.dateTo.slice(0, 10) : '',
+          paxAdults: pr.paxAdults || 1,
+          paxChildren: pr.paxChildren || 0,
+        });
+        setSelectedHotelId(pr.hotels[0]?.id || '');
+        setSelectedTourIds(pr.tours.map((t) => t.id));
+        setSelectedTransferIds(pr.transfers.map((t) => t.id));
+        setSelectedActivityIds(pr.activities.map((a) => a.id));
+        if (pr.travelers.length > 0) {
+          setTravelers(pr.travelers.map((t) => ({ name: t.name, passportNo: t.passportNo || '' })));
+        }
+      })
+      .catch((err) => setError(err.message || 'Unable to load this draft'))
+      .finally(() => setDraftLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftIdParam]);
+
   function update(key, value) {
     setForm((f) => ({ ...f, [key]: value }));
+  }
+
+  // Item 1 — "Save Draft"/"Continue Editing" autosave. Deliberately skips
+  // validateStep(): a half-built package (no destination yet, no hotel
+  // picked) must still save without being blocked by the strict Submit rules.
+  function buildDraftPayload() {
+    return {
+      destination: form.destination,
+      dateFrom: form.dateFrom || null,
+      dateTo: form.dateTo || null,
+      paxAdults: Number(form.paxAdults) || 1,
+      paxChildren: Number(form.paxChildren) || 0,
+      hotelIds: selectedHotelId ? [selectedHotelId] : [],
+      tourIds: selectedTourIds,
+      transferIds: selectedTransferIds,
+      activityIds: selectedActivityIds,
+      travelers: travelers.map((t) => ({ name: t.name, passportNo: t.passportNo || undefined })),
+    };
+  }
+
+  async function saveDraft() {
+    setError('');
+    setSavingDraft(true);
+    try {
+      if (draftId) {
+        await api.patch(`/package-requests/${draftId}`, buildDraftPayload());
+      } else {
+        const { packageRequest } = await api.post('/package-requests/draft', buildDraftPayload());
+        setDraftId(packageRequest.id);
+        navigate(`/agent/package-builder/${packageRequest.id}`, { replace: true });
+      }
+      setDraftSavedAt(new Date());
+    } catch (err) {
+      setError(err.message || 'Unable to save draft');
+    } finally {
+      setSavingDraft(false);
+    }
   }
 
   function toggleTour(id) {
@@ -419,7 +496,12 @@ export default function PackageBuilder() {
           .filter((t) => t.name.trim())
           .map((t) => ({ name: t.name, passportNo: t.passportNo || undefined })),
       };
-      const { packageRequest } = await api.post('/package-requests', payload);
+      // A draft opened via "Continue Editing" submits through its own row
+      // (validated the same way — createPackageRequestSchema — just against
+      // an existing 'draft' instead of creating a new 'submitted' one).
+      const { packageRequest } = draftId
+        ? await api.post(`/package-requests/${draftId}/submit`, payload)
+        : await api.post('/package-requests', payload);
       setSubmittedId(packageRequest.id);
     } catch (err) {
       setError(err.message || 'Unable to submit request');
@@ -448,12 +530,15 @@ export default function PackageBuilder() {
             notified once a quote is ready.
           </p>
           <p className="mt-2 font-mono text-xs text-agent-muted">Reference: {submittedId}</p>
-          <Button className="mt-4" variant="accent" onClick={() => navigate('/agent/dashboard')}>
-            Back to Dashboard
-          </Button>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button variant="accent" onClick={() => navigate('/agent/fit-requests')}>
+              View My FIT Requests
+            </Button>
+            <Button onClick={() => navigate('/agent/dashboard')}>Back to Dashboard</Button>
+          </div>
         </Card>
-      ) : catalogLoading ? (
-        <p className="text-sm text-agent-muted">Loading catalog…</p>
+      ) : catalogLoading || draftLoading ? (
+        <p className="text-sm text-agent-muted">Loading…</p>
       ) : (
         <>
           <StepIndicator step={step} />
@@ -497,19 +582,27 @@ export default function PackageBuilder() {
 
           <ErrorText>{error}</ErrorText>
 
-          <div className="mt-4 flex justify-between">
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
             <Button onClick={goBack} disabled={step === 1}>
               Back
             </Button>
-            {step < STEPS.length ? (
-              <Button variant="accent" onClick={goNext}>
-                Next
+            <div className="flex flex-wrap items-center gap-2">
+              {draftSavedAt && (
+                <span className="text-[11px] text-agent-muted">Draft saved {draftSavedAt.toLocaleTimeString()}</span>
+              )}
+              <Button disabled={savingDraft} onClick={saveDraft}>
+                {savingDraft ? 'Saving…' : 'Save Draft'}
               </Button>
-            ) : (
-              <Button variant="accent" onClick={handleSubmit} disabled={submitting}>
-                {submitting ? 'Submitting…' : 'Submit Request'}
-              </Button>
-            )}
+              {step < STEPS.length ? (
+                <Button variant="accent" onClick={goNext}>
+                  Next
+                </Button>
+              ) : (
+                <Button variant="accent" onClick={handleSubmit} disabled={submitting}>
+                  {submitting ? 'Submitting…' : 'Submit Request'}
+                </Button>
+              )}
+            </div>
           </div>
         </>
       )}
