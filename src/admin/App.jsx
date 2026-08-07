@@ -10,6 +10,8 @@ import ProductCatalog from './pages/ProductCatalog.jsx';
 import FdPackageEditor from './pages/FdPackageEditor.jsx';
 import HotelEditor from './pages/HotelEditor.jsx';
 import TourEditor from './pages/TourEditor.jsx';
+import ActivityEditor from './pages/ActivityEditor.jsx';
+import TransferEditor from './pages/TransferEditor.jsx';
 import MiceCatalog from './pages/MiceCatalog.jsx';
 import NeftVerification from './pages/NeftVerification.jsx';
 import QuoteInbox from './pages/QuoteInbox.jsx';
@@ -40,6 +42,8 @@ export default function App() {
               <Route path="catalog/fd-packages/:id" element={<FdPackageEditor />} />
               <Route path="catalog/hotels/:id" element={<HotelEditor />} />
               <Route path="catalog/tours/:id" element={<TourEditor />} />
+              <Route path="catalog/activities/:id" element={<ActivityEditor />} />
+              <Route path="catalog/transfers/:id" element={<TransferEditor />} />
               <Route path="mice-catalog" element={<MiceCatalog />} />
               <Route path="quote-inbox" element={<QuoteInbox />} />
               <Route path="quote-inbox/:id" element={<QuoteInboxDetail />} />

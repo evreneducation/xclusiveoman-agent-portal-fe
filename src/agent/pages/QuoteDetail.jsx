@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { getSocket } from '../lib/socket.js';
 import { Badge, Button, Card, ErrorText, FieldLabel, Table, Textarea } from '../components/ui.jsx';
+import ItineraryTimeline from '../components/ItineraryTimeline.jsx';
 import { formatCurrency } from '../../shared/fdPackage/index.js';
 
 // Item 2 — agent-facing status labels/tones match the wireframe's colour
@@ -330,6 +331,14 @@ export default function QuoteDetail() {
             items={packageRequest.activities}
             empty="No extras selected."
             renderMeta={(a) => `${a.city || '—'}${a.duration ? ` · ${a.duration}` : ''}`}
+          />
+
+          {/* Day-wise Itinerary Planner (FIT-5) — whatever's here is exactly
+              what was submitted, or what the admin has since rearranged;
+              both write through the same rows this reads. */}
+          <ItineraryTimeline
+            days={packageRequest.itinerary}
+            emptyLabel="No day-wise itinerary was added for this request."
           />
 
           {packageRequest.status === 'published' && <AgentActions packageRequest={packageRequest} onUpdated={setPackageRequest} />}
