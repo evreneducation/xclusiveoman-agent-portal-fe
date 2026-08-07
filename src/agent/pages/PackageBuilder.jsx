@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api/client.js';
-import { Button, Card, Checkbox, ErrorText, FieldLabel, TextInput } from '../components/ui.jsx';
+import { Button, Card, Checkbox, ErrorText, FieldLabel, Tag, TextInput } from '../components/ui.jsx';
 import ItineraryTimeline from '../components/ItineraryTimeline.jsx';
 import {
   ITINERARY_ITEM_TYPE_META,
@@ -92,42 +92,87 @@ function TripFieldsCard({ form, update }) {
   );
 }
 
+// Star categories the Product Catalog actually supports (admin/lib/
+// hotelForm.js's STAR_OPTIONS) — no "Luxury" tier exists in the hotels
+// schema (just a plain 3/4/5 `category` column), so the picker only offers
+// what the catalog can actually filter on.
+const HOTEL_STAR_CATEGORIES = [3, 4, 5];
+
+// Renamed from the obvious "StarRating" to avoid confusion with agent/
+// components/ui.jsx's StarRating, which renders a numeric review rating
+// (rating + review count) — hotels have neither; this just turns the plain
+// 3/4/5 `category` column into star glyphs.
+function HotelStars({ category }) {
+  return (
+    <span className="tracking-tight text-agent-accent-dark">
+      {'★'.repeat(category)}
+      <span className="text-agent-line-light">{'★'.repeat(Math.max(0, 5 - category))}</span>
+    </span>
+  );
+}
+
 // Hotel selection (FIT-2), now a section within Trip Details rather than its
-// own wizard step. Single-select, matching the wireframe's one "Selected"
+// own wizard step. Gated behind a star-category pick first — hotels don't
+// load at all until a category is chosen, rather than dumping every hotel on
+// screen at once. Single-select, matching the wireframe's one "Selected"
 // card and the priced-quote summary later showing one hotel line item. No
 // price is ever rendered here (FIT-6 blind pricing).
-function HotelsStep({ hotels, cityFilter, setCityFilter, selectedHotelId, setSelectedHotelId }) {
+function HotelsStep({ hotels, starCategory, setStarCategory, cityFilter, setCityFilter, selectedHotelId, setSelectedHotelId }) {
+  const inCategory = starCategory ? hotels.filter((h) => h.category === starCategory) : [];
   const filtered = cityFilter
-    ? hotels.filter((h) => (h.city || '').toLowerCase().includes(cityFilter.toLowerCase()))
-    : hotels;
+    ? inCategory.filter((h) => (h.city || '').toLowerCase().includes(cityFilter.toLowerCase()))
+    : inCategory;
 
   return (
     <Card label="Select a hotel" className="border-white">
-      <TextInput className="mb-4 max-w-xs" placeholder="Filter by city…" value={cityFilter} onChange={(e) => setCityFilter(e.target.value)} />
-      {filtered.length === 0 && <p className="text-sm text-agent-muted">No hotels available{cityFilter ? ' for that city' : ''}.</p>}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {filtered.map((h) => {
-          const selected = h.id === selectedHotelId;
-          return (
-            <button
-              type="button"
-              key={h.id}
-              onClick={() => setSelectedHotelId(selected ? '' : h.id)}
-              className={`rounded-lg border p-3 text-left shadow-sm transition ${
-                selected ? 'border-agent-accent ring-2 ring-agent-accent/25' : 'border-agent-line-light hover:border-agent-ink'
-              }`}
-            >
-              <CatalogImage url={h.images?.[0]} />
-              <div className="mt-2 text-sm font-bold">{h.name}</div>
-              <div className="text-xs text-agent-muted">
-                {h.city || '—'} {h.category ? `· ${h.category}★` : ''}
-              </div>
-              {h.description && <p className="mt-1 line-clamp-2 text-xs text-agent-muted">{h.description}</p>}
-              {selected && <div className="mt-2 text-[10px] font-semibold uppercase text-agent-accent">Selected</div>}
-            </button>
-          );
-        })}
+      <FieldLabel>Star category *</FieldLabel>
+      <div className="mb-4 flex flex-wrap gap-2">
+        {HOTEL_STAR_CATEGORIES.map((cat) => (
+          <button key={cat} type="button" onClick={() => setStarCategory(cat)}>
+            <Tag active={starCategory === cat}>{cat}★</Tag>
+          </button>
+        ))}
       </div>
+
+      {!starCategory ? (
+        <p className="text-sm text-agent-muted">Select a star category above to see hotels.</p>
+      ) : (
+        <>
+          <TextInput className="mb-4 max-w-xs" placeholder="Filter by city…" value={cityFilter} onChange={(e) => setCityFilter(e.target.value)} />
+          {filtered.length === 0 && (
+            <p className="text-sm text-agent-muted">No {starCategory}★ hotels available{cityFilter ? ' for that city' : ''}.</p>
+          )}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {filtered.map((h) => {
+              const selected = h.id === selectedHotelId;
+              return (
+                <div
+                  key={h.id}
+                  className={`flex flex-col rounded-lg border p-3 shadow-sm transition ${
+                    selected ? 'border-agent-accent ring-2 ring-agent-accent/25' : 'border-agent-line-light'
+                  }`}
+                >
+                  <CatalogImage url={h.images?.[0]} />
+                  <div className="mt-2 text-sm font-bold">{h.name}</div>
+                  <HotelStars category={h.category} />
+                  <div className="mt-0.5 text-xs text-agent-muted">{[h.city, h.state].filter(Boolean).join(', ') || '—'}</div>
+                  {h.description && <p className="mt-1 line-clamp-2 text-xs text-agent-muted">{h.description}</p>}
+                  {h.roomTypes?.length > 0 && (
+                    <p className="mt-1 text-[11px] text-agent-muted">Room types: {h.roomTypes.join(', ')}</p>
+                  )}
+                  <Button
+                    variant={selected ? 'accent' : 'default'}
+                    className="mt-3 w-full justify-center"
+                    onClick={() => setSelectedHotelId(selected ? '' : h.id)}
+                  >
+                    {selected ? 'Selected ✓' : 'Select'}
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
     </Card>
   );
 }
@@ -220,6 +265,8 @@ function TripDetailsStep({
   form,
   update,
   hotels,
+  starCategory,
+  setStarCategory,
   hotelCityFilter,
   setHotelCityFilter,
   selectedHotelId,
@@ -241,6 +288,8 @@ function TripDetailsStep({
       <TripFieldsCard form={form} update={update} />
       <HotelsStep
         hotels={hotels}
+        starCategory={starCategory}
+        setStarCategory={setStarCategory}
         cityFilter={hotelCityFilter}
         setCityFilter={setHotelCityFilter}
         selectedHotelId={selectedHotelId}
@@ -620,6 +669,9 @@ export default function PackageBuilder() {
   const [activities, setActivities] = useState([]);
   const [catalogLoading, setCatalogLoading] = useState(true);
 
+  // Hotels don't load until a star category is picked (see HotelsStep) —
+  // '' means "none picked yet", not "show everything".
+  const [starCategory, setStarCategory] = useState('');
   const [hotelCityFilter, setHotelCityFilter] = useState('');
   const [tourCityFilter, setTourCityFilter] = useState('');
 
@@ -682,6 +734,10 @@ export default function PackageBuilder() {
           paxChildren: pr.paxChildren || 0,
         });
         setSelectedHotelId(pr.hotels[0]?.id || '');
+        // Pre-picks the star category the already-selected hotel belongs to,
+        // so resuming a draft shows that hotel's card rather than the
+        // "select a category first" prompt.
+        setStarCategory(pr.hotels[0]?.category || '');
         setSelectedTourIds(pr.tours.map((t) => t.id));
         setSelectedTransferIds(pr.transfers.map((t) => t.id));
         setSelectedActivityIds(pr.activities.map((a) => a.id));
@@ -896,6 +952,8 @@ export default function PackageBuilder() {
               form={form}
               update={update}
               hotels={hotels}
+              starCategory={starCategory}
+              setStarCategory={setStarCategory}
               hotelCityFilter={hotelCityFilter}
               setHotelCityFilter={setHotelCityFilter}
               selectedHotelId={selectedHotelId}
