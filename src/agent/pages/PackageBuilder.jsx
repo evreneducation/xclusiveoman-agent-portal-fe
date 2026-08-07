@@ -2,16 +2,33 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { Button, Card, Checkbox, ErrorText, FieldLabel, TextInput } from '../components/ui.jsx';
+import ItineraryTimeline from '../components/ItineraryTimeline.jsx';
+import {
+  ITINERARY_ITEM_TYPE_META,
+  buildItineraryDays,
+  buildSelectionPool,
+  clampItineraryDays,
+  computeDayCount,
+  deserializeItinerary,
+  itemsForDay,
+  moveItineraryItem,
+  reconcileItineraryItems,
+  resolveItemMeta,
+  serializeItinerary,
+  unassignedItems,
+} from '../../shared/itinerary/index.js';
 
-// FIT-1: destination/dates/pax -> hotels -> tours -> transfers -> extras -> review,
-// matching the wireframe's step tags on Screen 05.
+// FIT-1: destination/dates/pax -> hotels -> tours -> transfers -> extras ->
+// itinerary -> review, matching the wireframe's step tags on Screen 05 plus
+// FIT-5's day-wise itinerary planner.
 const STEPS = [
   { n: 1, label: 'Trip Details' },
   { n: 2, label: 'Hotels' },
   { n: 3, label: 'Tours' },
   { n: 4, label: 'Transfers' },
   { n: 5, label: 'Extras' },
-  { n: 6, label: 'Review & Submit' },
+  { n: 6, label: 'Itinerary' },
+  { n: 7, label: 'Review & Submit' },
 ];
 
 function StepIndicator({ step }) {
@@ -191,6 +208,185 @@ function ExtrasStep({ activities, selectedActivityIds, toggleActivity }) {
   );
 }
 
+// A single draggable placed/unplaced item — hotel/tour/transfer/extra —
+// within the Itinerary step. Dropping directly on a chip (rather than the
+// day's empty space) inserts before it, which is what lets ItineraryDayCard
+// support reordering within a day, not just moving between days.
+function ItineraryItemChip({ item, meta, isDragging, onDragStart, onDragEnd, onDropBefore, onUnassign }) {
+  const typeMeta = ITINERARY_ITEM_TYPE_META[item.type];
+  return (
+    <div
+      draggable
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={onDropBefore}
+      className={`flex items-center gap-2 rounded-md border border-agent-line-light bg-white px-2.5 py-2 text-xs shadow-sm cursor-grab active:cursor-grabbing ${
+        isDragging ? 'opacity-40' : ''
+      }`}
+    >
+      <span className="flex-none">{typeMeta?.icon}</span>
+      <div className="min-w-0 flex-1">
+        <div className="truncate font-semibold text-agent-ink">{meta?.name || 'Unknown item'}</div>
+        <div className="truncate text-[10px] text-agent-muted">
+          {typeMeta?.label}
+          {meta?.city ? ` · ${meta.city}` : ''}
+        </div>
+      </div>
+      {onUnassign && (
+        <button
+          type="button"
+          onClick={onUnassign}
+          title="Move back to unassigned"
+          className="flex-none text-agent-muted hover:text-agent-ink"
+        >
+          ×
+        </button>
+      )}
+    </div>
+  );
+}
+
+// One numbered timeline node — mirrors ItineraryTimeline's read-only layout,
+// but each day is a drop target (moving items in) that also renders its
+// items as drop targets themselves (reordering/moving individual items),
+// plus a free-text notes field.
+function ItineraryDayCard({ dayNumber, items, notes, onNotesChange, resolveMeta, draggingKey, setDraggingKey, moveItem, isLast }) {
+  return (
+    <div className="relative flex gap-4 pb-5 last:pb-0">
+      {!isLast && <span className="absolute left-[15px] top-8 h-[calc(100%-1.25rem)] w-px bg-agent-line-light" />}
+      <span className="relative z-10 flex h-8 w-8 flex-none items-center justify-center rounded-full bg-agent-ink text-xs font-bold text-white shadow-sm">
+        {dayNumber}
+      </span>
+      <div className="flex-1 pt-0.5">
+        <div className="mb-2 text-xs font-bold uppercase tracking-wide text-agent-accent-dark">Day {dayNumber}</div>
+        <div
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => moveItem(e.dataTransfer.getData('text/plain'), dayNumber)}
+          className="mb-2 min-h-[52px] space-y-1.5 rounded-md border border-dashed border-agent-line-light bg-agent-panel/40 p-2"
+        >
+          {items.length === 0 ? (
+            <p className="py-2 text-center text-[11px] text-agent-muted">Drag items here</p>
+          ) : (
+            items.map((item, idx) => (
+              <ItineraryItemChip
+                key={item.key}
+                item={item}
+                meta={resolveMeta(item)}
+                isDragging={draggingKey === item.key}
+                onDragStart={(e) => {
+                  e.dataTransfer.setData('text/plain', item.key);
+                  setDraggingKey(item.key);
+                }}
+                onDragEnd={() => setDraggingKey(null)}
+                onDropBefore={(e) => {
+                  e.stopPropagation();
+                  moveItem(e.dataTransfer.getData('text/plain'), dayNumber, idx);
+                }}
+                onUnassign={() => moveItem(item.key, null)}
+              />
+            ))
+          )}
+        </div>
+        <TextInput placeholder="Notes for this day (optional)…" value={notes} onChange={(e) => onNotesChange(e.target.value)} />
+      </div>
+    </div>
+  );
+}
+
+// Step 6 — Day-wise Itinerary Planner (FIT-5). Days are auto-generated from
+// Trip Details' Travel Start/End Date; every hotel/tour/transfer/extra
+// selected in steps 2-5 shows up here (in the unassigned tray until dragged
+// onto a day) via the reconciliation effect in the main component below.
+function ItineraryStep({ dayCount, itineraryItems, setItineraryItems, dayNotes, setDayNotes, selectedHotel, selectedTours, selectedTransfers, selectedActivities }) {
+  const [draggingKey, setDraggingKey] = useState(null);
+
+  function resolveMeta(item) {
+    return resolveItemMeta(item.type, item.id, {
+      hotel: selectedHotel,
+      tours: selectedTours,
+      transfers: selectedTransfers,
+      activities: selectedActivities,
+    });
+  }
+
+  function moveItem(key, targetDay, targetIndex) {
+    setItineraryItems((items) => moveItineraryItem(items, key, targetDay, targetIndex));
+  }
+
+  const pool = unassignedItems(itineraryItems);
+
+  return (
+    <Card label="Day-wise itinerary (optional)" className="border-white">
+      <p className="mb-4 text-xs text-agent-muted">
+        Drag your selected hotel, tours, transfers, and extras onto the day they happen, reorder within a day, or add
+        a note for the day. This is included with your request exactly as arranged here.
+      </p>
+
+      {dayCount === 0 ? (
+        <p className="rounded-md border border-dashed border-agent-line-light bg-agent-panel/40 p-4 text-center text-sm text-agent-muted">
+          Set Travel Start Date and Travel End Date in Trip Details to build the day-wise itinerary.
+        </p>
+      ) : (
+        <>
+          <div className="mb-5">
+            <FieldLabel>Unassigned items — drag onto a day below</FieldLabel>
+            <div
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => moveItem(e.dataTransfer.getData('text/plain'), null)}
+              className="flex min-h-[56px] flex-wrap gap-2 rounded-md border border-dashed border-agent-line-light bg-agent-panel/40 p-2.5"
+            >
+              {pool.length === 0 ? (
+                <p className="py-2 text-[11px] text-agent-muted">
+                  {itineraryItems.length === 0
+                    ? 'Select hotels/tours/transfers/extras in earlier steps to place them here.'
+                    : 'Everything is placed on a day.'}
+                </p>
+              ) : (
+                pool.map((item, idx) => (
+                  <div key={item.key} className="w-full sm:w-64">
+                    <ItineraryItemChip
+                      item={item}
+                      meta={resolveMeta(item)}
+                      isDragging={draggingKey === item.key}
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData('text/plain', item.key);
+                        setDraggingKey(item.key);
+                      }}
+                      onDragEnd={() => setDraggingKey(null)}
+                      onDropBefore={(e) => {
+                        e.stopPropagation();
+                        moveItem(e.dataTransfer.getData('text/plain'), null, idx);
+                      }}
+                    />
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div>
+            {Array.from({ length: dayCount }, (_, i) => i + 1).map((dayNumber) => (
+              <ItineraryDayCard
+                key={dayNumber}
+                dayNumber={dayNumber}
+                items={itemsForDay(itineraryItems, dayNumber)}
+                notes={dayNotes[dayNumber] || ''}
+                onNotesChange={(value) => setDayNotes((n) => ({ ...n, [dayNumber]: value }))}
+                resolveMeta={resolveMeta}
+                draggingKey={draggingKey}
+                setDraggingKey={setDraggingKey}
+                moveItem={moveItem}
+                isLast={dayNumber === dayCount}
+              />
+            ))}
+          </div>
+        </>
+      )}
+    </Card>
+  );
+}
+
 // Traveller Details rows are entirely derived from Trip Details' adult/child
 // counts (no manual add/remove) — passport only ever applies to adults, so
 // each row carries a `type` rather than relying on array position.
@@ -246,8 +442,8 @@ function TravelersEditor({ travelers, updateTraveler }) {
   );
 }
 
-// Step 6 — review & submit. No price/cost/markup fields anywhere (FIT-6).
-function ReviewStep({ form, selectedHotel, selectedTours, selectedTransfers, selectedActivities, travelers, updateTraveler }) {
+// Step 7 — review & submit. No price/cost/markup fields anywhere (FIT-6).
+function ReviewStep({ form, selectedHotel, selectedTours, selectedTransfers, selectedActivities, itineraryDays, travelers, updateTraveler }) {
   return (
     <div className="space-y-4">
       <Card label="Trip summary" className="border-white">
@@ -322,6 +518,8 @@ function ReviewStep({ form, selectedHotel, selectedTours, selectedTransfers, sel
         )}
       </Card>
 
+      <ItineraryTimeline days={itineraryDays} emptyLabel="No day-wise itinerary added — you can still submit without one." />
+
       <TravelersEditor travelers={travelers} updateTraveler={updateTraveler} />
     </div>
   );
@@ -339,7 +537,7 @@ function validateStep(step, { form, selectedHotelId, travelers }) {
     if (!selectedHotelId) return 'Select a hotel to continue.';
     return '';
   }
-  if (step === 6) {
+  if (step === 7) {
     if (travelers.some((t) => !t.name.trim())) return 'Enter a name for every traveller.';
     if (travelers.some((t) => t.type === 'adult' && !(t.passportNo || '').trim())) {
       return 'Enter a passport number for every adult traveller.';
@@ -383,6 +581,14 @@ export default function PackageBuilder() {
   // Rows are derived from form.paxAdults/paxChildren (see the sync effect
   // below) rather than started with a hardcoded default row.
   const [travelers, setTravelers] = useState([]);
+
+  // Day-wise Itinerary Planner (FIT-5) — see shared/itinerary/index.js for
+  // the shape. itineraryItems' dayNumber is kept in sync with the current
+  // hotel/tour/transfer/extra selection and the day count implied by Trip
+  // Details' dates by the two effects below, so the Itinerary step never has
+  // to reconcile stale state itself.
+  const [itineraryItems, setItineraryItems] = useState([]);
+  const [dayNotes, setDayNotes] = useState({});
 
   // Draft Quotes (item 1) — "Continue Editing" opens /agent/package-builder/:id;
   // draftId then tracks which row "Save Draft" and "Submit Request" write to.
@@ -442,6 +648,9 @@ export default function PackageBuilder() {
           ...resizeTravelerGroup(loadedAdults, pr.paxAdults || 0, 'adult'),
           ...resizeTravelerGroup(loadedChildren, pr.paxChildren || 0, 'child'),
         ]);
+        const { items, dayNotes: loadedDayNotes } = deserializeItinerary(pr.itinerary);
+        setItineraryItems(items);
+        setDayNotes(loadedDayNotes);
       })
       .catch((err) => setError(err.message || 'Unable to load this draft'))
       .finally(() => setDraftLoading(false));
@@ -459,6 +668,27 @@ export default function PackageBuilder() {
       ...resizeTravelerGroup(current.filter((t) => t.type === 'child'), childrenCount, 'child'),
     ]);
   }, [form.paxAdults, form.paxChildren]);
+
+  // Keeps the Itinerary step's item pool in sync whenever the agent changes
+  // their hotel/tour/transfer/extra picks in earlier steps — deselected
+  // items drop out, newly-selected ones land in the unassigned tray.
+  useEffect(() => {
+    const pool = buildSelectionPool({
+      hotelId: selectedHotelId,
+      tourIds: selectedTourIds,
+      transferIds: selectedTransferIds,
+      activityIds: selectedActivityIds,
+    });
+    setItineraryItems((items) => reconcileItineraryItems(items, pool));
+  }, [selectedHotelId, selectedTourIds, selectedTransferIds, selectedActivityIds]);
+
+  const dayCount = computeDayCount(form.dateFrom, form.dateTo);
+
+  // Sends anything assigned to a day that no longer exists (Travel End Date
+  // moved earlier) back to the unassigned tray instead of losing it.
+  useEffect(() => {
+    setItineraryItems((items) => clampItineraryDays(items, dayCount));
+  }, [dayCount]);
 
   function update(key, value) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -483,6 +713,7 @@ export default function PackageBuilder() {
       transferIds: selectedTransferIds,
       activityIds: selectedActivityIds,
       travelers: travelers.map((t) => ({ name: t.name, passportNo: t.passportNo || undefined, isChild: t.type === 'child' })),
+      itinerary: serializeItinerary(itineraryItems, dayNotes, dayCount),
     };
   }
 
@@ -531,7 +762,7 @@ export default function PackageBuilder() {
   }
 
   async function handleSubmit() {
-    const validationError = validateStep(6, { form, selectedHotelId, travelers });
+    const validationError = validateStep(7, { form, selectedHotelId, travelers });
     if (validationError) {
       setError(validationError);
       return;
@@ -549,9 +780,10 @@ export default function PackageBuilder() {
         tourIds: selectedTourIds,
         transferIds: selectedTransferIds,
         activityIds: selectedActivityIds,
-        // Unfiltered — validateStep(6) above already guarantees every row
+        // Unfiltered — validateStep(7) above already guarantees every row
         // has a name (and adults have a passport), so all rows are real.
         travelers: travelers.map((t) => ({ name: t.name, passportNo: t.passportNo || undefined, isChild: t.type === 'child' })),
+        itinerary: serializeItinerary(itineraryItems, dayNotes, dayCount),
       };
       // A draft opened via "Continue Editing" submits through its own row
       // (validated the same way — createPackageRequestSchema — just against
@@ -571,6 +803,16 @@ export default function PackageBuilder() {
   const selectedTours = tours.filter((t) => selectedTourIds.includes(t.id));
   const selectedTransfers = transfers.filter((t) => selectedTransferIds.includes(t.id));
   const selectedActivities = activities.filter((a) => selectedActivityIds.includes(a.id));
+
+  function resolveItineraryMeta(item) {
+    return resolveItemMeta(item.type, item.id, {
+      hotel: selectedHotel,
+      tours: selectedTours,
+      transfers: selectedTransfers,
+      activities: selectedActivities,
+    });
+  }
+  const itineraryDays = buildItineraryDays(itineraryItems, dayNotes, dayCount, resolveItineraryMeta);
 
   return (
     <div className="mx-auto max-w-5xl p-5 lg:p-8">
@@ -626,12 +868,26 @@ export default function PackageBuilder() {
             <ExtrasStep activities={activities} selectedActivityIds={selectedActivityIds} toggleActivity={toggleActivity} />
           )}
           {step === 6 && (
+            <ItineraryStep
+              dayCount={dayCount}
+              itineraryItems={itineraryItems}
+              setItineraryItems={setItineraryItems}
+              dayNotes={dayNotes}
+              setDayNotes={setDayNotes}
+              selectedHotel={selectedHotel}
+              selectedTours={selectedTours}
+              selectedTransfers={selectedTransfers}
+              selectedActivities={selectedActivities}
+            />
+          )}
+          {step === 7 && (
             <ReviewStep
               form={form}
               selectedHotel={selectedHotel}
               selectedTours={selectedTours}
               selectedTransfers={selectedTransfers}
               selectedActivities={selectedActivities}
+              itineraryDays={itineraryDays}
               travelers={travelers}
               updateTraveler={updateTraveler}
             />
