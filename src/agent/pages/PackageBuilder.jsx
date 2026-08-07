@@ -20,6 +20,16 @@ import {
   unassignedItems,
 } from '../../shared/itinerary/index.js';
 
+// Today, as a "YYYY-MM-DD" string in the browser's local timezone — matches
+// what <input type="date"> reads/writes, so it can be used directly as a
+// `min` bound and in string comparisons without any Date-object timezone
+// pitfalls. (Not toISOString().slice(0, 10) — that's UTC and can read as
+// "tomorrow" or "yesterday" depending on the agent's local time of day.)
+function todayDateString() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 // FIT-1: destination/dates/pax + hotels/tours/transfers/extras are all
 // managed together from Trip Details (hotels/tours/transfers/extras used to
 // be their own wizard steps — merged in so agents can start placing items on
@@ -75,11 +85,20 @@ function TripFieldsCard({ form, update }) {
         </div>
         <div>
           <FieldLabel>Travel start date *</FieldLabel>
-          <TextInput type="date" value={form.dateFrom} onChange={(e) => update('dateFrom', e.target.value)} />
+          <TextInput type="date" min={todayDateString()} value={form.dateFrom} onChange={(e) => update('dateFrom', e.target.value)} />
         </div>
         <div>
           <FieldLabel>Travel end date *</FieldLabel>
-          <TextInput type="date" value={form.dateTo} onChange={(e) => update('dateTo', e.target.value)} />
+          {/* min= the selected Start Date (falling back to today when none is
+              picked yet) disables every earlier date in the End Date
+              calendar itself, on top of the auto-clear-on-conflict effect
+              and validateStep's submit-time check below. */}
+          <TextInput
+            type="date"
+            min={form.dateFrom || todayDateString()}
+            value={form.dateTo}
+            onChange={(e) => update('dateTo', e.target.value)}
+          />
         </div>
         <div>
           <FieldLabel>Adults *</FieldLabel>
@@ -694,7 +713,11 @@ function validateStep(step, { form, selectedHotelId, travelers }) {
   if (step === 1) {
     if (!form.destination.trim()) return 'Destination is required.';
     if (!form.dateFrom || !form.dateTo) return 'Travel start and end dates are required.';
-    if (new Date(form.dateFrom) > new Date(form.dateTo)) return 'Travel end date must be on or after the start date.';
+    // String comparison, not Date parsing — both are plain "YYYY-MM-DD" from
+    // <input type="date">, so lexicographic order already matches
+    // chronological order (see the matching backend refine in schemas.js).
+    if (form.dateTo < form.dateFrom) return 'End date cannot be earlier than the start date.';
+    if (form.dateFrom < todayDateString()) return 'Start date cannot be in the past.';
     if (!form.paxAdults || Number(form.paxAdults) < 1) return 'At least one adult is required.';
     // Hotel selection moved into this same step (was its own wizard step).
     if (!selectedHotelId) return 'Select a hotel to continue.';
@@ -838,6 +861,18 @@ export default function PackageBuilder() {
       ...resizeTravelerGroup(current.filter((t) => t.type === 'child'), childrenCount, 'child'),
     ]);
   }, [form.paxAdults, form.paxChildren]);
+
+  // If Start Date moves later than the already-picked End Date, the End Date
+  // is no longer valid — clear it automatically rather than leaving a
+  // backwards range sitting in the form (the <input min> above stops most of
+  // this at the picker level, but doesn't retroactively clear a value that
+  // was valid before Start Date changed). Deliberately one-directional: a
+  // shortened End Date can't ever make Start Date invalid.
+  useEffect(() => {
+    if (form.dateFrom && form.dateTo && form.dateTo < form.dateFrom) {
+      setForm((f) => ({ ...f, dateTo: '' }));
+    }
+  }, [form.dateFrom]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Keeps the Itinerary step's item pool in sync whenever the agent changes
   // their hotel/tour/transfer/extra picks in earlier steps — deselected
