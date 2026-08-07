@@ -18,17 +18,15 @@ import {
   unassignedItems,
 } from '../../shared/itinerary/index.js';
 
-// FIT-1: destination/dates/pax -> hotels -> tours -> transfers -> extras ->
-// itinerary -> review, matching the wireframe's step tags on Screen 05 plus
-// FIT-5's day-wise itinerary planner.
+// FIT-1: destination/dates/pax + hotels/tours/transfers/extras are all
+// managed together from Trip Details (hotels/tours/transfers/extras used to
+// be their own wizard steps — merged in so agents can start placing items on
+// the itinerary immediately instead of stepping through four pickers first),
+// then Itinerary (FIT-5), then Review.
 const STEPS = [
   { n: 1, label: 'Trip Details' },
-  { n: 2, label: 'Hotels' },
-  { n: 3, label: 'Tours' },
-  { n: 4, label: 'Transfers' },
-  { n: 5, label: 'Extras' },
-  { n: 6, label: 'Itinerary' },
-  { n: 7, label: 'Review & Submit' },
+  { n: 2, label: 'Itinerary' },
+  { n: 3, label: 'Review & Submit' },
 ];
 
 function StepIndicator({ step }) {
@@ -62,8 +60,10 @@ function CatalogImage({ url }) {
   );
 }
 
-// Step 1 — trip details (FIT-1: destination, dates, pax).
-function TripDetailsStep({ form, update }) {
+// Trip Details' own fields (FIT-1: destination, dates, pax) — one section
+// among several the consolidated TripDetailsStep composite (below) renders
+// together with hotel/tour/transfer/extra selection.
+function TripFieldsCard({ form, update }) {
   return (
     <Card label="Trip details" className="border-white">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -92,9 +92,10 @@ function TripDetailsStep({ form, update }) {
   );
 }
 
-// Step 2 — hotel selection (FIT-2). Single-select, matching the wireframe's
-// one "Selected" card and the priced-quote summary later showing one hotel
-// line item. No price is ever rendered here (FIT-6 blind pricing).
+// Hotel selection (FIT-2), now a section within Trip Details rather than its
+// own wizard step. Single-select, matching the wireframe's one "Selected"
+// card and the priced-quote summary later showing one hotel line item. No
+// price is ever rendered here (FIT-6 blind pricing).
 function HotelsStep({ hotels, cityFilter, setCityFilter, selectedHotelId, setSelectedHotelId }) {
   const filtered = cityFilter
     ? hotels.filter((h) => (h.city || '').toLowerCase().includes(cityFilter.toLowerCase()))
@@ -131,7 +132,8 @@ function HotelsStep({ hotels, cityFilter, setCityFilter, selectedHotelId, setSel
   );
 }
 
-// Step 3 — tours (FIT-3: multi-select checkboxes, no price).
+// Tour selection (FIT-3: multi-select checkboxes, no price), now a section
+// within Trip Details rather than its own wizard step.
 function ToursStep({ tours, cityFilter, setCityFilter, selectedTourIds, toggleTour }) {
   const filtered = cityFilter
     ? tours.filter((t) => (t.city || '').toLowerCase().includes(cityFilter.toLowerCase()))
@@ -160,7 +162,8 @@ function ToursStep({ tours, cityFilter, setCityFilter, selectedTourIds, toggleTo
   );
 }
 
-// Step 4 — transfers (FIT-4: multi-select checkboxes, no price).
+// Transfer selection (FIT-4: multi-select checkboxes, no price), now a
+// section within Trip Details rather than its own wizard step.
 function TransfersStep({ transfers, selectedTransferIds, toggleTransfer }) {
   return (
     <Card label="Select transfers (optional, multiple allowed)" className="border-white">
@@ -183,8 +186,9 @@ function TransfersStep({ transfers, selectedTransferIds, toggleTransfer }) {
   );
 }
 
-// Step 5 — extras. The admin's Activities catalog is the pool of short
-// add-on experiences (mirrors how FGD add-ons draw from activities/tours).
+// Extras selection, now a section within Trip Details rather than its own
+// wizard step. The admin's Activities catalog is the pool of short add-on
+// experiences (mirrors how FGD add-ons draw from activities/tours).
 function ExtrasStep({ activities, selectedActivityIds, toggleActivity }) {
   return (
     <Card label="Select extras / add-ons (optional, multiple allowed)" className="border-white">
@@ -205,6 +209,53 @@ function ExtrasStep({ activities, selectedActivityIds, toggleActivity }) {
         ))}
       </div>
     </Card>
+  );
+}
+
+// Step 1 — Trip Details. Consolidates the trip fields with hotel/tour/
+// transfer/extra selection into one step (these were four separate wizard
+// steps before) so agents can build the whole selection in one place, then
+// move straight to arranging it into a day-wise itinerary.
+function TripDetailsStep({
+  form,
+  update,
+  hotels,
+  hotelCityFilter,
+  setHotelCityFilter,
+  selectedHotelId,
+  setSelectedHotelId,
+  tours,
+  tourCityFilter,
+  setTourCityFilter,
+  selectedTourIds,
+  toggleTour,
+  transfers,
+  selectedTransferIds,
+  toggleTransfer,
+  activities,
+  selectedActivityIds,
+  toggleActivity,
+}) {
+  return (
+    <div className="space-y-4">
+      <TripFieldsCard form={form} update={update} />
+      <HotelsStep
+        hotels={hotels}
+        cityFilter={hotelCityFilter}
+        setCityFilter={setHotelCityFilter}
+        selectedHotelId={selectedHotelId}
+        setSelectedHotelId={setSelectedHotelId}
+      />
+      <ToursStep
+        tours={tours}
+        cityFilter={tourCityFilter}
+        setCityFilter={setTourCityFilter}
+        selectedTourIds={selectedTourIds}
+        toggleTour={toggleTour}
+      />
+      <TransfersStep transfers={transfers} selectedTransferIds={selectedTransferIds} toggleTransfer={toggleTransfer} />
+      <ExtrasStep activities={activities} selectedActivityIds={selectedActivityIds} toggleActivity={toggleActivity} />
+    </div>
   );
 }
 
@@ -294,10 +345,10 @@ function ItineraryDayCard({ dayNumber, items, notes, onNotesChange, resolveMeta,
   );
 }
 
-// Step 6 — Day-wise Itinerary Planner (FIT-5). Days are auto-generated from
+// Step 2 — Day-wise Itinerary Planner (FIT-5). Days are auto-generated from
 // Trip Details' Travel Start/End Date; every hotel/tour/transfer/extra
-// selected in steps 2-5 shows up here (in the unassigned tray until dragged
-// onto a day) via the reconciliation effect in the main component below.
+// selected back in Trip Details shows up here (in the unassigned tray until
+// dragged onto a day) via the reconciliation effect in the main component below.
 function ItineraryStep({ dayCount, itineraryItems, setItineraryItems, dayNotes, setDayNotes, selectedHotel, selectedTours, selectedTransfers, selectedActivities }) {
   const [draggingKey, setDraggingKey] = useState(null);
 
@@ -442,7 +493,7 @@ function TravelersEditor({ travelers, updateTraveler }) {
   );
 }
 
-// Step 7 — review & submit. No price/cost/markup fields anywhere (FIT-6).
+// Step 3 — review & submit. No price/cost/markup fields anywhere (FIT-6).
 function ReviewStep({ form, selectedHotel, selectedTours, selectedTransfers, selectedActivities, itineraryDays, travelers, updateTraveler }) {
   return (
     <div className="space-y-4">
@@ -531,13 +582,11 @@ function validateStep(step, { form, selectedHotelId, travelers }) {
     if (!form.dateFrom || !form.dateTo) return 'Travel start and end dates are required.';
     if (new Date(form.dateFrom) > new Date(form.dateTo)) return 'Travel end date must be on or after the start date.';
     if (!form.paxAdults || Number(form.paxAdults) < 1) return 'At least one adult is required.';
-    return '';
-  }
-  if (step === 2) {
+    // Hotel selection moved into this same step (was its own wizard step).
     if (!selectedHotelId) return 'Select a hotel to continue.';
     return '';
   }
-  if (step === 7) {
+  if (step === 3) {
     if (travelers.some((t) => !t.name.trim())) return 'Enter a name for every traveller.';
     if (travelers.some((t) => t.type === 'adult' && !(t.passportNo || '').trim())) {
       return 'Enter a passport number for every adult traveller.';
@@ -762,7 +811,7 @@ export default function PackageBuilder() {
   }
 
   async function handleSubmit() {
-    const validationError = validateStep(7, { form, selectedHotelId, travelers });
+    const validationError = validateStep(3, { form, selectedHotelId, travelers });
     if (validationError) {
       setError(validationError);
       return;
@@ -780,7 +829,7 @@ export default function PackageBuilder() {
         tourIds: selectedTourIds,
         transferIds: selectedTransferIds,
         activityIds: selectedActivityIds,
-        // Unfiltered — validateStep(7) above already guarantees every row
+        // Unfiltered — validateStep(3) above already guarantees every row
         // has a name (and adults have a passport), so all rows are real.
         travelers: travelers.map((t) => ({ name: t.name, passportNo: t.passportNo || undefined, isChild: t.type === 'child' })),
         itinerary: serializeItinerary(itineraryItems, dayNotes, dayCount),
@@ -842,32 +891,29 @@ export default function PackageBuilder() {
         <>
           <StepIndicator step={step} />
 
-          {step === 1 && <TripDetailsStep form={form} update={update} />}
-          {step === 2 && (
-            <HotelsStep
+          {step === 1 && (
+            <TripDetailsStep
+              form={form}
+              update={update}
               hotels={hotels}
-              cityFilter={hotelCityFilter}
-              setCityFilter={setHotelCityFilter}
+              hotelCityFilter={hotelCityFilter}
+              setHotelCityFilter={setHotelCityFilter}
               selectedHotelId={selectedHotelId}
               setSelectedHotelId={setSelectedHotelId}
-            />
-          )}
-          {step === 3 && (
-            <ToursStep
               tours={tours}
-              cityFilter={tourCityFilter}
-              setCityFilter={setTourCityFilter}
+              tourCityFilter={tourCityFilter}
+              setTourCityFilter={setTourCityFilter}
               selectedTourIds={selectedTourIds}
               toggleTour={toggleTour}
+              transfers={transfers}
+              selectedTransferIds={selectedTransferIds}
+              toggleTransfer={toggleTransfer}
+              activities={activities}
+              selectedActivityIds={selectedActivityIds}
+              toggleActivity={toggleActivity}
             />
           )}
-          {step === 4 && (
-            <TransfersStep transfers={transfers} selectedTransferIds={selectedTransferIds} toggleTransfer={toggleTransfer} />
-          )}
-          {step === 5 && (
-            <ExtrasStep activities={activities} selectedActivityIds={selectedActivityIds} toggleActivity={toggleActivity} />
-          )}
-          {step === 6 && (
+          {step === 2 && (
             <ItineraryStep
               dayCount={dayCount}
               itineraryItems={itineraryItems}
@@ -880,7 +926,7 @@ export default function PackageBuilder() {
               selectedActivities={selectedActivities}
             />
           )}
-          {step === 7 && (
+          {step === 3 && (
             <ReviewStep
               form={form}
               selectedHotel={selectedHotel}
