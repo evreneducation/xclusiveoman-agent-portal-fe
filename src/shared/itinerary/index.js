@@ -141,21 +141,19 @@ export function serializeItinerary(items, dayNotes, dayCount) {
   return days;
 }
 
-// Builder state -> the same wire shape as serializeItinerary, but with each
-// item enriched via `resolveMeta` instead of stripped to {type, id} — used
-// for a live, pre-submit preview (PackageBuilder's Review step) that renders
-// through the exact same read-only <ItineraryTimeline> as the post-submit
-// view, so "preview" and "what actually gets submitted" can't drift apart.
-export function buildItineraryDays(items, dayNotes, dayCount, resolveMeta) {
+// Builder state -> the full printable/PDF-style itinerary document shape
+// (ItineraryDocument.jsx), with each item enriched via `resolveMeta` instead
+// of stripped to {type, id}. Every day 1..dayCount is included even when
+// empty, so an untouched day still gets its own row/section instead of
+// silently vanishing from the document — unlike serializeItinerary, which
+// omits empty days since the backend only persists what's actually on a day.
+export function buildFullItineraryDays(items, dayNotes, dayCount, resolveMeta) {
   const days = [];
   for (let n = 1; n <= dayCount; n++) {
-    const dayItems = itemsForDay(items, n);
-    const notes = (dayNotes[n] || '').trim();
-    if (!notes && dayItems.length === 0) continue;
     days.push({
       dayNumber: n,
-      notes,
-      items: dayItems.map((it) => ({ ...(resolveMeta(it) || {}), type: it.type, id: it.id, note: it.note || '' })),
+      notes: (dayNotes[n] || '').trim(),
+      items: itemsForDay(items, n).map((it) => ({ ...(resolveMeta(it) || {}), type: it.type, id: it.id, note: it.note || '' })),
     });
   }
   return days;

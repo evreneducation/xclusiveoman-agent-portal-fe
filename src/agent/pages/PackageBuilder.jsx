@@ -2,10 +2,10 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { Button, Card, Checkbox, ErrorText, FieldLabel, Select, Tag, TextInput } from '../components/ui.jsx';
-import ItineraryTimeline from '../components/ItineraryTimeline.jsx';
+import ItineraryDocument from '../components/ItineraryDocument.jsx';
 import {
   ITINERARY_ITEM_TYPE_META,
-  buildItineraryDays,
+  buildFullItineraryDays,
   buildSelectionPool,
   clampItineraryDays,
   computeDayCount,
@@ -673,84 +673,35 @@ function TravelersEditor({ travelers, updateTraveler }) {
 }
 
 // Step 3 — review & submit. No price/cost/markup fields anywhere (FIT-6).
-function ReviewStep({ form, selectedHotel, selectedTours, selectedTransfers, selectedActivities, itineraryDays, travelers, updateTraveler }) {
+function ReviewStep({ form, dayCount, selectedHotel, days, selectedCounts, travelers, updateTraveler }) {
   return (
     <div className="space-y-4">
-      <Card label="Trip summary" className="border-white">
-        <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
-          <div>
-            <dt className="text-[10px] font-semibold uppercase text-agent-muted">Destination</dt>
-            <dd>{form.destination || '—'}</dd>
-          </div>
-          <div>
-            <dt className="text-[10px] font-semibold uppercase text-agent-muted">Travel dates</dt>
-            <dd>
-              {form.dateFrom || '—'} → {form.dateTo || '—'}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-[10px] font-semibold uppercase text-agent-muted">Adults</dt>
-            <dd>{form.paxAdults || 0}</dd>
-          </div>
-          <div>
-            <dt className="text-[10px] font-semibold uppercase text-agent-muted">Children</dt>
-            <dd>{form.paxChildren || 0}</dd>
-          </div>
-        </dl>
-      </Card>
+      {/* Redesigned to read like a real client-facing itinerary document
+          (see ItineraryDocument.jsx) rather than a wizard-review checklist —
+          this is also the print/PDF surface, hence the Print button here and
+          .print:hidden below rather than inside the document itself. */}
+      <div className="flex justify-end print:hidden">
+        <Button onClick={() => window.print()}>🖨️ Print / Save as PDF</Button>
+      </div>
 
-      <Card label="Selected hotel" className="border-white">
-        {selectedHotel ? (
-          <div className="text-sm">
-            <span className="font-semibold">{selectedHotel.name}</span> — {selectedHotel.city}
-            {selectedHotel.category ? ` · ${selectedHotel.category}★` : ''}
-          </div>
-        ) : (
-          <p className="text-sm text-agent-muted">No hotel selected.</p>
-        )}
-      </Card>
+      <ItineraryDocument
+        destination={form.destination}
+        dateFrom={form.dateFrom}
+        dateTo={form.dateTo}
+        paxAdults={Number(form.paxAdults) || 0}
+        paxChildren={Number(form.paxChildren) || 0}
+        dayCount={dayCount}
+        hotel={selectedHotel}
+        days={days}
+        selectedCounts={selectedCounts}
+      />
 
-      <Card label="Selected tours" className="border-white">
-        {selectedTours.length === 0 ? (
-          <p className="text-sm text-agent-muted">No tours selected.</p>
-        ) : (
-          <ul className="list-disc space-y-1 pl-5 text-sm">
-            {selectedTours.map((t) => (
-              <li key={t.id}>
-                {t.name} — {t.city}
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
-
-      <Card label="Selected transfers" className="border-white">
-        {selectedTransfers.length === 0 ? (
-          <p className="text-sm text-agent-muted">No transfers selected.</p>
-        ) : (
-          <ul className="list-disc space-y-1 pl-5 text-sm">
-            {selectedTransfers.map((t) => (
-              <li key={t.id}>{t.name}</li>
-            ))}
-          </ul>
-        )}
-      </Card>
-
-      <Card label="Selected extras" className="border-white">
-        {selectedActivities.length === 0 ? (
-          <p className="text-sm text-agent-muted">No extras selected.</p>
-        ) : (
-          <ul className="list-disc space-y-1 pl-5 text-sm">
-            {selectedActivities.map((a) => (
-              <li key={a.id}>{a.name}</li>
-            ))}
-          </ul>
-        )}
-      </Card>
-
-      <ItineraryTimeline days={itineraryDays} emptyLabel="No day-wise itinerary added — you can still submit without one." />
-
-      <TravelersEditor travelers={travelers} updateTraveler={updateTraveler} />
+      {/* Traveller details is data entry, not part of the client-facing
+          document — still required before Submit (validateStep(3)), just
+          kept out of the printed/PDF output. */}
+      <div className="print:hidden">
+        <TravelersEditor travelers={travelers} updateTraveler={updateTraveler} />
+      </div>
     </div>
   );
 }
@@ -1083,12 +1034,21 @@ export default function PackageBuilder() {
       activities: selectedActivities,
     });
   }
-  const itineraryDays = buildItineraryDays(itineraryItems, dayNotes, dayCount, resolveItineraryMeta);
+  // Every day 1..N, not just the ones with something on them (unlike
+  // buildItineraryDays, used for the draft/submit payload) — the printable
+  // document renders every day as its own row/section, same as the sample.
+  const fullItineraryDays = buildFullItineraryDays(itineraryItems, dayNotes, dayCount, resolveItineraryMeta);
+  const selectedCounts = {
+    hotels: selectedHotel ? 1 : 0,
+    tours: selectedTours.length,
+    transfers: selectedTransfers.length,
+    activities: selectedActivities.length,
+  };
 
   return (
     <div className="mx-auto max-w-5xl p-5 lg:p-8">
-      <h2 className="mb-1 text-2xl font-bold text-agent-ink">Custom FIT Package Builder</h2>
-      <p className="mb-5 text-sm text-agent-muted">
+      <h2 className="mb-1 text-2xl font-bold text-agent-ink print:hidden">Custom FIT Package Builder</h2>
+      <p className="mb-5 text-sm text-agent-muted print:hidden">
         Build a personalised package for your client. Pricing is handled by Xclusive Oman once you submit
         — no cost or price is shown anywhere in this builder.
       </p>
@@ -1111,7 +1071,9 @@ export default function PackageBuilder() {
         <p className="text-sm text-agent-muted">Loading…</p>
       ) : (
         <>
-          <StepIndicator step={step} />
+          <div className="print:hidden">
+            <StepIndicator step={step} />
+          </div>
 
           {step === 1 && (
             <TripDetailsStep
@@ -1157,38 +1119,39 @@ export default function PackageBuilder() {
           {step === 3 && (
             <ReviewStep
               form={form}
+              dayCount={dayCount}
               selectedHotel={selectedHotel}
-              selectedTours={selectedTours}
-              selectedTransfers={selectedTransfers}
-              selectedActivities={selectedActivities}
-              itineraryDays={itineraryDays}
+              days={fullItineraryDays}
+              selectedCounts={selectedCounts}
               travelers={travelers}
               updateTraveler={updateTraveler}
             />
           )}
 
-          <ErrorText>{error}</ErrorText>
+          <div className="print:hidden">
+            <ErrorText>{error}</ErrorText>
 
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
-            <Button onClick={goBack} disabled={step === 1}>
-              Back
-            </Button>
-            <div className="flex flex-wrap items-center gap-2">
-              {draftSavedAt && (
-                <span className="text-[11px] text-agent-muted">Draft saved {draftSavedAt.toLocaleTimeString()}</span>
-              )}
-              <Button disabled={savingDraft} onClick={saveDraft}>
-                {savingDraft ? 'Saving…' : 'Save Draft'}
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+              <Button onClick={goBack} disabled={step === 1}>
+                Back
               </Button>
-              {step < STEPS.length ? (
-                <Button variant="accent" onClick={goNext}>
-                  Next
+              <div className="flex flex-wrap items-center gap-2">
+                {draftSavedAt && (
+                  <span className="text-[11px] text-agent-muted">Draft saved {draftSavedAt.toLocaleTimeString()}</span>
+                )}
+                <Button disabled={savingDraft} onClick={saveDraft}>
+                  {savingDraft ? 'Saving…' : 'Save Draft'}
                 </Button>
-              ) : (
-                <Button variant="accent" onClick={handleSubmit} disabled={submitting}>
-                  {submitting ? 'Submitting…' : 'Submit Request'}
-                </Button>
-              )}
+                {step < STEPS.length ? (
+                  <Button variant="accent" onClick={goNext}>
+                    Next
+                  </Button>
+                ) : (
+                  <Button variant="accent" onClick={handleSubmit} disabled={submitting}>
+                    {submitting ? 'Submitting…' : 'Submit Request'}
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
         </>
