@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api/client.js';
-import { Button, Card, Checkbox, ErrorText, FieldLabel, Tag, TextInput } from '../components/ui.jsx';
+import { Button, Card, Checkbox, ErrorText, FieldLabel, Select, Tag, TextInput } from '../components/ui.jsx';
 import ItineraryTimeline from '../components/ItineraryTimeline.jsx';
 import {
   ITINERARY_ITEM_TYPE_META,
@@ -10,7 +10,9 @@ import {
   clampItineraryDays,
   computeDayCount,
   deserializeItinerary,
+  findItineraryItemDay,
   itemsForDay,
+  itineraryItemKey,
   moveItineraryItem,
   reconcileItineraryItems,
   resolveItemMeta,
@@ -177,9 +179,34 @@ function HotelsStep({ hotels, starCategory, setStarCategory, cityFilter, setCity
   );
 }
 
+// Lets an already-selected tour/transfer/extra be dropped straight onto a
+// day from its own selection card — no detour through the separate
+// Itinerary step for the common case of "I just picked this, put it on Day
+// 3". Reordering within a day and moving between days still happens there;
+// this is just a shortcut for the initial placement.
+function AssignToDayControl({ type, id, dayCount, itineraryItems, assignItemToDay }) {
+  if (dayCount === 0) {
+    return <p className="mt-2 text-[11px] text-agent-muted">Set travel dates in Trip Details to assign this to a day.</p>;
+  }
+  const currentDay = findItineraryItemDay(itineraryItems, type, id);
+  return (
+    <div className="mt-2">
+      <FieldLabel>Assign to day</FieldLabel>
+      <Select value={currentDay ?? ''} onChange={(e) => assignItemToDay(type, id, e.target.value)}>
+        <option value="">Unassigned</option>
+        {Array.from({ length: dayCount }, (_, i) => i + 1).map((n) => (
+          <option key={n} value={n}>
+            Day {n}
+          </option>
+        ))}
+      </Select>
+    </div>
+  );
+}
+
 // Tour selection (FIT-3: multi-select checkboxes, no price), now a section
 // within Trip Details rather than its own wizard step.
-function ToursStep({ tours, cityFilter, setCityFilter, selectedTourIds, toggleTour }) {
+function ToursStep({ tours, cityFilter, setCityFilter, selectedTourIds, toggleTour, dayCount, itineraryItems, assignItemToDay }) {
   const filtered = cityFilter
     ? tours.filter((t) => (t.city || '').toLowerCase().includes(cityFilter.toLowerCase()))
     : tours;
@@ -189,19 +216,25 @@ function ToursStep({ tours, cityFilter, setCityFilter, selectedTourIds, toggleTo
       <TextInput className="mb-4 max-w-xs" placeholder="Filter by city…" value={cityFilter} onChange={(e) => setCityFilter(e.target.value)} />
       {filtered.length === 0 && <p className="text-sm text-agent-muted">No tours available{cityFilter ? ' for that city' : ''}.</p>}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {filtered.map((t) => (
-          <div key={t.id} className="rounded-lg border border-agent-line-light p-3 shadow-sm">
-            <CatalogImage url={t.images?.[0]} />
-            <div className="mt-2 text-sm font-bold">{t.name}</div>
-            <div className="text-xs text-agent-muted">
-              {t.city || '—'} {t.category ? `· ${t.category}` : ''} {t.duration ? `· ${t.duration}` : ''}
+        {filtered.map((t) => {
+          const selected = selectedTourIds.includes(t.id);
+          return (
+            <div key={t.id} className="rounded-lg border border-agent-line-light p-3 shadow-sm">
+              <CatalogImage url={t.images?.[0]} />
+              <div className="mt-2 text-sm font-bold">{t.name}</div>
+              <div className="text-xs text-agent-muted">
+                {t.city || '—'} {t.category ? `· ${t.category}` : ''} {t.duration ? `· ${t.duration}` : ''}
+              </div>
+              {t.description && <p className="mt-1 line-clamp-2 text-xs text-agent-muted">{t.description}</p>}
+              <div className="mt-2">
+                <Checkbox checked={selected} onChange={() => toggleTour(t.id)} label="Include this tour" />
+              </div>
+              {selected && (
+                <AssignToDayControl type="tour" id={t.id} dayCount={dayCount} itineraryItems={itineraryItems} assignItemToDay={assignItemToDay} />
+              )}
             </div>
-            {t.description && <p className="mt-1 line-clamp-2 text-xs text-agent-muted">{t.description}</p>}
-            <div className="mt-2">
-              <Checkbox checked={selectedTourIds.includes(t.id)} onChange={() => toggleTour(t.id)} label="Include this tour" />
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </Card>
   );
@@ -209,23 +242,29 @@ function ToursStep({ tours, cityFilter, setCityFilter, selectedTourIds, toggleTo
 
 // Transfer selection (FIT-4: multi-select checkboxes, no price), now a
 // section within Trip Details rather than its own wizard step.
-function TransfersStep({ transfers, selectedTransferIds, toggleTransfer }) {
+function TransfersStep({ transfers, selectedTransferIds, toggleTransfer, dayCount, itineraryItems, assignItemToDay }) {
   return (
     <Card label="Select transfers (optional, multiple allowed)" className="border-white">
       {transfers.length === 0 && <p className="text-sm text-agent-muted">No transfers available.</p>}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {transfers.map((tr) => (
-          <div key={tr.id} className="rounded-lg border border-agent-line-light p-3 shadow-sm">
-            <div className="text-sm font-bold">{tr.name}</div>
-            <div className="text-xs text-agent-muted">
-              {tr.type ? tr.type.replace(/_/g, ' ') : '—'} {tr.vehicleClass ? `· ${tr.vehicleClass}` : ''} {tr.city ? `· ${tr.city}` : ''}
+        {transfers.map((tr) => {
+          const selected = selectedTransferIds.includes(tr.id);
+          return (
+            <div key={tr.id} className="rounded-lg border border-agent-line-light p-3 shadow-sm">
+              <div className="text-sm font-bold">{tr.name}</div>
+              <div className="text-xs text-agent-muted">
+                {tr.type ? tr.type.replace(/_/g, ' ') : '—'} {tr.vehicleClass ? `· ${tr.vehicleClass}` : ''} {tr.city ? `· ${tr.city}` : ''}
+              </div>
+              {tr.description && <p className="mt-1 text-xs text-agent-muted">{tr.description}</p>}
+              <div className="mt-2">
+                <Checkbox checked={selected} onChange={() => toggleTransfer(tr.id)} label="Include this transfer" />
+              </div>
+              {selected && (
+                <AssignToDayControl type="transfer" id={tr.id} dayCount={dayCount} itineraryItems={itineraryItems} assignItemToDay={assignItemToDay} />
+              )}
             </div>
-            {tr.description && <p className="mt-1 text-xs text-agent-muted">{tr.description}</p>}
-            <div className="mt-2">
-              <Checkbox checked={selectedTransferIds.includes(tr.id)} onChange={() => toggleTransfer(tr.id)} label="Include this transfer" />
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </Card>
   );
@@ -234,24 +273,30 @@ function TransfersStep({ transfers, selectedTransferIds, toggleTransfer }) {
 // Extras selection, now a section within Trip Details rather than its own
 // wizard step. The admin's Activities catalog is the pool of short add-on
 // experiences (mirrors how FGD add-ons draw from activities/tours).
-function ExtrasStep({ activities, selectedActivityIds, toggleActivity }) {
+function ExtrasStep({ activities, selectedActivityIds, toggleActivity, dayCount, itineraryItems, assignItemToDay }) {
   return (
     <Card label="Select extras / add-ons (optional, multiple allowed)" className="border-white">
       {activities.length === 0 && <p className="text-sm text-agent-muted">No extras available.</p>}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {activities.map((a) => (
-          <div key={a.id} className="rounded-lg border border-agent-line-light p-3 shadow-sm">
-            <CatalogImage url={a.images?.[0]} />
-            <div className="mt-2 text-sm font-bold">{a.name}</div>
-            <div className="text-xs text-agent-muted">
-              {a.city || '—'} {a.duration ? `· ${a.duration}` : ''}
+        {activities.map((a) => {
+          const selected = selectedActivityIds.includes(a.id);
+          return (
+            <div key={a.id} className="rounded-lg border border-agent-line-light p-3 shadow-sm">
+              <CatalogImage url={a.images?.[0]} />
+              <div className="mt-2 text-sm font-bold">{a.name}</div>
+              <div className="text-xs text-agent-muted">
+                {a.city || '—'} {a.duration ? `· ${a.duration}` : ''}
+              </div>
+              {a.description && <p className="mt-1 line-clamp-2 text-xs text-agent-muted">{a.description}</p>}
+              <div className="mt-2">
+                <Checkbox checked={selected} onChange={() => toggleActivity(a.id)} label="Include this extra" />
+              </div>
+              {selected && (
+                <AssignToDayControl type="activity" id={a.id} dayCount={dayCount} itineraryItems={itineraryItems} assignItemToDay={assignItemToDay} />
+              )}
             </div>
-            {a.description && <p className="mt-1 line-clamp-2 text-xs text-agent-muted">{a.description}</p>}
-            <div className="mt-2">
-              <Checkbox checked={selectedActivityIds.includes(a.id)} onChange={() => toggleActivity(a.id)} label="Include this extra" />
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </Card>
   );
@@ -282,6 +327,9 @@ function TripDetailsStep({
   activities,
   selectedActivityIds,
   toggleActivity,
+  dayCount,
+  itineraryItems,
+  assignItemToDay,
 }) {
   return (
     <div className="space-y-4">
@@ -301,9 +349,26 @@ function TripDetailsStep({
         setCityFilter={setTourCityFilter}
         selectedTourIds={selectedTourIds}
         toggleTour={toggleTour}
+        dayCount={dayCount}
+        itineraryItems={itineraryItems}
+        assignItemToDay={assignItemToDay}
       />
-      <TransfersStep transfers={transfers} selectedTransferIds={selectedTransferIds} toggleTransfer={toggleTransfer} />
-      <ExtrasStep activities={activities} selectedActivityIds={selectedActivityIds} toggleActivity={toggleActivity} />
+      <TransfersStep
+        transfers={transfers}
+        selectedTransferIds={selectedTransferIds}
+        toggleTransfer={toggleTransfer}
+        dayCount={dayCount}
+        itineraryItems={itineraryItems}
+        assignItemToDay={assignItemToDay}
+      />
+      <ExtrasStep
+        activities={activities}
+        selectedActivityIds={selectedActivityIds}
+        toggleActivity={toggleActivity}
+        dayCount={dayCount}
+        itineraryItems={itineraryItems}
+        assignItemToDay={assignItemToDay}
+      />
     </div>
   );
 }
@@ -851,6 +916,15 @@ export default function PackageBuilder() {
     setSelectedActivityIds((list) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]));
   }
 
+  // Inline "Assign to day" shortcut on a tour/transfer/extra's own selection
+  // card (Trip Details) — same moveItineraryItem the drag-and-drop Itinerary
+  // step uses, just driven by a <Select> instead of a drop event. Always
+  // appends to the end of the target day; reordering still happens there.
+  function assignItemToDay(type, id, dayNumberValue) {
+    const targetDay = dayNumberValue === '' ? null : Number(dayNumberValue);
+    setItineraryItems((items) => moveItineraryItem(items, itineraryItemKey(type, id), targetDay));
+  }
+
   function goNext() {
     const validationError = validateStep(step, { form, selectedHotelId, travelers });
     if (validationError) {
@@ -969,6 +1043,9 @@ export default function PackageBuilder() {
               activities={activities}
               selectedActivityIds={selectedActivityIds}
               toggleActivity={toggleActivity}
+              dayCount={dayCount}
+              itineraryItems={itineraryItems}
+              assignItemToDay={assignItemToDay}
             />
           )}
           {step === 2 && (

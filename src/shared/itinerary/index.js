@@ -79,6 +79,16 @@ export function clampItineraryDays(items, dayCount) {
   return items.map((it) => (it.dayNumber != null && it.dayNumber > dayCount ? { ...it, dayNumber: null } : it));
 }
 
+// Looks up where a specific item currently sits, by type+id rather than its
+// derived key — used by inline "assign to day" controls (rendered right on
+// a tour/transfer/extra's own selection card) that only know the item's
+// type/id, not its key. Returns null for "not placed yet" (or not in
+// `items` at all, e.g. the reconciliation effect hasn't caught up to a
+// just-toggled selection on this render).
+export function findItineraryItemDay(items, type, id) {
+  return items.find((it) => it.key === itineraryItemKey(type, id))?.dayNumber ?? null;
+}
+
 export function itemsForDay(items, dayNumber) {
   return items.filter((it) => it.dayNumber === dayNumber).sort((a, b) => a.position - b.position);
 }
