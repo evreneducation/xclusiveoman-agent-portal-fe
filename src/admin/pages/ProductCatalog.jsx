@@ -2,35 +2,8 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { api } from '../api/client.js';
-import { Badge, Button, Card, Checkbox, ErrorText, Select, Table, TextInput } from '../components/ui.jsx';
+import { Badge, Button, Table, TextInput } from '../components/ui.jsx';
 import { FD_STATUS_TONE, formatCurrency, formatDateRange, getFdBadges, getStartingRate } from '../../shared/fdPackage/index.js';
-
-const ENTITY_FIELDS = {
-  activities: [
-    { key: 'name', label: 'Name', type: 'text', required: true },
-    { key: 'city', label: 'City', type: 'text', required: true },
-    { key: 'duration', label: 'Duration', type: 'text' },
-    { key: 'pricePerPax', label: 'Price per pax (INR)', type: 'number' },
-    { key: 'description', label: 'Description', type: 'text' },
-    { key: 'isBestseller', label: 'Bestseller', type: 'checkbox' },
-  ],
-  transfers: [
-    { key: 'name', label: 'Name', type: 'text', required: true },
-    {
-      key: 'type',
-      label: 'Type',
-      type: 'select',
-      options: ['airport', 'intercity', 'point_to_point', 'group_coach'],
-      required: true,
-    },
-    { key: 'vehicleClass', label: 'Vehicle class', type: 'text' },
-    { key: 'city', label: 'City', type: 'text' },
-    // Feeds Quote Details' "Landing Cost Breakdown" auto-calculation, same
-    // as hotels' price_per_night / tours' price / activities' pricePerPax.
-    { key: 'price', label: 'Price (INR)', type: 'number' },
-    { key: 'description', label: 'Description', type: 'text' },
-  ],
-};
 
 const TABS = [
   { key: 'fdPackages', label: 'FD Packages' },
@@ -290,75 +263,11 @@ function ToursTab() {
   );
 }
 
-function AddEntityForm({ entity, onCreated }) {
-  const fields = ENTITY_FIELDS[entity];
-  const [form, setForm] = useState({});
-  const [error, setError] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-
-  function update(key, value) {
-    setForm((f) => ({ ...f, [key]: value }));
-  }
-
-  async function handleSubmit(e) {
-    e.preventDefault();
-    setError('');
-    setSubmitting(true);
-    try {
-      const payload = {};
-      for (const f of fields) {
-        if (form[f.key] === undefined) continue;
-        payload[f.key] = f.type === 'number' ? Number(form[f.key]) : form[f.key];
-      }
-      const { [entity.slice(0, -1)]: created } = await api.post(`/admin/${entity}`, payload);
-      onCreated(created);
-      setForm({});
-    } catch (err) {
-      setError(err.message || 'Unable to create');
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  return (
-    <Card label={`Add ${entity.slice(0, -1)}`} className="mt-4 border-white">
-      <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {fields.map((f) => (
-          <div key={f.key}>
-            <div className="mb-1 text-xs text-muted">{f.label}</div>
-            {f.type === 'checkbox' ? (
-              <Checkbox checked={!!form[f.key]} onChange={(v) => update(f.key, v)} label={f.label} />
-            ) : f.type === 'select' ? (
-              <Select value={form[f.key] || ''} onChange={(e) => update(f.key, e.target.value)}>
-                <option value="">Select…</option>
-                {f.options.map((o) => (
-                  <option key={o} value={o}>
-                    {o}
-                  </option>
-                ))}
-              </Select>
-            ) : (
-              <TextInput
-                type={f.type === 'number' ? 'number' : 'text'}
-                required={f.required}
-                value={form[f.key] || ''}
-                onChange={(e) => update(f.key, e.target.value)}
-              />
-            )}
-          </div>
-        ))}
-        <div className="sm:col-span-2">
-          <ErrorText>{error}</ErrorText>
-          <Button variant="accent" type="submit" disabled={submitting} className="mt-2">
-            {submitting ? 'Saving…' : `Save ${entity.slice(0, -1)}`}
-          </Button>
-        </div>
-      </form>
-    </Card>
-  );
-}
-
-function SimpleEntityTab({ entity }) {
+// Gets its own dedicated tab (mirroring HotelsTab/ToursTab) instead of the
+// old generic SimpleEntityTab — activities now have a photo option, which
+// means a thumbnail column here and a real edit page (ActivityEditor.jsx)
+// instead of the previous add-only inline form.
+function ActivitiesTab() {
   const [items, setItems] = useState([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
@@ -366,41 +275,133 @@ function SimpleEntityTab({ entity }) {
   function load() {
     setLoading(true);
     api
-      .get(`/${entity}${search ? `?search=${encodeURIComponent(search)}` : ''}`)
-      .then((data) => setItems(data[entity]))
+      .get(`/activities${search ? `?search=${encodeURIComponent(search)}` : ''}`)
+      .then(({ activities }) => setItems(activities))
       .finally(() => setLoading(false));
   }
 
-  useEffect(load, [entity, search]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(load, [search]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleDelete(id) {
-    await api.del(`/admin/${entity}/${id}`);
+    await api.del(`/admin/activities/${id}`);
     setItems((list) => list.filter((i) => i.id !== id));
   }
 
   return (
     <div>
-      <TextInput className="mb-3 max-w-xs" placeholder={`Search ${entity}…`} value={search} onChange={(e) => setSearch(e.target.value)} />
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <TextInput className="max-w-xs" placeholder="Search activities…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <Link to="/admin/catalog/activities/new">
+          <Button variant="accent">+ Add New Activity</Button>
+        </Link>
+      </div>
       {loading ? (
         <p className="text-xs text-muted">Loading…</p>
       ) : (
         <Table
-          columns={['Name', 'City', '']}
+          columns={['', 'Activity', 'City', 'Duration', 'Price per pax', '']}
           rows={items}
-          renderRow={(item) => (
-            <tr key={item.id} className="border-b border-line-light last:border-0">
-              <td className="px-3 py-2 font-semibold">{item.name}</td>
-              <td className="px-3 py-2">{item.city || '—'}</td>
+          renderRow={(activity) => (
+            <tr key={activity.id} className="border-b border-line-light last:border-0">
+              <td className="px-3 py-2">
+                {activity.images?.[0] ? (
+                  <img src={activity.images[0]} alt="" className="h-10 w-10 rounded-md border border-line-light object-cover" />
+                ) : (
+                  <div className="flex h-10 w-10 items-center justify-center rounded-md border border-dashed border-line-light font-mono text-[8px] text-muted">
+                    No image
+                  </div>
+                )}
+              </td>
+              <td className="px-3 py-2 font-semibold">{activity.name}</td>
+              <td className="px-3 py-2">{activity.city || '—'}</td>
+              <td className="px-3 py-2">{activity.duration || '—'}</td>
+              <td className="px-3 py-2">
+                {(activity.pricePerPax ?? activity.price_per_pax) != null ? `₹${activity.pricePerPax ?? activity.price_per_pax}` : '—'}
+              </td>
               <td className="px-3 py-2 text-right">
-                <button onClick={() => handleDelete(item.id)} className="text-[#a5162d] hover:underline">
-                  Delete
-                </button>
+                <div className="flex justify-end gap-3">
+                  <Link to={`/admin/catalog/activities/${activity.id}`} className="text-accent hover:underline">
+                    Edit
+                  </Link>
+                  <button onClick={() => handleDelete(activity.id)} className="text-[#a5162d] hover:underline">
+                    Delete
+                  </button>
+                </div>
               </td>
             </tr>
           )}
         />
       )}
-      <AddEntityForm entity={entity} onCreated={(created) => setItems((list) => [created, ...list])} />
+    </div>
+  );
+}
+
+// Gets its own dedicated tab for the same reason as ActivitiesTab above —
+// photos + a real edit page (TransferEditor.jsx) replacing the old add-only
+// inline form.
+function TransfersTab() {
+  const [items, setItems] = useState([]);
+  const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  function load() {
+    setLoading(true);
+    api
+      .get(`/transfers${search ? `?search=${encodeURIComponent(search)}` : ''}`)
+      .then(({ transfers }) => setItems(transfers))
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(load, [search]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function handleDelete(id) {
+    await api.del(`/admin/transfers/${id}`);
+    setItems((list) => list.filter((i) => i.id !== id));
+  }
+
+  return (
+    <div>
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <TextInput className="max-w-xs" placeholder="Search transfers…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <Link to="/admin/catalog/transfers/new">
+          <Button variant="accent">+ Add New Transfer</Button>
+        </Link>
+      </div>
+      {loading ? (
+        <p className="text-xs text-muted">Loading…</p>
+      ) : (
+        <Table
+          columns={['', 'Transfer', 'Type', 'City', 'Price', '']}
+          rows={items}
+          renderRow={(transfer) => (
+            <tr key={transfer.id} className="border-b border-line-light last:border-0">
+              <td className="px-3 py-2">
+                {transfer.images?.[0] ? (
+                  <img src={transfer.images[0]} alt="" className="h-10 w-10 rounded-md border border-line-light object-cover" />
+                ) : (
+                  <div className="flex h-10 w-10 items-center justify-center rounded-md border border-dashed border-line-light font-mono text-[8px] text-muted">
+                    No image
+                  </div>
+                )}
+              </td>
+              <td className="px-3 py-2 font-semibold">{transfer.name}</td>
+              <td className="px-3 py-2">{transfer.type ? <Badge tone="amber">{transfer.type}</Badge> : '—'}</td>
+              <td className="px-3 py-2">{transfer.city || '—'}</td>
+              <td className="px-3 py-2">{transfer.price != null ? `₹${transfer.price}` : '—'}</td>
+              <td className="px-3 py-2 text-right">
+                <div className="flex justify-end gap-3">
+                  <Link to={`/admin/catalog/transfers/${transfer.id}`} className="text-accent hover:underline">
+                    Edit
+                  </Link>
+                  <button onClick={() => handleDelete(transfer.id)} className="text-[#a5162d] hover:underline">
+                    Delete
+                  </button>
+                </div>
+              </td>
+            </tr>
+          )}
+        />
+      )}
     </div>
   );
 }
@@ -432,8 +433,10 @@ export default function ProductCatalog() {
           <HotelsTab />
         ) : tab === 'tours' ? (
           <ToursTab />
+        ) : tab === 'activities' ? (
+          <ActivitiesTab />
         ) : (
-          <SimpleEntityTab entity={tab} />
+          <TransfersTab />
         )}
       </div>
     </div>
