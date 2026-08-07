@@ -9,11 +9,13 @@
 // the same shape. Pure data/functions only, no JSX — mirrors shared/fdPackage.
 //
 // Editable state shape used by the two builder UIs:
-//   items: [{ key: "type:id", type, id, dayNumber: number|null, position }]
+//   items: [{ key: "type:id", type, id, dayNumber: number|null, position, note? }]
 //   dayNotes: { [dayNumber]: string }
 // `dayNumber: null` means "not yet placed on a day" (the unassigned pool).
-// Server wire shape (what both GET responses and the itinerary save payload
-// use): [{ dayNumber, notes, items: [{ type, id, name?, city?, images? }] }]
+// `note` is a short per-item annotation ("9am pickup"), separate from the
+// day's own overall note in `dayNotes`. Server wire shape (what both GET
+// responses and the itinerary save payload use):
+//   [{ dayNumber, notes, items: [{ type, id, note?, name?, city?, images? }] }]
 
 export const ITINERARY_ITEM_TYPES = ['hotel', 'tour', 'transfer', 'activity'];
 
@@ -68,8 +70,17 @@ export function reconcileItineraryItems(items, pool) {
       id: p.id,
       dayNumber: null,
       position: kept.length + idx,
+      note: '',
     }));
   return [...kept, ...additions];
+}
+
+// Updates a single item's per-item note, by key — the counterpart to
+// moveItineraryItem for the one other thing an itinerary item's own chip can
+// edit directly (which day/position it's on being the other, handled by
+// moveItineraryItem).
+export function updateItineraryItemNote(items, key, note) {
+  return items.map((it) => (it.key === key ? { ...it, note } : it));
 }
 
 // Sends anything assigned to a day beyond the current trip length back to
@@ -122,7 +133,7 @@ export function moveItineraryItem(items, key, targetDay, targetIndex) {
 export function serializeItinerary(items, dayNotes, dayCount) {
   const days = [];
   for (let n = 1; n <= dayCount; n++) {
-    const dayItems = itemsForDay(items, n).map((it) => ({ type: it.type, id: it.id }));
+    const dayItems = itemsForDay(items, n).map((it) => ({ type: it.type, id: it.id, note: it.note || '' }));
     const notes = (dayNotes[n] || '').trim();
     if (!notes && dayItems.length === 0) continue;
     days.push({ dayNumber: n, notes, items: dayItems });
@@ -144,7 +155,7 @@ export function buildItineraryDays(items, dayNotes, dayCount, resolveMeta) {
     days.push({
       dayNumber: n,
       notes,
-      items: dayItems.map((it) => ({ type: it.type, id: it.id, ...(resolveMeta(it) || {}) })),
+      items: dayItems.map((it) => ({ ...(resolveMeta(it) || {}), type: it.type, id: it.id, note: it.note || '' })),
     });
   }
   return days;
@@ -167,6 +178,7 @@ export function deserializeItinerary(itinerary) {
         id: it.id,
         dayNumber: day.dayNumber,
         position: idx,
+        note: it.note || '',
       });
     });
   }

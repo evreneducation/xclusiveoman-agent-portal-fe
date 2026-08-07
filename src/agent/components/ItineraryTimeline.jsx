@@ -9,8 +9,9 @@ import { Card } from './ui.jsx';
 // than by two renderers happening to agree.
 //
 // `days` is the wire shape: [{ dayNumber, notes, items: [{ type, id, name,
-// city, images }] }] — either the backend's composeItinerary() output, or
-// PackageBuilder's local equivalent built from the in-progress selection.
+// city, images, note }] }] — either the backend's composeItinerary() output,
+// or PackageBuilder's local equivalent built from the in-progress selection.
+// `note` is per-item (e.g. "9am pickup"); `notes` above it is the day's own.
 export default function ItineraryTimeline({ days, emptyLabel = 'No day-wise itinerary added.' }) {
   if (!days || days.length === 0) {
     return (
@@ -34,17 +35,20 @@ export default function ItineraryTimeline({ days, emptyLabel = 'No day-wise itin
             <div className="flex-1 pt-1">
               <div className="mb-1.5 text-xs font-bold uppercase tracking-wide text-agent-accent-dark">Day {day.dayNumber}</div>
               {day.items.length > 0 && (
-                <div className="mb-2 flex flex-wrap gap-1.5">
+                <div className="mb-2 space-y-1">
                   {day.items.map((item, itemIdx) => {
                     const meta = ITINERARY_ITEM_TYPE_META[item.type];
                     return (
-                      <span
+                      <div
                         key={`${item.type}:${item.id}:${itemIdx}`}
-                        className="inline-flex items-center gap-1.5 rounded-full border border-agent-line-light bg-agent-panel px-2.5 py-1 text-[11px] font-semibold text-agent-ink"
+                        className="rounded-md border border-agent-line-light bg-agent-panel px-2.5 py-1.5"
                       >
-                        <span>{meta?.icon}</span>
-                        {item.name || meta?.label || 'Item'}
-                      </span>
+                        <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-agent-ink">
+                          <span>{meta?.icon}</span>
+                          {item.name || meta?.label || 'Item'}
+                        </span>
+                        {item.note && <p className="mt-0.5 pl-[1.375rem] text-[11px] text-agent-muted">{item.note}</p>}
+                      </div>
                     );
                   })}
                 </div>

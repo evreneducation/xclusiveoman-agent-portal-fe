@@ -14,6 +14,7 @@ import {
   resolveItemMeta,
   serializeItinerary,
   unassignedItems,
+  updateItineraryItemNote,
 } from '../../shared/itinerary/index.js';
 
 const STATUS_TONE = {
@@ -341,10 +342,13 @@ function CostingAndPublishing({ packageRequest, onUpdated }) {
 }
 
 // A single draggable placed/unplaced item — mirrors the agent builder's
-// ItineraryItemChip (agent/pages/PackageBuilder.jsx) exactly, themed for the
-// admin console. Dropping directly on a chip inserts before it, which is
-// what lets ItineraryDayCard support reordering within a day.
-function ItineraryItemChip({ item, meta, isDragging, onDragStart, onDragEnd, onDropBefore, onUnassign }) {
+// ItineraryItemChip (agent/pages/PackageBuilder.jsx), themed for the admin
+// console. Dropping directly on a chip inserts before it, which is what lets
+// ItineraryDayCard support reordering within a day. No delete control here
+// (unlike the agent's chip) — the admin has no UI to deselect a hotel/tour/
+// transfer/extra from the request itself, so there's nothing for a "remove
+// from the trip entirely" action to do; only its own note is editable.
+function ItineraryItemChip({ item, meta, isDragging, onDragStart, onDragEnd, onDropBefore, onNoteChange, onUnassign }) {
   const typeMeta = ITINERARY_ITEM_TYPE_META[item.type];
   return (
     <div
@@ -353,22 +357,30 @@ function ItineraryItemChip({ item, meta, isDragging, onDragStart, onDragEnd, onD
       onDragEnd={onDragEnd}
       onDragOver={(e) => e.preventDefault()}
       onDrop={onDropBefore}
-      className={`flex items-center gap-2 rounded-md border border-line-light bg-white px-2.5 py-2 text-xs shadow-sm cursor-grab active:cursor-grabbing ${
-        isDragging ? 'opacity-40' : ''
-      }`}
+      className={`rounded-md border border-line-light bg-white px-2.5 py-2 text-xs shadow-sm ${isDragging ? 'opacity-40' : ''}`}
     >
-      <span className="flex-none">{typeMeta?.icon}</span>
-      <div className="min-w-0 flex-1">
-        <div className="truncate font-semibold">{meta?.name || 'Unknown item'}</div>
-        <div className="truncate text-[10px] text-muted">
-          {typeMeta?.label}
-          {meta?.city ? ` · ${meta.city}` : ''}
+      <div className="flex cursor-grab items-center gap-2 active:cursor-grabbing">
+        <span className="flex-none">{typeMeta?.icon}</span>
+        <div className="min-w-0 flex-1">
+          <div className="truncate font-semibold">{meta?.name || 'Unknown item'}</div>
+          <div className="truncate text-[10px] text-muted">
+            {typeMeta?.label}
+            {meta?.city ? ` · ${meta.city}` : ''}
+          </div>
         </div>
+        {onUnassign && (
+          <button type="button" onClick={onUnassign} title="Move back to unassigned" className="flex-none text-muted hover:text-ink">
+            ×
+          </button>
+        )}
       </div>
-      {onUnassign && (
-        <button type="button" onClick={onUnassign} title="Move back to unassigned" className="flex-none text-muted hover:text-ink">
-          ×
-        </button>
+      {onNoteChange && (
+        <TextInput
+          className="mt-1.5 px-2 py-1.5 text-[11px]"
+          placeholder="Add a note (optional)…"
+          value={item.note || ''}
+          onChange={(e) => onNoteChange(e.target.value)}
+        />
       )}
     </div>
   );
@@ -376,7 +388,7 @@ function ItineraryItemChip({ item, meta, isDragging, onDragStart, onDragEnd, onD
 
 // One numbered timeline node, editable — same drop-target-within-a-drop-target
 // structure as the agent builder's ItineraryDayCard.
-function ItineraryDayCard({ dayNumber, items, notes, onNotesChange, resolveMeta, draggingKey, setDraggingKey, moveItem, isLast }) {
+function ItineraryDayCard({ dayNumber, items, notes, onNotesChange, resolveMeta, draggingKey, setDraggingKey, moveItem, updateNote, isLast }) {
   return (
     <div className="relative flex gap-4 pb-5 last:pb-0">
       {!isLast && <span className="absolute left-[15px] top-8 h-[calc(100%-1.25rem)] w-px bg-line-light" />}
@@ -408,6 +420,7 @@ function ItineraryDayCard({ dayNumber, items, notes, onNotesChange, resolveMeta,
                   e.stopPropagation();
                   moveItem(e.dataTransfer.getData('text/plain'), dayNumber, idx);
                 }}
+                onNoteChange={(note) => updateNote(item.key, note)}
                 onUnassign={() => moveItem(item.key, null)}
               />
             ))
@@ -462,6 +475,10 @@ function ItineraryEditor({ packageRequest, onUpdated }) {
 
   function moveItem(key, targetDay, targetIndex) {
     setItineraryItems((items) => moveItineraryItem(items, key, targetDay, targetIndex));
+  }
+
+  function updateNote(key, note) {
+    setItineraryItems((items) => updateItineraryItemNote(items, key, note));
   }
 
   async function save() {
@@ -524,6 +541,7 @@ function ItineraryEditor({ packageRequest, onUpdated }) {
                         const idx = pool.findIndex((p) => p.key === item.key);
                         moveItem(e.dataTransfer.getData('text/plain'), null, idx);
                       }}
+                      onNoteChange={(note) => updateNote(item.key, note)}
                     />
                   </div>
                 ))
@@ -543,6 +561,7 @@ function ItineraryEditor({ packageRequest, onUpdated }) {
                 draggingKey={draggingKey}
                 setDraggingKey={setDraggingKey}
                 moveItem={moveItem}
+                updateNote={updateNote}
                 isLast={dayNumber === dayCount}
               />
             ))}

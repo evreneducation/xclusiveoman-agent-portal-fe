@@ -18,6 +18,7 @@ import {
   resolveItemMeta,
   serializeItinerary,
   unassignedItems,
+  updateItineraryItemNote,
 } from '../../shared/itinerary/index.js';
 
 // Today, as a "YYYY-MM-DD" string in the browser's local timezone — matches
@@ -395,8 +396,12 @@ function TripDetailsStep({
 // A single draggable placed/unplaced item — hotel/tour/transfer/extra —
 // within the Itinerary step. Dropping directly on a chip (rather than the
 // day's empty space) inserts before it, which is what lets ItineraryDayCard
-// support reordering within a day, not just moving between days.
-function ItineraryItemChip({ item, meta, isDragging, onDragStart, onDragEnd, onDropBefore, onUnassign }) {
+// support reordering within a day, not just moving between days. Editable
+// in two ways: its own short note (separate from the day's overall note),
+// and — via ↩/🗑 — moved back to the unassigned tray or removed from the
+// trip entirely (which also drops it from the itinerary via the
+// reconciliation effect in the main component).
+function ItineraryItemChip({ item, meta, isDragging, onDragStart, onDragEnd, onDropBefore, onNoteChange, onUnassign, onDelete }) {
   const typeMeta = ITINERARY_ITEM_TYPE_META[item.type];
   return (
     <div
@@ -405,27 +410,35 @@ function ItineraryItemChip({ item, meta, isDragging, onDragStart, onDragEnd, onD
       onDragEnd={onDragEnd}
       onDragOver={(e) => e.preventDefault()}
       onDrop={onDropBefore}
-      className={`flex items-center gap-2 rounded-md border border-agent-line-light bg-white px-2.5 py-2 text-xs shadow-sm cursor-grab active:cursor-grabbing ${
-        isDragging ? 'opacity-40' : ''
-      }`}
+      className={`rounded-md border border-agent-line-light bg-white px-2.5 py-2 text-xs shadow-sm ${isDragging ? 'opacity-40' : ''}`}
     >
-      <span className="flex-none">{typeMeta?.icon}</span>
-      <div className="min-w-0 flex-1">
-        <div className="truncate font-semibold text-agent-ink">{meta?.name || 'Unknown item'}</div>
-        <div className="truncate text-[10px] text-agent-muted">
-          {typeMeta?.label}
-          {meta?.city ? ` · ${meta.city}` : ''}
+      <div className="flex cursor-grab items-center gap-2 active:cursor-grabbing">
+        <span className="flex-none">{typeMeta?.icon}</span>
+        <div className="min-w-0 flex-1">
+          <div className="truncate font-semibold text-agent-ink">{meta?.name || 'Unknown item'}</div>
+          <div className="truncate text-[10px] text-agent-muted">
+            {typeMeta?.label}
+            {meta?.city ? ` · ${meta.city}` : ''}
+          </div>
         </div>
+        {onUnassign && (
+          <button type="button" onClick={onUnassign} title="Move back to unassigned" className="flex-none text-agent-muted hover:text-agent-ink">
+            ↩
+          </button>
+        )}
+        {onDelete && (
+          <button type="button" onClick={onDelete} title="Remove from this trip entirely" className="flex-none text-agent-muted hover:text-[#a5162d]">
+            🗑
+          </button>
+        )}
       </div>
-      {onUnassign && (
-        <button
-          type="button"
-          onClick={onUnassign}
-          title="Move back to unassigned"
-          className="flex-none text-agent-muted hover:text-agent-ink"
-        >
-          ×
-        </button>
+      {onNoteChange && (
+        <TextInput
+          className="mt-1.5 px-2 py-1.5 text-[11px]"
+          placeholder="Add a note (optional)…"
+          value={item.note || ''}
+          onChange={(e) => onNoteChange(e.target.value)}
+        />
       )}
     </div>
   );
@@ -435,7 +448,19 @@ function ItineraryItemChip({ item, meta, isDragging, onDragStart, onDragEnd, onD
 // but each day is a drop target (moving items in) that also renders its
 // items as drop targets themselves (reordering/moving individual items),
 // plus a free-text notes field.
-function ItineraryDayCard({ dayNumber, items, notes, onNotesChange, resolveMeta, draggingKey, setDraggingKey, moveItem, isLast }) {
+function ItineraryDayCard({
+  dayNumber,
+  items,
+  notes,
+  onNotesChange,
+  resolveMeta,
+  draggingKey,
+  setDraggingKey,
+  moveItem,
+  updateNote,
+  deleteItem,
+  isLast,
+}) {
   return (
     <div className="relative flex gap-4 pb-5 last:pb-0">
       {!isLast && <span className="absolute left-[15px] top-8 h-[calc(100%-1.25rem)] w-px bg-agent-line-light" />}
@@ -467,7 +492,9 @@ function ItineraryDayCard({ dayNumber, items, notes, onNotesChange, resolveMeta,
                   e.stopPropagation();
                   moveItem(e.dataTransfer.getData('text/plain'), dayNumber, idx);
                 }}
+                onNoteChange={(note) => updateNote(item.key, note)}
                 onUnassign={() => moveItem(item.key, null)}
+                onDelete={() => deleteItem(item.type, item.id)}
               />
             ))
           )}
@@ -482,7 +509,18 @@ function ItineraryDayCard({ dayNumber, items, notes, onNotesChange, resolveMeta,
 // Trip Details' Travel Start/End Date; every hotel/tour/transfer/extra
 // selected back in Trip Details shows up here (in the unassigned tray until
 // dragged onto a day) via the reconciliation effect in the main component below.
-function ItineraryStep({ dayCount, itineraryItems, setItineraryItems, dayNotes, setDayNotes, selectedHotel, selectedTours, selectedTransfers, selectedActivities }) {
+function ItineraryStep({
+  dayCount,
+  itineraryItems,
+  setItineraryItems,
+  dayNotes,
+  setDayNotes,
+  selectedHotel,
+  selectedTours,
+  selectedTransfers,
+  selectedActivities,
+  onDeleteItem,
+}) {
   const [draggingKey, setDraggingKey] = useState(null);
 
   function resolveMeta(item) {
@@ -496,6 +534,10 @@ function ItineraryStep({ dayCount, itineraryItems, setItineraryItems, dayNotes, 
 
   function moveItem(key, targetDay, targetIndex) {
     setItineraryItems((items) => moveItineraryItem(items, key, targetDay, targetIndex));
+  }
+
+  function updateNote(key, note) {
+    setItineraryItems((items) => updateItineraryItemNote(items, key, note));
   }
 
   const pool = unassignedItems(itineraryItems);
@@ -542,6 +584,8 @@ function ItineraryStep({ dayCount, itineraryItems, setItineraryItems, dayNotes, 
                         e.stopPropagation();
                         moveItem(e.dataTransfer.getData('text/plain'), null, idx);
                       }}
+                      onNoteChange={(note) => updateNote(item.key, note)}
+                      onDelete={() => onDeleteItem(item.type, item.id)}
                     />
                   </div>
                 ))
@@ -561,6 +605,8 @@ function ItineraryStep({ dayCount, itineraryItems, setItineraryItems, dayNotes, 
                 draggingKey={draggingKey}
                 setDraggingKey={setDraggingKey}
                 moveItem={moveItem}
+                updateNote={updateNote}
+                deleteItem={onDeleteItem}
                 isLast={dayNumber === dayCount}
               />
             ))}
@@ -960,6 +1006,17 @@ export default function PackageBuilder() {
     setItineraryItems((items) => moveItineraryItem(items, itineraryItemKey(type, id), targetDay));
   }
 
+  // "Delete" from the Itinerary step (🗑 on a chip) — removing an itinerary
+  // item is really removing it from the trip: deselect it at the source
+  // (Trip Details), and the reconciliation effect above drops it from
+  // itineraryItems automatically, same as unchecking it there directly would.
+  function deleteItineraryItem(type, id) {
+    if (type === 'hotel') setSelectedHotelId((current) => (current === id ? '' : current));
+    else if (type === 'tour') setSelectedTourIds((list) => list.filter((x) => x !== id));
+    else if (type === 'transfer') setSelectedTransferIds((list) => list.filter((x) => x !== id));
+    else if (type === 'activity') setSelectedActivityIds((list) => list.filter((x) => x !== id));
+  }
+
   function goNext() {
     const validationError = validateStep(step, { form, selectedHotelId, travelers });
     if (validationError) {
@@ -1094,6 +1151,7 @@ export default function PackageBuilder() {
               selectedTours={selectedTours}
               selectedTransfers={selectedTransfers}
               selectedActivities={selectedActivities}
+              onDeleteItem={deleteItineraryItem}
             />
           )}
           {step === 3 && (
