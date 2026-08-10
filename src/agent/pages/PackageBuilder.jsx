@@ -1,23 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api/client.js';
-import { Button, Card, Checkbox, ErrorText, FieldLabel, Select, Tag, TextInput } from '../components/ui.jsx';
+import { Button, Card, ErrorText, FieldLabel, Select, Tag, TextInput } from '../components/ui.jsx';
 import ItineraryDocument from '../components/ItineraryDocument.jsx';
 import {
   ITINERARY_ITEM_TYPE_META,
   buildFullItineraryDays,
-  buildSelectionPool,
-  clampItineraryDays,
   computeDayCount,
   deserializeItinerary,
-  findItineraryItemDay,
   itemsForDay,
   itineraryItemKey,
-  moveItineraryItem,
-  reconcileItineraryItems,
   resolveItemMeta,
   serializeItinerary,
-  unassignedItems,
   updateItineraryItemNote,
 } from '../../shared/itinerary/index.js';
 
@@ -31,11 +25,9 @@ function todayDateString() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-// FIT-1: destination/dates/pax + hotels/tours/transfers/extras are all
-// managed together from Trip Details (hotels/tours/transfers/extras used to
-// be their own wizard steps — merged in so agents can start placing items on
-// the itinerary immediately instead of stepping through four pickers first),
-// then Itinerary (FIT-5), then Review.
+// FIT-1: Trip Details is just destination/dates/pax — hotel/tours/transfers/
+// extras selection now happens inside Itinerary (FIT-5), city by city, day by
+// day, instead of upfront here.
 const STEPS = [
   { n: 1, label: 'Trip Details' },
   { n: 2, label: 'Itinerary' },
@@ -73,9 +65,7 @@ function CatalogImage({ url }) {
   );
 }
 
-// Trip Details' own fields (FIT-1: destination, dates, pax) — one section
-// among several the consolidated TripDetailsStep composite (below) renders
-// together with hotel/tour/transfer/extra selection.
+// Trip Details (FIT-1) — destination, dates, pax only.
 function TripFieldsCard({ form, update }) {
   return (
     <Card label="Trip details" className="border-white">
@@ -133,286 +123,202 @@ function HotelStars({ category }) {
   );
 }
 
-// Hotel selection (FIT-2), now a section within Trip Details rather than its
-// own wizard step. Gated behind a star-category pick first — hotels don't
-// load at all until a category is chosen, rather than dumping every hotel on
-// screen at once. Single-select, matching the wireframe's one "Selected"
-// card and the priced-quote summary later showing one hotel line item. No
-// price is ever rendered here (FIT-6 blind pricing).
-function HotelsStep({ hotels, starCategory, setStarCategory, cityFilter, setCityFilter, selectedHotelId, setSelectedHotelId }) {
-  const inCategory = starCategory ? hotels.filter((h) => h.category === starCategory) : [];
-  const filtered = cityFilter
-    ? inCategory.filter((h) => (h.city || '').toLowerCase().includes(cityFilter.toLowerCase()))
-    : inCategory;
+// ---------------------------------------------------------------------------
+// Itinerary (FIT-5) — city/day allocation + day-wise builder
+// ---------------------------------------------------------------------------
+
+// The "city from the DB stored city" the City & Days planner picks from —
+// every distinct, non-empty city already present across the loaded catalogs,
+// not free text. Sorted for a stable, scannable dropdown.
+function distinctCities(...catalogs) {
+  const set = new Set();
+  for (const list of catalogs) {
+    for (const item of list) {
+      if (item.city) set.add(item.city);
+    }
+  }
+  return Array.from(set).sort((a, b) => a.localeCompare(b));
+}
+
+function sumCityDays(cityDays) {
+  return cityDays.reduce((total, row) => total + (Number(row.days) || 0), 0);
+}
+
+// cityDays -> { [dayNumber]: city|null } for days 1..dayCount. Walks the
+// rows cumulatively: the first row's days claim Day 1..N, the next row's
+// days claim the following block, and so on. Days past the allocated total
+// (cityDays can total less than dayCount, never more — see updateCityRow's
+// clamping) map to null, meaning "no city assigned to this day yet".
+function buildDayCityMap(cityDays, dayCount) {
+  const map = {};
+  let day = 1;
+  for (const row of cityDays) {
+    const rowDays = Math.max(0, Number(row.days) || 0);
+    for (let i = 0; i < rowDays && day <= dayCount; i++, day++) {
+      map[day] = row.city;
+    }
+  }
+  for (; day <= dayCount; day++) map[day] = null;
+  return map;
+}
+
+let cityRowSeq = 0;
+function nextCityRowId() {
+  cityRowSeq += 1;
+  return `city-${cityRowSeq}-${Date.now()}`;
+}
+
+// Adds a brand-new instance of a catalog item directly onto a day. Unlike
+// the old select-then-drag model, items in this builder never pass through
+// an "unassigned" tray — every item is added straight onto the day (and
+// city) it belongs to, so this always appends to the end of that day's list.
+// The same catalog item (typically a hotel) can be added to more than one
+// day, so the key includes the day and a random suffix rather than being a
+// plain `type:id`.
+function addItineraryItem(items, { type, id, dayNumber }) {
+  const dayItems = itemsForDay(items, dayNumber);
+  const newItem = {
+    key: `${itineraryItemKey(type, id)}:${dayNumber}:${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    type,
+    id,
+    dayNumber,
+    position: dayItems.length,
+    note: '',
+  };
+  return [...items, newItem];
+}
+
+// Removes one item by its (unique, per-instance) key and renumbers the
+// remaining items in that day so positions stay a dense 0..n-1 sequence.
+function removeItineraryItemByKey(items, key) {
+  const removing = items.find((it) => it.key === key);
+  if (!removing) return items;
+  const rest = items.filter((it) => it.key !== key);
+  const remainingInDay = itemsForDay(rest, removing.dayNumber).map((it, idx) => ({ ...it, position: idx }));
+  const others = rest.filter((it) => it.dayNumber !== removing.dayNumber);
+  return [...others, ...remainingInDay];
+}
+
+// Hotel is single-select per day — choosing a new hotel for a day replaces
+// whatever hotel was already there instead of stacking up multiple.
+function setHotelForDay(items, dayNumber, hotelId) {
+  const withoutOldHotel = items.filter((it) => !(it.dayNumber === dayNumber && it.type === 'hotel'));
+  return addItineraryItem(withoutOldHotel, { type: 'hotel', id: hotelId, dayNumber });
+}
+
+function dedupeIdsByType(items, type) {
+  const ids = [];
+  const seen = new Set();
+  for (const it of items) {
+    if (it.type === type && !seen.has(it.id)) {
+      seen.add(it.id);
+      ids.push(it.id);
+    }
+  }
+  return ids;
+}
+
+// Best-effort reconstruction of city/day blocks from an already-saved
+// itinerary (resuming a draft saved before this feature existed, or one left
+// with under-filled days) — `cityDays` itself isn't part of the persisted
+// package-request shape, only the per-day items are. Walks day 1..dayCount,
+// reads the city of whichever item already occupies that day, and collapses
+// consecutive same-city runs into rows; a day with no items yet breaks the
+// run and is left for the agent to fill in manually.
+function deriveCityDaysFromItems(items, dayCount, catalogs) {
+  const rows = [];
+  let current = null;
+  for (let day = 1; day <= dayCount; day++) {
+    let city = null;
+    for (const it of itemsForDay(items, day)) {
+      const meta = resolveItemMeta(it.type, it.id, catalogs);
+      if (meta?.city) {
+        city = meta.city;
+        break;
+      }
+    }
+    if (city && current && current.city === city) {
+      current.days += 1;
+    } else if (city) {
+      current = { id: nextCityRowId(), city, days: 1 };
+      rows.push(current);
+    } else {
+      current = null;
+    }
+  }
+  return rows;
+}
+
+// City & Days planner — the first thing the agent fills in on Itinerary.
+// Each row is a city (picked from the catalogs' own city values) plus how
+// many days of the trip it gets; the day-wise itinerary below is generated
+// straight from this allocation.
+function CityDaysPlanner({ cityOptions, cityDays, dayCount, addCityRow, updateCityRow, removeCityRow }) {
+  const allocated = sumCityDays(cityDays);
+  const remaining = Math.max(0, dayCount - allocated);
 
   return (
-    <Card label="Select a hotel" className="border-white">
-      <FieldLabel>Star category *</FieldLabel>
-      <div className="mb-4 flex flex-wrap gap-2">
-        {HOTEL_STAR_CATEGORIES.map((cat) => (
-          <button key={cat} type="button" onClick={() => setStarCategory(cat)}>
-            <Tag active={starCategory === cat}>{cat}★</Tag>
-          </button>
-        ))}
-      </div>
-
-      {!starCategory ? (
-        <p className="text-sm text-agent-muted">Select a star category above to see hotels.</p>
+    <Card label="Cities & days" className="border-white">
+      <p className="mb-3 text-xs text-agent-muted">
+        Pick the cities this trip covers and how many days each gets — the day-wise itinerary below is built from
+        this. Total days across all cities can't exceed the trip length set in Trip Details.
+      </p>
+      {dayCount === 0 ? (
+        <p className="text-sm text-agent-muted">Set Travel Start Date and Travel End Date in Trip Details first.</p>
       ) : (
         <>
-          <TextInput className="mb-4 max-w-xs" placeholder="Filter by city…" value={cityFilter} onChange={(e) => setCityFilter(e.target.value)} />
-          {filtered.length === 0 && (
-            <p className="text-sm text-agent-muted">No {starCategory}★ hotels available{cityFilter ? ' for that city' : ''}.</p>
-          )}
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {filtered.map((h) => {
-              const selected = h.id === selectedHotelId;
-              return (
-                <div
-                  key={h.id}
-                  className={`flex flex-col rounded-lg border p-3 shadow-sm transition ${
-                    selected ? 'border-agent-accent ring-2 ring-agent-accent/25' : 'border-agent-line-light'
-                  }`}
-                >
-                  <CatalogImage url={h.images?.[0]} />
-                  <div className="mt-2 text-sm font-bold">{h.name}</div>
-                  <HotelStars category={h.category} />
-                  <div className="mt-0.5 text-xs text-agent-muted">{[h.city, h.state].filter(Boolean).join(', ') || '—'}</div>
-                  {h.description && <p className="mt-1 line-clamp-2 text-xs text-agent-muted">{h.description}</p>}
-                  {h.roomTypes?.length > 0 && (
-                    <p className="mt-1 text-[11px] text-agent-muted">Room types: {h.roomTypes.join(', ')}</p>
-                  )}
-                  <Button
-                    variant={selected ? 'accent' : 'default'}
-                    className="mt-3 w-full justify-center"
-                    onClick={() => setSelectedHotelId(selected ? '' : h.id)}
-                  >
-                    {selected ? 'Selected ✓' : 'Select'}
-                  </Button>
-                </div>
-              );
-            })}
+          <div className="mb-3 text-xs font-semibold text-agent-ink">
+            {allocated} of {dayCount} day{dayCount === 1 ? '' : 's'} allocated
+            {remaining > 0 && <span className="font-normal text-agent-muted"> · {remaining} remaining</span>}
           </div>
+          {cityDays.length === 0 && <p className="mb-2 text-sm text-agent-muted">No cities added yet.</p>}
+          <div className="space-y-2">
+            {cityDays.map((row, idx) => (
+              <div key={row.id} className="flex flex-wrap items-end gap-2">
+                <div className="min-w-[180px] flex-1">
+                  <FieldLabel>City {idx + 1} *</FieldLabel>
+                  <Select value={row.city} onChange={(e) => updateCityRow(row.id, 'city', e.target.value)}>
+                    <option value="">Select a city…</option>
+                    {cityOptions.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+                <div className="w-28">
+                  <FieldLabel>Days *</FieldLabel>
+                  <TextInput
+                    type="number"
+                    min="1"
+                    value={row.days}
+                    onChange={(e) => updateCityRow(row.id, 'days', e.target.value)}
+                  />
+                </div>
+                <Button onClick={() => removeCityRow(row.id)} title="Remove this city">
+                  🗑
+                </Button>
+              </div>
+            ))}
+          </div>
+          <Button className="mt-3" disabled={remaining === 0} onClick={addCityRow}>
+            + Add city
+          </Button>
         </>
       )}
     </Card>
   );
 }
 
-// Lets an already-selected tour/transfer/extra be dropped straight onto a
-// day from its own selection card — no detour through the separate
-// Itinerary step for the common case of "I just picked this, put it on Day
-// 3". Reordering within a day and moving between days still happens there;
-// this is just a shortcut for the initial placement.
-function AssignToDayControl({ type, id, dayCount, itineraryItems, assignItemToDay }) {
-  if (dayCount === 0) {
-    return <p className="mt-2 text-[11px] text-agent-muted">Set travel dates in Trip Details to assign this to a day.</p>;
-  }
-  const currentDay = findItineraryItemDay(itineraryItems, type, id);
-  return (
-    <div className="mt-2">
-      <FieldLabel>Assign to day</FieldLabel>
-      <Select value={currentDay ?? ''} onChange={(e) => assignItemToDay(type, id, e.target.value)}>
-        <option value="">Unassigned</option>
-        {Array.from({ length: dayCount }, (_, i) => i + 1).map((n) => (
-          <option key={n} value={n}>
-            Day {n}
-          </option>
-        ))}
-      </Select>
-    </div>
-  );
-}
-
-// Tour selection (FIT-3: multi-select checkboxes, no price), now a section
-// within Trip Details rather than its own wizard step.
-function ToursStep({ tours, cityFilter, setCityFilter, selectedTourIds, toggleTour, dayCount, itineraryItems, assignItemToDay }) {
-  const filtered = cityFilter
-    ? tours.filter((t) => (t.city || '').toLowerCase().includes(cityFilter.toLowerCase()))
-    : tours;
-
-  return (
-    <Card label="Select tours (optional, multiple allowed)" className="border-white">
-      <TextInput className="mb-4 max-w-xs" placeholder="Filter by city…" value={cityFilter} onChange={(e) => setCityFilter(e.target.value)} />
-      {filtered.length === 0 && <p className="text-sm text-agent-muted">No tours available{cityFilter ? ' for that city' : ''}.</p>}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {filtered.map((t) => {
-          const selected = selectedTourIds.includes(t.id);
-          return (
-            <div key={t.id} className="rounded-lg border border-agent-line-light p-3 shadow-sm">
-              <CatalogImage url={t.images?.[0]} />
-              <div className="mt-2 text-sm font-bold">{t.name}</div>
-              <div className="text-xs text-agent-muted">
-                {t.city || '—'} {t.category ? `· ${t.category}` : ''} {t.duration ? `· ${t.duration}` : ''}
-              </div>
-              {t.description && <p className="mt-1 line-clamp-2 text-xs text-agent-muted">{t.description}</p>}
-              <div className="mt-2">
-                <Checkbox checked={selected} onChange={() => toggleTour(t.id)} label="Include this tour" />
-              </div>
-              {selected && (
-                <AssignToDayControl type="tour" id={t.id} dayCount={dayCount} itineraryItems={itineraryItems} assignItemToDay={assignItemToDay} />
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </Card>
-  );
-}
-
-// Transfer selection (FIT-4: multi-select checkboxes, no price), now a
-// section within Trip Details rather than its own wizard step.
-function TransfersStep({ transfers, selectedTransferIds, toggleTransfer, dayCount, itineraryItems, assignItemToDay }) {
-  return (
-    <Card label="Select transfers (optional, multiple allowed)" className="border-white">
-      {transfers.length === 0 && <p className="text-sm text-agent-muted">No transfers available.</p>}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {transfers.map((tr) => {
-          const selected = selectedTransferIds.includes(tr.id);
-          return (
-            <div key={tr.id} className="rounded-lg border border-agent-line-light p-3 shadow-sm">
-              <div className="text-sm font-bold">{tr.name}</div>
-              <div className="text-xs text-agent-muted">
-                {tr.type ? tr.type.replace(/_/g, ' ') : '—'} {tr.vehicleClass ? `· ${tr.vehicleClass}` : ''} {tr.city ? `· ${tr.city}` : ''}
-              </div>
-              {tr.description && <p className="mt-1 text-xs text-agent-muted">{tr.description}</p>}
-              <div className="mt-2">
-                <Checkbox checked={selected} onChange={() => toggleTransfer(tr.id)} label="Include this transfer" />
-              </div>
-              {selected && (
-                <AssignToDayControl type="transfer" id={tr.id} dayCount={dayCount} itineraryItems={itineraryItems} assignItemToDay={assignItemToDay} />
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </Card>
-  );
-}
-
-// Extras selection, now a section within Trip Details rather than its own
-// wizard step. The admin's Activities catalog is the pool of short add-on
-// experiences (mirrors how FGD add-ons draw from activities/tours).
-function ExtrasStep({ activities, selectedActivityIds, toggleActivity, dayCount, itineraryItems, assignItemToDay }) {
-  return (
-    <Card label="Select extras / add-ons (optional, multiple allowed)" className="border-white">
-      {activities.length === 0 && <p className="text-sm text-agent-muted">No extras available.</p>}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {activities.map((a) => {
-          const selected = selectedActivityIds.includes(a.id);
-          return (
-            <div key={a.id} className="rounded-lg border border-agent-line-light p-3 shadow-sm">
-              <CatalogImage url={a.images?.[0]} />
-              <div className="mt-2 text-sm font-bold">{a.name}</div>
-              <div className="text-xs text-agent-muted">
-                {a.city || '—'} {a.duration ? `· ${a.duration}` : ''}
-              </div>
-              {a.description && <p className="mt-1 line-clamp-2 text-xs text-agent-muted">{a.description}</p>}
-              <div className="mt-2">
-                <Checkbox checked={selected} onChange={() => toggleActivity(a.id)} label="Include this extra" />
-              </div>
-              {selected && (
-                <AssignToDayControl type="activity" id={a.id} dayCount={dayCount} itineraryItems={itineraryItems} assignItemToDay={assignItemToDay} />
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </Card>
-  );
-}
-
-// Step 1 — Trip Details. Consolidates the trip fields with hotel/tour/
-// transfer/extra selection into one step (these were four separate wizard
-// steps before) so agents can build the whole selection in one place, then
-// move straight to arranging it into a day-wise itinerary.
-function TripDetailsStep({
-  form,
-  update,
-  hotels,
-  starCategory,
-  setStarCategory,
-  hotelCityFilter,
-  setHotelCityFilter,
-  selectedHotelId,
-  setSelectedHotelId,
-  tours,
-  tourCityFilter,
-  setTourCityFilter,
-  selectedTourIds,
-  toggleTour,
-  transfers,
-  selectedTransferIds,
-  toggleTransfer,
-  activities,
-  selectedActivityIds,
-  toggleActivity,
-  dayCount,
-  itineraryItems,
-  assignItemToDay,
-}) {
-  return (
-    <div className="space-y-4">
-      <TripFieldsCard form={form} update={update} />
-      <HotelsStep
-        hotels={hotels}
-        starCategory={starCategory}
-        setStarCategory={setStarCategory}
-        cityFilter={hotelCityFilter}
-        setCityFilter={setHotelCityFilter}
-        selectedHotelId={selectedHotelId}
-        setSelectedHotelId={setSelectedHotelId}
-      />
-      <ToursStep
-        tours={tours}
-        cityFilter={tourCityFilter}
-        setCityFilter={setTourCityFilter}
-        selectedTourIds={selectedTourIds}
-        toggleTour={toggleTour}
-        dayCount={dayCount}
-        itineraryItems={itineraryItems}
-        assignItemToDay={assignItemToDay}
-      />
-      <TransfersStep
-        transfers={transfers}
-        selectedTransferIds={selectedTransferIds}
-        toggleTransfer={toggleTransfer}
-        dayCount={dayCount}
-        itineraryItems={itineraryItems}
-        assignItemToDay={assignItemToDay}
-      />
-      <ExtrasStep
-        activities={activities}
-        selectedActivityIds={selectedActivityIds}
-        toggleActivity={toggleActivity}
-        dayCount={dayCount}
-        itineraryItems={itineraryItems}
-        assignItemToDay={assignItemToDay}
-      />
-    </div>
-  );
-}
-
-// A single draggable placed/unplaced item — hotel/tour/transfer/extra —
-// within the Itinerary step. Dropping directly on a chip (rather than the
-// day's empty space) inserts before it, which is what lets ItineraryDayCard
-// support reordering within a day, not just moving between days. Editable
-// in two ways: its own short note (separate from the day's overall note),
-// and — via ↩/🗑 — moved back to the unassigned tray or removed from the
-// trip entirely (which also drops it from the itinerary via the
-// reconciliation effect in the main component).
-function ItineraryItemChip({ item, meta, isDragging, onDragStart, onDragEnd, onDropBefore, onNoteChange, onUnassign, onDelete }) {
+// A placed hotel/tour/transfer/extra on a specific day — a trimmed,
+// non-draggable version of the old ItineraryItemChip (there's no
+// drag-and-drop between days anymore: every item is added directly to the
+// day it belongs to, filtered by that day's city).
+function PlacedItemChip({ item, meta, onNoteChange, onRemove }) {
   const typeMeta = ITINERARY_ITEM_TYPE_META[item.type];
   return (
-    <div
-      draggable
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
-      onDragOver={(e) => e.preventDefault()}
-      onDrop={onDropBefore}
-      className={`rounded-md border border-agent-line-light bg-white px-2.5 py-2 text-xs shadow-sm ${isDragging ? 'opacity-40' : ''}`}
-    >
-      <div className="flex cursor-grab items-center gap-2 active:cursor-grabbing">
+    <div className="rounded-md border border-agent-line-light bg-white px-2.5 py-2 text-xs shadow-sm">
+      <div className="flex items-center gap-2">
         <span className="flex-none">{typeMeta?.icon}</span>
         <div className="min-w-0 flex-1">
           <div className="truncate font-semibold text-agent-ink">{meta?.name || 'Unknown item'}</div>
@@ -421,199 +327,302 @@ function ItineraryItemChip({ item, meta, isDragging, onDragStart, onDragEnd, onD
             {meta?.city ? ` · ${meta.city}` : ''}
           </div>
         </div>
-        {onUnassign && (
-          <button type="button" onClick={onUnassign} title="Move back to unassigned" className="flex-none text-agent-muted hover:text-agent-ink">
-            ↩
-          </button>
-        )}
-        {onDelete && (
-          <button type="button" onClick={onDelete} title="Remove from this trip entirely" className="flex-none text-agent-muted hover:text-[#a5162d]">
+        <button type="button" onClick={onRemove} title="Remove" className="flex-none text-agent-muted hover:text-[#a5162d]">
+          🗑
+        </button>
+      </div>
+      <TextInput
+        className="mt-1.5 px-2 py-1.5 text-[11px]"
+        placeholder="Add a note (optional)…"
+        value={item.note || ''}
+        onChange={(e) => onNoteChange(e.target.value)}
+      />
+    </div>
+  );
+}
+
+// A day's hotel section — single-select, filtered to that day's city, gated
+// behind a star-category pick first (matching the old HotelsStep). Choosing
+// a hotel replaces whatever was already selected for this day.
+function DayHotelSection({ city, hotels, currentHotelId, onSelect }) {
+  const [open, setOpen] = useState(false);
+  const [starCategory, setStarCategory] = useState('');
+  const inCity = hotels.filter((h) => (h.city || '').toLowerCase() === city.toLowerCase());
+  const filtered = starCategory ? inCity.filter((h) => h.category === starCategory) : inCity;
+  const currentHotel = hotels.find((h) => h.id === currentHotelId) || null;
+
+  return (
+    <div>
+      <FieldLabel>Hotel</FieldLabel>
+      {currentHotel ? (
+        <div className="flex items-center justify-between rounded-md border border-agent-line-light bg-white px-3 py-2 text-xs">
+          <div>
+            <div className="font-semibold text-agent-ink">{currentHotel.name}</div>
+            <div className="text-agent-muted">
+              {currentHotel.category ? `${currentHotel.category}★ · ` : ''}
+              {currentHotel.city}
+            </div>
+          </div>
+          <button type="button" onClick={() => onSelect('')} title="Remove" className="flex-none text-agent-muted hover:text-[#a5162d]">
             🗑
           </button>
-        )}
-      </div>
-      {onNoteChange && (
-        <TextInput
-          className="mt-1.5 px-2 py-1.5 text-[11px]"
-          placeholder="Add a note (optional)…"
-          value={item.note || ''}
-          onChange={(e) => onNoteChange(e.target.value)}
-        />
+        </div>
+      ) : (
+        <p className="mb-1 text-[11px] text-agent-muted">No hotel selected for this day.</p>
+      )}
+      <Button className="mt-1.5" onClick={() => setOpen((o) => !o)}>
+        {open ? 'Close' : currentHotel ? 'Change hotel' : '+ Add hotel'}
+      </Button>
+      {open && (
+        <div className="mt-2 rounded-md border border-dashed border-agent-line-light p-2.5">
+          <div className="mb-2 flex flex-wrap gap-2">
+            {HOTEL_STAR_CATEGORIES.map((cat) => (
+              <button key={cat} type="button" onClick={() => setStarCategory((c) => (c === cat ? '' : cat))}>
+                <Tag active={starCategory === cat}>{cat}★</Tag>
+              </button>
+            ))}
+          </div>
+          {filtered.length === 0 ? (
+            <p className="text-[11px] text-agent-muted">
+              No hotels in {city}
+              {starCategory ? ` at ${starCategory}★` : ''}.
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {filtered.map((h) => {
+                const selected = h.id === currentHotelId;
+                return (
+                  <div
+                    key={h.id}
+                    className={`rounded-md border p-2 text-xs ${selected ? 'border-agent-accent ring-1 ring-agent-accent/25' : 'border-agent-line-light'}`}
+                  >
+                    <CatalogImage url={h.images?.[0]} />
+                    <div className="mt-1.5 font-semibold text-agent-ink">{h.name}</div>
+                    <HotelStars category={h.category} />
+                    <Button
+                      variant={selected ? 'accent' : 'default'}
+                      className="mt-1.5 w-full justify-center"
+                      onClick={() => {
+                        onSelect(selected ? '' : h.id);
+                        setOpen(false);
+                      }}
+                    >
+                      {selected ? 'Selected ✓' : 'Select'}
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
 }
 
-// One numbered timeline node — mirrors ItineraryTimeline's read-only layout,
-// but each day is a drop target (moving items in) that also renders its
-// items as drop targets themselves (reordering/moving individual items),
-// plus a free-text notes field.
-function ItineraryDayCard({
-  dayNumber,
-  items,
-  notes,
-  onNotesChange,
-  resolveMeta,
-  draggingKey,
-  setDraggingKey,
-  moveItem,
-  updateNote,
-  deleteItem,
-  isLast,
-}) {
+const DAY_SECTION_META = {
+  tour: { label: 'Tours', addLabel: '+ Add tour' },
+  transfer: { label: 'Transfers', addLabel: '+ Add transfer' },
+  activity: { label: 'Extras', addLabel: '+ Add extra' },
+};
+
+// A day's tours/transfers/extras section — multi-add, filtered to that
+// day's city. Reusable across all three types since they share the same
+// "toggle catalog card in/out of this day" shape.
+function DayCatalogSection({ type, city, catalog, placedItems, onAdd, onRemove, onNoteChange }) {
+  const [open, setOpen] = useState(false);
+  const meta = DAY_SECTION_META[type];
+  const inCity = catalog.filter((item) => (item.city || '').toLowerCase() === city.toLowerCase());
+  const placedByItemId = new Map(placedItems.map((it) => [it.id, it]));
+
   return (
-    <div className="relative flex gap-4 pb-5 last:pb-0">
+    <div>
+      <FieldLabel>{meta.label}</FieldLabel>
+      {placedItems.length === 0 ? (
+        <p className="mb-1 text-[11px] text-agent-muted">None added for this day.</p>
+      ) : (
+        <div className="mb-1.5 space-y-1.5">
+          {placedItems.map((it) => (
+            <PlacedItemChip
+              key={it.key}
+              item={it}
+              meta={catalog.find((c) => c.id === it.id)}
+              onRemove={() => onRemove(it.key)}
+              onNoteChange={(note) => onNoteChange(it.key, note)}
+            />
+          ))}
+        </div>
+      )}
+      <Button onClick={() => setOpen((o) => !o)}>{open ? 'Close' : meta.addLabel}</Button>
+      {open && (
+        <div className="mt-2 rounded-md border border-dashed border-agent-line-light p-2.5">
+          {inCity.length === 0 ? (
+            <p className="text-[11px] text-agent-muted">
+              No {meta.label.toLowerCase()} available in {city}.
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {inCity.map((item) => {
+                const placed = placedByItemId.get(item.id);
+                return (
+                  <div
+                    key={item.id}
+                    className={`rounded-md border p-2 text-xs ${placed ? 'border-agent-accent ring-1 ring-agent-accent/25' : 'border-agent-line-light'}`}
+                  >
+                    <div className="font-semibold text-agent-ink">{item.name}</div>
+                    <div className="text-agent-muted">
+                      {type === 'tour' && `${item.category ? item.category + ' · ' : ''}${item.duration || ''}`}
+                      {type === 'transfer' && `${item.type ? item.type.replace(/_/g, ' ') : ''}${item.vehicleClass ? ' · ' + item.vehicleClass : ''}`}
+                      {type === 'activity' && (item.duration || '')}
+                    </div>
+                    <Button
+                      variant={placed ? 'accent' : 'default'}
+                      className="mt-1.5 w-full justify-center"
+                      onClick={() => (placed ? onRemove(placed.key) : onAdd(item.id))}
+                    >
+                      {placed ? 'Added ✓ (tap to remove)' : 'Add'}
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// One numbered day node — mirrors the old ItineraryDayCard's timeline
+// layout, but each section adds directly from that day's city-filtered
+// catalog instead of dragging from a shared unassigned tray.
+function DayPlanCard({ dayNumber, city, items, catalogs, notes, onNotesChange, addItem, removeItem, updateNote, setHotel, isLast }) {
+  const hotelItem = items.find((it) => it.type === 'hotel') || null;
+  const tourItems = items.filter((it) => it.type === 'tour');
+  const transferItems = items.filter((it) => it.type === 'transfer');
+  const activityItems = items.filter((it) => it.type === 'activity');
+
+  return (
+    <div className="relative flex gap-4 pb-6 last:pb-0">
       {!isLast && <span className="absolute left-[15px] top-8 h-[calc(100%-1.25rem)] w-px bg-agent-line-light" />}
       <span className="relative z-10 flex h-8 w-8 flex-none items-center justify-center rounded-full bg-agent-ink text-xs font-bold text-white shadow-sm">
         {dayNumber}
       </span>
-      <div className="flex-1 pt-0.5">
-        <div className="mb-2 text-xs font-bold uppercase tracking-wide text-agent-accent-dark">Day {dayNumber}</div>
-        <div
-          onDragOver={(e) => e.preventDefault()}
-          onDrop={(e) => moveItem(e.dataTransfer.getData('text/plain'), dayNumber)}
-          className="mb-2 min-h-[52px] space-y-1.5 rounded-md border border-dashed border-agent-line-light bg-agent-panel/40 p-2"
-        >
-          {items.length === 0 ? (
-            <p className="py-2 text-center text-[11px] text-agent-muted">Drag items here</p>
-          ) : (
-            items.map((item, idx) => (
-              <ItineraryItemChip
-                key={item.key}
-                item={item}
-                meta={resolveMeta(item)}
-                isDragging={draggingKey === item.key}
-                onDragStart={(e) => {
-                  e.dataTransfer.setData('text/plain', item.key);
-                  setDraggingKey(item.key);
-                }}
-                onDragEnd={() => setDraggingKey(null)}
-                onDropBefore={(e) => {
-                  e.stopPropagation();
-                  moveItem(e.dataTransfer.getData('text/plain'), dayNumber, idx);
-                }}
-                onNoteChange={(note) => updateNote(item.key, note)}
-                onUnassign={() => moveItem(item.key, null)}
-                onDelete={() => deleteItem(item.type, item.id)}
-              />
-            ))
-          )}
+      <div className="flex-1 space-y-3 pt-0.5">
+        <div className="text-xs font-bold uppercase tracking-wide text-agent-accent-dark">
+          Day {dayNumber}
+          {city ? ` — ${city}` : ''}
         </div>
-        <TextInput placeholder="Notes for this day (optional)…" value={notes} onChange={(e) => onNotesChange(e.target.value)} />
+        {!city ? (
+          <p className="rounded-md border border-dashed border-agent-line-light bg-agent-panel/40 p-3 text-center text-[11px] text-agent-muted">
+            Add a city above to plan this day.
+          </p>
+        ) : (
+          <>
+            <DayHotelSection
+              city={city}
+              hotels={catalogs.hotels}
+              currentHotelId={hotelItem?.id || ''}
+              onSelect={(hotelId) => setHotel(dayNumber, hotelId)}
+            />
+            <DayCatalogSection
+              type="tour"
+              city={city}
+              catalog={catalogs.tours}
+              placedItems={tourItems}
+              onAdd={(id) => addItem('tour', id)}
+              onRemove={removeItem}
+              onNoteChange={updateNote}
+            />
+            <DayCatalogSection
+              type="transfer"
+              city={city}
+              catalog={catalogs.transfers}
+              placedItems={transferItems}
+              onAdd={(id) => addItem('transfer', id)}
+              onRemove={removeItem}
+              onNoteChange={updateNote}
+            />
+            <DayCatalogSection
+              type="activity"
+              city={city}
+              catalog={catalogs.activities}
+              placedItems={activityItems}
+              onAdd={(id) => addItem('activity', id)}
+              onRemove={removeItem}
+              onNoteChange={updateNote}
+            />
+            <TextInput placeholder="Notes for this day (optional)…" value={notes} onChange={(e) => onNotesChange(e.target.value)} />
+          </>
+        )}
       </div>
     </div>
   );
 }
 
-// Step 2 — Day-wise Itinerary Planner (FIT-5). Days are auto-generated from
-// Trip Details' Travel Start/End Date; every hotel/tour/transfer/extra
-// selected back in Trip Details shows up here (in the unassigned tray until
-// dragged onto a day) via the reconciliation effect in the main component below.
+// Step 2 — City & Days planner + day-wise itinerary built from it (FIT-5).
 function ItineraryStep({
   dayCount,
+  cityOptions,
+  cityDays,
+  addCityRow,
+  updateCityRow,
+  removeCityRow,
+  dayCityMap,
   itineraryItems,
-  setItineraryItems,
   dayNotes,
   setDayNotes,
-  selectedHotel,
-  selectedTours,
-  selectedTransfers,
-  selectedActivities,
-  onDeleteItem,
+  hotels,
+  tours,
+  transfers,
+  activities,
+  addItemToDay,
+  removeItemFromDay,
+  updateItemNoteByKey,
+  setHotelForDayNumber,
 }) {
-  const [draggingKey, setDraggingKey] = useState(null);
-
-  function resolveMeta(item) {
-    return resolveItemMeta(item.type, item.id, {
-      hotel: selectedHotel,
-      tours: selectedTours,
-      transfers: selectedTransfers,
-      activities: selectedActivities,
-    });
-  }
-
-  function moveItem(key, targetDay, targetIndex) {
-    setItineraryItems((items) => moveItineraryItem(items, key, targetDay, targetIndex));
-  }
-
-  function updateNote(key, note) {
-    setItineraryItems((items) => updateItineraryItemNote(items, key, note));
-  }
-
-  const pool = unassignedItems(itineraryItems);
-
   return (
-    <Card label="Day-wise itinerary (optional)" className="border-white">
-      <p className="mb-4 text-xs text-agent-muted">
-        Drag your selected hotel, tours, transfers, and extras onto the day they happen, reorder within a day, or add
-        a note for the day. This is included with your request exactly as arranged here.
-      </p>
+    <div className="space-y-4">
+      <CityDaysPlanner
+        cityOptions={cityOptions}
+        cityDays={cityDays}
+        dayCount={dayCount}
+        addCityRow={addCityRow}
+        updateCityRow={updateCityRow}
+        removeCityRow={removeCityRow}
+      />
 
-      {dayCount === 0 ? (
-        <p className="rounded-md border border-dashed border-agent-line-light bg-agent-panel/40 p-4 text-center text-sm text-agent-muted">
-          Set Travel Start Date and Travel End Date in Trip Details to build the day-wise itinerary.
-        </p>
-      ) : (
-        <>
-          <div className="mb-5">
-            <FieldLabel>Unassigned items — drag onto a day below</FieldLabel>
-            <div
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => moveItem(e.dataTransfer.getData('text/plain'), null)}
-              className="flex min-h-[56px] flex-wrap gap-2 rounded-md border border-dashed border-agent-line-light bg-agent-panel/40 p-2.5"
-            >
-              {pool.length === 0 ? (
-                <p className="py-2 text-[11px] text-agent-muted">
-                  {itineraryItems.length === 0
-                    ? 'Select hotels/tours/transfers/extras in earlier steps to place them here.'
-                    : 'Everything is placed on a day.'}
-                </p>
-              ) : (
-                pool.map((item, idx) => (
-                  <div key={item.key} className="w-full sm:w-64">
-                    <ItineraryItemChip
-                      item={item}
-                      meta={resolveMeta(item)}
-                      isDragging={draggingKey === item.key}
-                      onDragStart={(e) => {
-                        e.dataTransfer.setData('text/plain', item.key);
-                        setDraggingKey(item.key);
-                      }}
-                      onDragEnd={() => setDraggingKey(null)}
-                      onDropBefore={(e) => {
-                        e.stopPropagation();
-                        moveItem(e.dataTransfer.getData('text/plain'), null, idx);
-                      }}
-                      onNoteChange={(note) => updateNote(item.key, note)}
-                      onDelete={() => onDeleteItem(item.type, item.id)}
-                    />
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
+      <Card label="Day-wise itinerary" className="border-white">
+        {dayCount === 0 ? (
+          <p className="rounded-md border border-dashed border-agent-line-light bg-agent-panel/40 p-4 text-center text-sm text-agent-muted">
+            Set Travel Start Date and Travel End Date in Trip Details to build the day-wise itinerary.
+          </p>
+        ) : cityDays.length === 0 ? (
+          <p className="rounded-md border border-dashed border-agent-line-light bg-agent-panel/40 p-4 text-center text-sm text-agent-muted">
+            Add at least one city above to start planning your days.
+          </p>
+        ) : (
           <div>
             {Array.from({ length: dayCount }, (_, i) => i + 1).map((dayNumber) => (
-              <ItineraryDayCard
+              <DayPlanCard
                 key={dayNumber}
                 dayNumber={dayNumber}
+                city={dayCityMap[dayNumber]}
                 items={itemsForDay(itineraryItems, dayNumber)}
+                catalogs={{ hotels, tours, transfers, activities }}
                 notes={dayNotes[dayNumber] || ''}
                 onNotesChange={(value) => setDayNotes((n) => ({ ...n, [dayNumber]: value }))}
-                resolveMeta={resolveMeta}
-                draggingKey={draggingKey}
-                setDraggingKey={setDraggingKey}
-                moveItem={moveItem}
-                updateNote={updateNote}
-                deleteItem={onDeleteItem}
+                addItem={(type, id) => addItemToDay(dayNumber, type, id)}
+                removeItem={removeItemFromDay}
+                updateNote={updateItemNoteByKey}
+                setHotel={setHotelForDayNumber}
                 isLast={dayNumber === dayCount}
               />
             ))}
           </div>
-        </>
-      )}
-    </Card>
+        )}
+      </Card>
+    </div>
   );
 }
 
@@ -673,7 +682,7 @@ function TravelersEditor({ travelers, updateTraveler }) {
 }
 
 // Step 3 — review & submit. No price/cost/markup fields anywhere (FIT-6).
-function ReviewStep({ form, dayCount, selectedHotel, days, selectedCounts, travelers, updateTraveler }) {
+function ReviewStep({ form, dayCount, hotels, days, selectedCounts, travelers, updateTraveler }) {
   return (
     <div className="space-y-4">
       {/* Redesigned to read like a real client-facing itinerary document
@@ -691,7 +700,7 @@ function ReviewStep({ form, dayCount, selectedHotel, days, selectedCounts, trave
         paxAdults={Number(form.paxAdults) || 0}
         paxChildren={Number(form.paxChildren) || 0}
         dayCount={dayCount}
-        hotel={selectedHotel}
+        hotels={hotels}
         days={days}
         selectedCounts={selectedCounts}
       />
@@ -706,7 +715,7 @@ function ReviewStep({ form, dayCount, selectedHotel, days, selectedCounts, trave
   );
 }
 
-function validateStep(step, { form, selectedHotelId, travelers }) {
+function validateStep(step, { form, cityDays, itineraryItems, travelers }) {
   if (step === 1) {
     if (!form.destination.trim()) return 'Destination is required.';
     if (!form.dateFrom || !form.dateTo) return 'Travel start and end dates are required.';
@@ -716,8 +725,13 @@ function validateStep(step, { form, selectedHotelId, travelers }) {
     if (form.dateTo < form.dateFrom) return 'End date cannot be earlier than the start date.';
     if (form.dateFrom < todayDateString()) return 'Start date cannot be in the past.';
     if (!form.paxAdults || Number(form.paxAdults) < 1) return 'At least one adult is required.';
-    // Hotel selection moved into this same step (was its own wizard step).
-    if (!selectedHotelId) return 'Select a hotel to continue.';
+    return '';
+  }
+  if (step === 2) {
+    if (cityDays.length === 0) return 'Add at least one city to build the itinerary.';
+    // Hotel selection now happens per day inside Itinerary (was its own
+    // Trip Details gate before) — still mandatory before moving on.
+    if (!itineraryItems.some((it) => it.type === 'hotel')) return 'Select at least one hotel in your itinerary.';
     return '';
   }
   if (step === 3) {
@@ -754,25 +768,18 @@ export default function PackageBuilder() {
   const [activities, setActivities] = useState([]);
   const [catalogLoading, setCatalogLoading] = useState(true);
 
-  // Hotels don't load until a star category is picked (see HotelsStep) —
-  // '' means "none picked yet", not "show everything".
-  const [starCategory, setStarCategory] = useState('');
-  const [hotelCityFilter, setHotelCityFilter] = useState('');
-  const [tourCityFilter, setTourCityFilter] = useState('');
+  // City & Days planner (FIT-1/FIT-5 merge) — [{ id, city, days }], sum of
+  // `days` never exceeds the trip's day count (see updateCityRow's clamp).
+  const [cityDays, setCityDays] = useState([]);
 
-  const [selectedHotelId, setSelectedHotelId] = useState('');
-  const [selectedTourIds, setSelectedTourIds] = useState([]);
-  const [selectedTransferIds, setSelectedTransferIds] = useState([]);
-  const [selectedActivityIds, setSelectedActivityIds] = useState([]);
   // Rows are derived from form.paxAdults/paxChildren (see the sync effect
   // below) rather than started with a hardcoded default row.
   const [travelers, setTravelers] = useState([]);
 
-  // Day-wise Itinerary Planner (FIT-5) — see shared/itinerary/index.js for
-  // the shape. itineraryItems' dayNumber is kept in sync with the current
-  // hotel/tour/transfer/extra selection and the day count implied by Trip
-  // Details' dates by the two effects below, so the Itinerary step never has
-  // to reconcile stale state itself.
+  // Day-wise Itinerary Planner (FIT-5) — items are the source of truth now
+  // (hotel/tour/transfer/extra selection happens by adding an item directly
+  // onto a day), not just a placement layer over a separate upfront
+  // selection. See shared/itinerary/index.js for the item shape.
   const [itineraryItems, setItineraryItems] = useState([]);
   const [dayNotes, setDayNotes] = useState({});
 
@@ -800,7 +807,9 @@ export default function PackageBuilder() {
   }, []);
 
   // Loads a previously-saved draft's state into the wizard so "Continue
-  // Editing" resumes exactly where the agent left off.
+  // Editing" resumes exactly where the agent left off. cityDays isn't part
+  // of the persisted shape (only per-day items are) — it's reconstructed
+  // best-effort in a separate effect below, once catalogs have also loaded.
   useEffect(() => {
     if (!draftIdParam) return;
     api
@@ -818,14 +827,6 @@ export default function PackageBuilder() {
           paxAdults: pr.paxAdults || 1,
           paxChildren: pr.paxChildren || 0,
         });
-        setSelectedHotelId(pr.hotels[0]?.id || '');
-        // Pre-picks the star category the already-selected hotel belongs to,
-        // so resuming a draft shows that hotel's card rather than the
-        // "select a category first" prompt.
-        setStarCategory(pr.hotels[0]?.category || '');
-        setSelectedTourIds(pr.tours.map((t) => t.id));
-        setSelectedTransferIds(pr.transfers.map((t) => t.id));
-        setSelectedActivityIds(pr.activities.map((a) => a.id));
         // Bucket by isChild rather than array position — DB order isn't
         // guaranteed to match adults-then-children (see migration 0023).
         const loadedAdults = pr.travelers
@@ -846,6 +847,22 @@ export default function PackageBuilder() {
       .finally(() => setDraftLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draftIdParam]);
+
+  // Reconstructs cityDays from the resumed draft's itineraryItems, once both
+  // the catalogs and the draft (if any) have finished loading — runs exactly
+  // once (guarded by the ref) so it never fights the agent's own edits to
+  // cityDays afterwards. A brand-new draft has nothing to derive from and
+  // simply starts with an empty cityDays for the agent to fill in.
+  const cityDaysDerivedRef = useRef(false);
+  useEffect(() => {
+    if (cityDaysDerivedRef.current) return;
+    if (catalogLoading || draftLoading) return;
+    cityDaysDerivedRef.current = true;
+    if (!draftIdParam) return;
+    const loadedDayCount = computeDayCount(form.dateFrom, form.dateTo);
+    setCityDays(deriveCityDaysFromItems(itineraryItems, loadedDayCount, { hotels, tours, transfers, activities }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [catalogLoading, draftLoading]);
 
   // Traveller Details rows always match Trip Details' adult/child counts —
   // grows/shrinks each group independently as those fields change, keeping
@@ -871,26 +888,29 @@ export default function PackageBuilder() {
     }
   }, [form.dateFrom]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Keeps the Itinerary step's item pool in sync whenever the agent changes
-  // their hotel/tour/transfer/extra picks in earlier steps — deselected
-  // items drop out, newly-selected ones land in the unassigned tray.
-  useEffect(() => {
-    const pool = buildSelectionPool({
-      hotelId: selectedHotelId,
-      tourIds: selectedTourIds,
-      transferIds: selectedTransferIds,
-      activityIds: selectedActivityIds,
-    });
-    setItineraryItems((items) => reconcileItineraryItems(items, pool));
-  }, [selectedHotelId, selectedTourIds, selectedTransferIds, selectedActivityIds]);
-
   const dayCount = computeDayCount(form.dateFrom, form.dateTo);
+  const cityOptions = distinctCities(hotels, tours, transfers, activities);
+  const dayCityMap = buildDayCityMap(cityDays, dayCount);
 
-  // Sends anything assigned to a day that no longer exists (Travel End Date
-  // moved earlier) back to the unassigned tray instead of losing it.
+  // Keeps itineraryItems consistent with the current city plan: drops
+  // anything sitting on a day beyond the current trip length (End Date moved
+  // earlier), and anything whose own city no longer matches the city now
+  // assigned to its day (a cityDays row was edited/removed/reordered) —
+  // there's no "unassigned tray" to send orphaned items back to in this
+  // model, so they're simply dropped.
   useEffect(() => {
-    setItineraryItems((items) => clampItineraryDays(items, dayCount));
-  }, [dayCount]);
+    const map = buildDayCityMap(cityDays, dayCount);
+    setItineraryItems((items) =>
+      items.filter((it) => {
+        if (it.dayNumber == null || it.dayNumber > dayCount) return false;
+        const city = map[it.dayNumber];
+        if (!city) return false;
+        const meta = resolveItemMeta(it.type, it.id, { hotels, tours, transfers, activities });
+        return !!meta && (meta.city || '').toLowerCase() === city.toLowerCase();
+      }),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cityDays, dayCount]);
 
   function update(key, value) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -900,9 +920,57 @@ export default function PackageBuilder() {
     setTravelers((list) => list.map((t, i) => (i === idx ? { ...t, [field]: value } : t)));
   }
 
+  function addCityRow() {
+    setCityDays((rows) => {
+      const remaining = Math.max(0, dayCount - sumCityDays(rows));
+      if (remaining === 0) return rows;
+      return [...rows, { id: nextCityRowId(), city: '', days: 1 }];
+    });
+  }
+
+  function updateCityRow(id, field, value) {
+    setCityDays((rows) => {
+      if (field === 'city') return rows.map((r) => (r.id === id ? { ...r, city: value } : r));
+      const otherSum = rows.filter((r) => r.id !== id).reduce((total, r) => total + (Number(r.days) || 0), 0);
+      const maxAllowed = Math.max(1, dayCount - otherSum);
+      const clamped = Math.min(Math.max(1, Number(value) || 1), maxAllowed);
+      return rows.map((r) => (r.id === id ? { ...r, days: clamped } : r));
+    });
+  }
+
+  function removeCityRow(id) {
+    setCityDays((rows) => rows.filter((r) => r.id !== id));
+  }
+
+  function addItemToDay(dayNumber, type, id) {
+    setItineraryItems((items) => addItineraryItem(items, { type, id, dayNumber }));
+  }
+
+  function removeItemFromDay(key) {
+    setItineraryItems((items) => removeItineraryItemByKey(items, key));
+  }
+
+  function updateItemNoteByKey(key, note) {
+    setItineraryItems((items) => updateItineraryItemNote(items, key, note));
+  }
+
+  function setHotelForDayNumber(dayNumber, hotelId) {
+    setItineraryItems((items) =>
+      hotelId ? setHotelForDay(items, dayNumber, hotelId) : items.filter((it) => !(it.dayNumber === dayNumber && it.type === 'hotel')),
+    );
+  }
+
+  // Selection is derived from itineraryItems now, not the other way around —
+  // deduped per type since the same catalog item can be added to more than
+  // one day (most often the same hotel across a multi-day city stay).
+  const selectedHotelIds = dedupeIdsByType(itineraryItems, 'hotel');
+  const selectedTourIds = dedupeIdsByType(itineraryItems, 'tour');
+  const selectedTransferIds = dedupeIdsByType(itineraryItems, 'transfer');
+  const selectedActivityIds = dedupeIdsByType(itineraryItems, 'activity');
+
   // Item 1 — "Save Draft"/"Continue Editing" autosave. Deliberately skips
-  // validateStep(): a half-built package (no destination yet, no hotel
-  // picked) must still save without being blocked by the strict Submit rules.
+  // validateStep(): a half-built package (no destination yet, no city added)
+  // must still save without being blocked by the strict Submit rules.
   function buildDraftPayload() {
     return {
       destination: form.destination,
@@ -910,7 +978,7 @@ export default function PackageBuilder() {
       dateTo: form.dateTo || null,
       paxAdults: Number(form.paxAdults) || 1,
       paxChildren: Number(form.paxChildren) || 0,
-      hotelIds: selectedHotelId ? [selectedHotelId] : [],
+      hotelIds: selectedHotelIds,
       tourIds: selectedTourIds,
       transferIds: selectedTransferIds,
       activityIds: selectedActivityIds,
@@ -938,38 +1006,8 @@ export default function PackageBuilder() {
     }
   }
 
-  function toggleTour(id) {
-    setSelectedTourIds((list) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]));
-  }
-  function toggleTransfer(id) {
-    setSelectedTransferIds((list) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]));
-  }
-  function toggleActivity(id) {
-    setSelectedActivityIds((list) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]));
-  }
-
-  // Inline "Assign to day" shortcut on a tour/transfer/extra's own selection
-  // card (Trip Details) — same moveItineraryItem the drag-and-drop Itinerary
-  // step uses, just driven by a <Select> instead of a drop event. Always
-  // appends to the end of the target day; reordering still happens there.
-  function assignItemToDay(type, id, dayNumberValue) {
-    const targetDay = dayNumberValue === '' ? null : Number(dayNumberValue);
-    setItineraryItems((items) => moveItineraryItem(items, itineraryItemKey(type, id), targetDay));
-  }
-
-  // "Delete" from the Itinerary step (🗑 on a chip) — removing an itinerary
-  // item is really removing it from the trip: deselect it at the source
-  // (Trip Details), and the reconciliation effect above drops it from
-  // itineraryItems automatically, same as unchecking it there directly would.
-  function deleteItineraryItem(type, id) {
-    if (type === 'hotel') setSelectedHotelId((current) => (current === id ? '' : current));
-    else if (type === 'tour') setSelectedTourIds((list) => list.filter((x) => x !== id));
-    else if (type === 'transfer') setSelectedTransferIds((list) => list.filter((x) => x !== id));
-    else if (type === 'activity') setSelectedActivityIds((list) => list.filter((x) => x !== id));
-  }
-
   function goNext() {
-    const validationError = validateStep(step, { form, selectedHotelId, travelers });
+    const validationError = validateStep(step, { form, cityDays, itineraryItems, travelers });
     if (validationError) {
       setError(validationError);
       return;
@@ -984,7 +1022,7 @@ export default function PackageBuilder() {
   }
 
   async function handleSubmit() {
-    const validationError = validateStep(3, { form, selectedHotelId, travelers });
+    const validationError = validateStep(3, { form, cityDays, itineraryItems, travelers });
     if (validationError) {
       setError(validationError);
       return;
@@ -998,7 +1036,7 @@ export default function PackageBuilder() {
         dateTo: form.dateTo,
         paxAdults: Number(form.paxAdults),
         paxChildren: Number(form.paxChildren) || 0,
-        hotelIds: [selectedHotelId],
+        hotelIds: selectedHotelIds,
         tourIds: selectedTourIds,
         transferIds: selectedTransferIds,
         activityIds: selectedActivityIds,
@@ -1021,14 +1059,14 @@ export default function PackageBuilder() {
     }
   }
 
-  const selectedHotel = hotels.find((h) => h.id === selectedHotelId) || null;
+  const selectedHotels = hotels.filter((h) => selectedHotelIds.includes(h.id));
   const selectedTours = tours.filter((t) => selectedTourIds.includes(t.id));
   const selectedTransfers = transfers.filter((t) => selectedTransferIds.includes(t.id));
   const selectedActivities = activities.filter((a) => selectedActivityIds.includes(a.id));
 
   function resolveItineraryMeta(item) {
     return resolveItemMeta(item.type, item.id, {
-      hotel: selectedHotel,
+      hotels: selectedHotels,
       tours: selectedTours,
       transfers: selectedTransfers,
       activities: selectedActivities,
@@ -1039,11 +1077,20 @@ export default function PackageBuilder() {
   // document renders every day as its own row/section, same as the sample.
   const fullItineraryDays = buildFullItineraryDays(itineraryItems, dayNotes, dayCount, resolveItineraryMeta);
   const selectedCounts = {
-    hotels: selectedHotel ? 1 : 0,
+    hotels: selectedHotels.length,
     tours: selectedTours.length,
     transfers: selectedTransfers.length,
     activities: selectedActivities.length,
   };
+
+  // Each hotel row in the printable document shows how many itinerary days
+  // it actually appears on (a proxy for nights), rather than the trip-wide
+  // night count — there can be more than one hotel now, one per day.
+  const hotelNightsById = {};
+  for (const it of itineraryItems) {
+    if (it.type === 'hotel') hotelNightsById[it.id] = (hotelNightsById[it.id] || 0) + 1;
+  }
+  const hotelsForDocument = selectedHotels.map((h) => ({ ...h, nights: hotelNightsById[h.id] || 0 }));
 
   return (
     <div className="mx-auto max-w-5xl p-5 lg:p-8">
@@ -1075,52 +1122,34 @@ export default function PackageBuilder() {
             <StepIndicator step={step} />
           </div>
 
-          {step === 1 && (
-            <TripDetailsStep
-              form={form}
-              update={update}
-              hotels={hotels}
-              starCategory={starCategory}
-              setStarCategory={setStarCategory}
-              hotelCityFilter={hotelCityFilter}
-              setHotelCityFilter={setHotelCityFilter}
-              selectedHotelId={selectedHotelId}
-              setSelectedHotelId={setSelectedHotelId}
-              tours={tours}
-              tourCityFilter={tourCityFilter}
-              setTourCityFilter={setTourCityFilter}
-              selectedTourIds={selectedTourIds}
-              toggleTour={toggleTour}
-              transfers={transfers}
-              selectedTransferIds={selectedTransferIds}
-              toggleTransfer={toggleTransfer}
-              activities={activities}
-              selectedActivityIds={selectedActivityIds}
-              toggleActivity={toggleActivity}
-              dayCount={dayCount}
-              itineraryItems={itineraryItems}
-              assignItemToDay={assignItemToDay}
-            />
-          )}
+          {step === 1 && <TripFieldsCard form={form} update={update} />}
           {step === 2 && (
             <ItineraryStep
               dayCount={dayCount}
+              cityOptions={cityOptions}
+              cityDays={cityDays}
+              addCityRow={addCityRow}
+              updateCityRow={updateCityRow}
+              removeCityRow={removeCityRow}
+              dayCityMap={dayCityMap}
               itineraryItems={itineraryItems}
-              setItineraryItems={setItineraryItems}
               dayNotes={dayNotes}
               setDayNotes={setDayNotes}
-              selectedHotel={selectedHotel}
-              selectedTours={selectedTours}
-              selectedTransfers={selectedTransfers}
-              selectedActivities={selectedActivities}
-              onDeleteItem={deleteItineraryItem}
+              hotels={hotels}
+              tours={tours}
+              transfers={transfers}
+              activities={activities}
+              addItemToDay={addItemToDay}
+              removeItemFromDay={removeItemFromDay}
+              updateItemNoteByKey={updateItemNoteByKey}
+              setHotelForDayNumber={setHotelForDayNumber}
             />
           )}
           {step === 3 && (
             <ReviewStep
               form={form}
               dayCount={dayCount}
-              selectedHotel={selectedHotel}
+              hotels={hotelsForDocument}
               days={fullItineraryDays}
               selectedCounts={selectedCounts}
               travelers={travelers}

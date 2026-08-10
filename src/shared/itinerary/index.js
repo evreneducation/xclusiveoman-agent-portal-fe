@@ -42,12 +42,13 @@ export function computeDayCount(dateFrom, dateTo) {
   return Math.max(diffDays + 1, 1);
 }
 
-// The pool of placeable items, in selection order — single hotel first (the
-// builder is single-select for hotels), then tours/transfers/activities in
-// whatever order they were selected.
-export function buildSelectionPool({ hotelId, tourIds = [], transferIds = [], activityIds = [] }) {
+// The pool of placeable items, in selection order — hotels first (plural now
+// that the agent builder can pick a different hotel per day, so a trip can
+// have more than one), then tours/transfers/activities in whatever order
+// they were selected.
+export function buildSelectionPool({ hotelIds = [], tourIds = [], transferIds = [], activityIds = [] }) {
   const pool = [];
-  if (hotelId) pool.push({ type: 'hotel', id: hotelId });
+  for (const id of hotelIds) pool.push({ type: 'hotel', id });
   for (const id of tourIds) pool.push({ type: 'tour', id });
   for (const id of transferIds) pool.push({ type: 'transfer', id });
   for (const id of activityIds) pool.push({ type: 'activity', id });
@@ -58,12 +59,22 @@ export function buildSelectionPool({ hotelId, tourIds = [], transferIds = [], ac
 // changes their hotel/tour/transfer/extra picks elsewhere in the builder:
 // drops items for anything deselected, and adds newly-selected items to the
 // unassigned tray (dayNumber: null) rather than guessing a day for them.
+//
+// Matches by (type, id) pair rather than exact `key` membership — the agent
+// builder can now place the *same* catalog item (typically a hotel) on more
+// than one day, which produces several items sharing a (type, id) but each
+// with its own unique `key` (see deserializeItinerary below). Matching on
+// `key` alone would only ever keep one of those duplicates; matching on the
+// pair keeps every existing instance alive as long as its (type, id) is
+// still selected, and only adds a fresh instance for a pool entry that has
+// none yet.
 export function reconcileItineraryItems(items, pool) {
-  const poolKeys = new Set(pool.map((p) => itineraryItemKey(p.type, p.id)));
-  const kept = items.filter((it) => poolKeys.has(it.key));
-  const keptKeys = new Set(kept.map((it) => it.key));
+  const pairKey = (type, id) => itineraryItemKey(type, id);
+  const poolPairs = new Set(pool.map((p) => pairKey(p.type, p.id)));
+  const kept = items.filter((it) => poolPairs.has(pairKey(it.type, it.id)));
+  const keptPairs = new Set(kept.map((it) => pairKey(it.type, it.id)));
   const additions = pool
-    .filter((p) => !keptKeys.has(itineraryItemKey(p.type, p.id)))
+    .filter((p) => !keptPairs.has(pairKey(p.type, p.id)))
     .map((p, idx) => ({
       key: itineraryItemKey(p.type, p.id),
       type: p.type,
@@ -164,6 +175,13 @@ export function buildFullItineraryDays(items, dayNotes, dayCount, resolveMeta) {
 // what's already been saved. Read-only views (Review step, QuoteDetail,
 // admin's read-only fallback) can render the wire shape directly and never
 // need this.
+//
+// Keys are always `type:id:dayNumber:index` rather than plain `type:id` —
+// the agent builder can save the same catalog item (typically a hotel) on
+// more than one day, and a plain `type:id` key would collide across those
+// rows. `key` is purely local UI identity (drag/move/note-edit targets,
+// React list keys) — it's never sent back to the server, since
+// serializeItinerary strips items back down to `{type, id, note}`.
 export function deserializeItinerary(itinerary) {
   const items = [];
   const dayNotes = {};
@@ -171,7 +189,7 @@ export function deserializeItinerary(itinerary) {
     dayNotes[day.dayNumber] = day.notes || '';
     (day.items || []).forEach((it, idx) => {
       items.push({
-        key: itineraryItemKey(it.type, it.id),
+        key: `${itineraryItemKey(it.type, it.id)}:${day.dayNumber}:${idx}`,
         type: it.type,
         id: it.id,
         dayNumber: day.dayNumber,
@@ -187,8 +205,11 @@ export function deserializeItinerary(itinerary) {
 // catalog pool matches its type — used by the *editable* builder UIs, where
 // items only carry {type, id} until rendered (the read-only wire shape
 // already comes back enriched from the backend, via composeItinerary there).
-export function resolveItemMeta(type, id, { hotel, tours, transfers, activities }) {
-  if (type === 'hotel') return hotel && hotel.id === id ? hotel : null;
+// `hotels` is plural — a trip can now have more than one (the agent builder
+// picks a hotel per day) — resolved the same way tours/transfers/activities
+// already are.
+export function resolveItemMeta(type, id, { hotels, tours, transfers, activities }) {
+  if (type === 'hotel') return (hotels || []).find((h) => h.id === id) || null;
   if (type === 'tour') return (tours || []).find((t) => t.id === id) || null;
   if (type === 'transfer') return (transfers || []).find((t) => t.id === id) || null;
   if (type === 'activity') return (activities || []).find((a) => a.id === id) || null;
