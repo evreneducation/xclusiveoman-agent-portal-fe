@@ -455,7 +455,7 @@ function ItineraryEditor({ packageRequest, onUpdated }) {
   // if that changes) rather than resyncing the whole editor.
   useEffect(() => {
     const pool = buildSelectionPool({
-      hotelId: packageRequest.hotels[0]?.id,
+      hotelIds: packageRequest.hotels.map((h) => h.id),
       tourIds: packageRequest.tours.map((t) => t.id),
       transferIds: packageRequest.transfers.map((t) => t.id),
       activityIds: packageRequest.activities.map((a) => a.id),
@@ -466,7 +466,7 @@ function ItineraryEditor({ packageRequest, onUpdated }) {
 
   function resolveMeta(item) {
     return resolveItemMeta(item.type, item.id, {
-      hotel: packageRequest.hotels[0] || null,
+      hotels: packageRequest.hotels,
       tours: packageRequest.tours,
       transfers: packageRequest.transfers,
       activities: packageRequest.activities,

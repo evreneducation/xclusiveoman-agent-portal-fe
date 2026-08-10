@@ -41,10 +41,12 @@ function SummaryTile({ label, value }) {
   );
 }
 
-// `hotel` is singular (the builder is single-select today) but rendered as
-// a one-row table so multi-hotel support later is a data change, not a
-// layout change — "chronological order" just falls out of rendering
-// whichever hotels come in, in the order given.
+// `hotels` is plural — the agent builder picks a hotel per day now, so a
+// trip can have more than one (e.g. a different hotel per city). Rendered as
+// one row per hotel, in whatever order the caller provides ("chronological
+// order" just falls out of that). Each hotel entry may carry its own
+// `nights` (how many itinerary days it actually appears on) — falls back to
+// the trip-wide `nights` below when not given.
 export default function ItineraryDocument({
   destination,
   dateFrom,
@@ -52,7 +54,7 @@ export default function ItineraryDocument({
   paxAdults,
   paxChildren,
   dayCount,
-  hotel,
+  hotels,
   days,
   selectedCounts,
 }) {
@@ -61,7 +63,7 @@ export default function ItineraryDocument({
   // No "number of rooms" field exists anywhere in the builder yet — double
   // occupancy is the standard assumption this stands in for until one does.
   const rooms = Math.max(1, Math.ceil((paxAdults || 1) / 2));
-  const hotels = hotel ? [hotel] : [];
+  const hotelRows = hotels || [];
 
   return (
     <div className="rounded-lg border border-agent-line-light bg-white p-6 shadow-sm print:border-0 print:p-0 print:shadow-none sm:p-8">
@@ -116,7 +118,7 @@ export default function ItineraryDocument({
       {/* 3. Accommodation Details */}
       <div className="mb-6">
         <SectionBar>Accommodation Details</SectionBar>
-        {hotels.length === 0 ? (
+        {hotelRows.length === 0 ? (
           <p className="text-sm text-agent-muted">No hotel selected yet.</p>
         ) : (
           <table className="w-full border-collapse text-sm">
@@ -132,7 +134,7 @@ export default function ItineraryDocument({
               </tr>
             </thead>
             <tbody>
-              {hotels.map((h) => (
+              {hotelRows.map((h) => (
                 <tr key={h.id}>
                   <Td className="font-semibold text-agent-ink">{h.name}</Td>
                   <Td>{h.category ? `${h.category}★` : '—'}</Td>
@@ -140,7 +142,7 @@ export default function ItineraryDocument({
                   <Td>{rooms}</Td>
                   <Td>{paxAdults || 0}</Td>
                   <Td>{paxChildren || 0}</Td>
-                  <Td>{dayCount > 0 ? nights : '—'}</Td>
+                  <Td>{h.nights ?? (dayCount > 0 ? nights : '—')}</Td>
                 </tr>
               ))}
             </tbody>
