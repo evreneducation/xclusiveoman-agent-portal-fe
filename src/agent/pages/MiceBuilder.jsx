@@ -1,21 +1,47 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api/client.js';
-import { Button, Card, Checkbox, ErrorText, FieldLabel, TextInput, Textarea } from '../components/ui.jsx';
+import { Button, Card, ErrorText, FieldLabel, Select, TextInput, Textarea } from '../components/ui.jsx';
+import ItineraryTimeline from '../components/ItineraryTimeline.jsx';
+import {
+  ITINERARY_ITEM_TYPE_META,
+  buildFullItineraryDays,
+  computeDayCount,
+  deserializeItinerary,
+  itemsForDay,
+  itineraryItemKey,
+  resolveItemMeta,
+  serializeItinerary,
+  updateItineraryItemNote,
+} from '../../shared/itinerary/index.js';
+
+// Today, as a "YYYY-MM-DD" string in the browser's local timezone — matches
+// what <input type="date"> reads/writes, so it can be used directly as a
+// `min` bound and in string comparisons without any Date-object timezone
+// pitfalls. Same helper as PackageBuilder.jsx's todayDateString.
+function todayDateString() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
 // MICE-1..MICE-7: Oman overview/content hub browsing happens on the catalog
 // screens already reachable elsewhere in the portal — this wizard is the
-// curation + submit half (event details -> hotels -> tours -> transfers ->
-// activities -> review), matching the FIT Package Builder's step-wizard
-// shape (PackageBuilder.jsx) with no traveller step (not applicable to MICE).
+// curation + submit half. Brought onto the same City & Days planner +
+// day-wise itinerary model as the Custom FIT Package Builder
+// (agent/pages/PackageBuilder.jsx) — Event Details -> Itinerary -> Review —
+// rather than the old flat Hotels/Tours/Transfers/Activities step-per-type
+// wizard. Still no traveller step (not applicable to MICE).
 const STEPS = [
   { n: 1, label: 'Event Details' },
-  { n: 2, label: 'Hotels' },
-  { n: 3, label: 'Tours' },
-  { n: 4, label: 'Transfers' },
-  { n: 5, label: 'Activities' },
-  { n: 6, label: 'Review & Submit' },
+  { n: 2, label: 'Itinerary' },
+  { n: 3, label: 'Review & Submit' },
 ];
+
+// MICE-2/MICE-7: "up to 3 hotels" is still server-enforced (createMiceRfqSchema/
+// draftMiceRfqSchema) — this is the client-side mirror of that cap, now
+// counted as distinct hotels across the whole day-wise itinerary rather than
+// a flat multi-select list.
+const MAX_HOTELS = 3;
 
 function StepIndicator({ step }) {
   return (
@@ -60,11 +86,20 @@ function EventDetailsStep({ form, update }) {
         </div>
         <div>
           <FieldLabel>Event start date *</FieldLabel>
-          <TextInput type="date" value={form.eventDateFrom} onChange={(e) => update('eventDateFrom', e.target.value)} />
+          <TextInput type="date" min={todayDateString()} value={form.eventDateFrom} onChange={(e) => update('eventDateFrom', e.target.value)} />
         </div>
         <div>
           <FieldLabel>Event end date *</FieldLabel>
-          <TextInput type="date" value={form.eventDateTo} onChange={(e) => update('eventDateTo', e.target.value)} />
+          {/* min= the selected Start Date (falling back to today when none is
+              picked yet) disables every earlier date in the End Date
+              calendar itself, on top of the auto-clear-on-conflict effect
+              and validateStep's submit-time check below. */}
+          <TextInput
+            type="date"
+            min={form.eventDateFrom || todayDateString()}
+            value={form.eventDateTo}
+            onChange={(e) => update('eventDateTo', e.target.value)}
+          />
         </div>
         <div>
           <FieldLabel>Group size *</FieldLabel>
@@ -96,127 +131,490 @@ function EventDetailsStep({ form, update }) {
   );
 }
 
-// Step 2 — hotels (MICE-2/MICE-7: up to 3, multi-select). No price is ever
-// rendered here — costing/markup is admin-only (blind pricing).
-function HotelsStep({ hotels, cityFilter, setCityFilter, selectedHotelIds, toggleHotel }) {
-  const filtered = cityFilter ? hotels.filter((h) => (h.city || '').toLowerCase().includes(cityFilter.toLowerCase())) : hotels;
-  const limitReached = selectedHotelIds.length >= 3;
+// ---------------------------------------------------------------------------
+// Itinerary — City & Days planner + day-wise builder, same shape as
+// PackageBuilder.jsx's Itinerary step (FIT-5).
+// ---------------------------------------------------------------------------
+
+function distinctCities(...catalogs) {
+  const set = new Set();
+  for (const list of catalogs) {
+    for (const item of list) {
+      if (item.city) set.add(item.city);
+    }
+  }
+  return Array.from(set).sort((a, b) => a.localeCompare(b));
+}
+
+function sumCityDays(cityDays) {
+  return cityDays.reduce((total, row) => total + (Number(row.days) || 0), 0);
+}
+
+function buildDayCityMap(cityDays, dayCount) {
+  const map = {};
+  let day = 1;
+  for (const row of cityDays) {
+    const rowDays = Math.max(0, Number(row.days) || 0);
+    for (let i = 0; i < rowDays && day <= dayCount; i++, day++) {
+      map[day] = row.city;
+    }
+  }
+  for (; day <= dayCount; day++) map[day] = null;
+  return map;
+}
+
+let cityRowSeq = 0;
+function nextCityRowId() {
+  cityRowSeq += 1;
+  return `city-${cityRowSeq}-${Date.now()}`;
+}
+
+// Adds a brand-new instance of a catalog item directly onto a day — every
+// item is added straight onto the day (and city) it belongs to, filtered by
+// that day's city, same model as PackageBuilder.jsx.
+function addItineraryItem(items, { type, id, dayNumber }) {
+  const dayItems = itemsForDay(items, dayNumber);
+  const newItem = {
+    key: `${itineraryItemKey(type, id)}:${dayNumber}:${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    type,
+    id,
+    dayNumber,
+    position: dayItems.length,
+    note: '',
+  };
+  return [...items, newItem];
+}
+
+function removeItineraryItemByKey(items, key) {
+  const removing = items.find((it) => it.key === key);
+  if (!removing) return items;
+  const rest = items.filter((it) => it.key !== key);
+  const remainingInDay = itemsForDay(rest, removing.dayNumber).map((it, idx) => ({ ...it, position: idx }));
+  const others = rest.filter((it) => it.dayNumber !== removing.dayNumber);
+  return [...others, ...remainingInDay];
+}
+
+// Hotel is single-select per day — choosing a new hotel for a day replaces
+// whatever hotel was already there instead of stacking up multiple.
+function setHotelForDay(items, dayNumber, hotelId) {
+  const withoutOldHotel = items.filter((it) => !(it.dayNumber === dayNumber && it.type === 'hotel'));
+  return addItineraryItem(withoutOldHotel, { type: 'hotel', id: hotelId, dayNumber });
+}
+
+function dedupeIdsByType(items, type) {
+  const ids = [];
+  const seen = new Set();
+  for (const it of items) {
+    if (it.type === type && !seen.has(it.id)) {
+      seen.add(it.id);
+      ids.push(it.id);
+    }
+  }
+  return ids;
+}
+
+// Best-effort reconstruction of city/day blocks from an already-saved
+// itinerary (resuming a draft) — `cityDays` itself isn't part of the
+// persisted mice_rfq shape, only the per-day items are.
+function deriveCityDaysFromItems(items, dayCount, catalogs) {
+  const rows = [];
+  let current = null;
+  for (let day = 1; day <= dayCount; day++) {
+    let city = null;
+    for (const it of itemsForDay(items, day)) {
+      const meta = resolveItemMeta(it.type, it.id, catalogs);
+      if (meta?.city) {
+        city = meta.city;
+        break;
+      }
+    }
+    if (city && current && current.city === city) {
+      current.days += 1;
+    } else if (city) {
+      current = { id: nextCityRowId(), city, days: 1 };
+      rows.push(current);
+    } else {
+      current = null;
+    }
+  }
+  return rows;
+}
+
+function CityDaysPlanner({ cityOptions, cityDays, dayCount, addCityRow, updateCityRow, removeCityRow }) {
+  const allocated = sumCityDays(cityDays);
+  const remaining = Math.max(0, dayCount - allocated);
 
   return (
-    <Card label="Select hotels — up to 3" className="border-white">
-      <TextInput className="mb-4 max-w-xs" placeholder="Filter by city…" value={cityFilter} onChange={(e) => setCityFilter(e.target.value)} />
-      {filtered.length === 0 && <p className="text-sm text-agent-muted">No hotels available{cityFilter ? ' for that city' : ''}.</p>}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {filtered.map((h) => {
-          const selected = selectedHotelIds.includes(h.id);
-          const disabled = !selected && limitReached;
-          return (
-            <button
-              type="button"
-              key={h.id}
-              disabled={disabled}
-              onClick={() => toggleHotel(h.id)}
-              className={`rounded-lg border p-3 text-left shadow-sm transition ${
-                selected
-                  ? 'border-agent-accent ring-2 ring-agent-accent/25'
-                  : disabled
-                    ? 'cursor-not-allowed border-agent-line-light opacity-50'
-                    : 'border-agent-line-light hover:border-agent-ink'
-              }`}
-            >
-              <CatalogImage url={h.images?.[0]} />
-              <div className="mt-2 text-sm font-bold">{h.name}</div>
-              <div className="text-xs text-agent-muted">
-                {h.city || '—'} {h.category ? `· ${h.category}★` : ''}
+    <Card label="Cities & days" className="border-white">
+      <p className="mb-3 text-xs text-agent-muted">
+        Pick the cities this event covers and how many days each gets — the day-wise itinerary below is built from
+        this. Total days across all cities can't exceed the event length set in Event Details.
+      </p>
+      {dayCount === 0 ? (
+        <p className="text-sm text-agent-muted">Set Event start date and Event end date in Event Details first.</p>
+      ) : (
+        <>
+          <div className="mb-3 text-xs font-semibold text-agent-ink">
+            {allocated} of {dayCount} day{dayCount === 1 ? '' : 's'} allocated
+            {remaining > 0 && <span className="font-normal text-agent-muted"> · {remaining} remaining</span>}
+          </div>
+          {cityDays.length === 0 && <p className="mb-2 text-sm text-agent-muted">No cities added yet.</p>}
+          <div className="space-y-2">
+            {cityDays.map((row, idx) => (
+              <div key={row.id} className="flex flex-wrap items-end gap-2">
+                <div className="min-w-[180px] flex-1">
+                  <FieldLabel>City {idx + 1} *</FieldLabel>
+                  <Select value={row.city} onChange={(e) => updateCityRow(row.id, 'city', e.target.value)}>
+                    <option value="">Select a city…</option>
+                    {cityOptions.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+                <div className="w-28">
+                  <FieldLabel>Days *</FieldLabel>
+                  <TextInput
+                    type="number"
+                    min="1"
+                    value={row.days}
+                    onChange={(e) => updateCityRow(row.id, 'days', e.target.value)}
+                  />
+                </div>
+                <Button onClick={() => removeCityRow(row.id)} title="Remove this city">
+                  🗑
+                </Button>
               </div>
-              {h.description && <p className="mt-1 line-clamp-2 text-xs text-agent-muted">{h.description}</p>}
-              {selected && <div className="mt-2 text-[10px] font-semibold uppercase text-agent-accent">Selected</div>}
-              {disabled && <div className="mt-2 text-[10px] font-semibold uppercase text-agent-muted">Limit reached</div>}
-            </button>
-          );
-        })}
-      </div>
+            ))}
+          </div>
+          <Button className="mt-3" disabled={remaining === 0} onClick={addCityRow}>
+            + Add city
+          </Button>
+        </>
+      )}
     </Card>
   );
 }
 
-// Step 3 — tours (MICE-3: multi-select checkboxes, no price).
-function ToursStep({ tours, cityFilter, setCityFilter, selectedTourIds, toggleTour }) {
-  const filtered = cityFilter ? tours.filter((t) => (t.city || '').toLowerCase().includes(cityFilter.toLowerCase())) : tours;
+function PlacedItemChip({ item, meta, onNoteChange, onRemove }) {
+  const typeMeta = ITINERARY_ITEM_TYPE_META[item.type];
+  return (
+    <div className="rounded-md border border-agent-line-light bg-white px-2.5 py-2 text-xs shadow-sm">
+      <div className="flex items-center gap-2">
+        <span className="flex-none">{typeMeta?.icon}</span>
+        <div className="min-w-0 flex-1">
+          <div className="truncate font-semibold text-agent-ink">{meta?.name || 'Unknown item'}</div>
+          <div className="truncate text-[10px] text-agent-muted">
+            {typeMeta?.label}
+            {meta?.city ? ` · ${meta.city}` : ''}
+          </div>
+        </div>
+        <button type="button" onClick={onRemove} title="Remove" className="flex-none text-agent-muted hover:text-[#a5162d]">
+          🗑
+        </button>
+      </div>
+      <TextInput
+        className="mt-1.5 px-2 py-1.5 text-[11px]"
+        placeholder="Add a note (optional)…"
+        value={item.note || ''}
+        onChange={(e) => onNoteChange(e.target.value)}
+      />
+    </div>
+  );
+}
+
+// A day's hotel section — single-select, filtered to that day's city. Still
+// capped at MAX_HOTELS *distinct* hotels across the whole itinerary
+// (MICE-2/MICE-7) — a hotel already used on another day is always
+// selectable again here (that's reuse, not a new hotel), only a genuinely
+// new 4th hotel is blocked once the cap is hit.
+function DayHotelSection({ city, hotels, currentHotelId, selectedHotelIds, onSelect }) {
+  const [open, setOpen] = useState(false);
+  const inCity = hotels.filter((h) => (h.city || '').toLowerCase() === city.toLowerCase());
+  const currentHotel = hotels.find((h) => h.id === currentHotelId) || null;
+  const capReached = selectedHotelIds.length >= MAX_HOTELS;
 
   return (
-    <Card label="Select tours (optional, multiple allowed)" className="border-white">
-      <TextInput className="mb-4 max-w-xs" placeholder="Filter by city…" value={cityFilter} onChange={(e) => setCityFilter(e.target.value)} />
-      {filtered.length === 0 && <p className="text-sm text-agent-muted">No tours available{cityFilter ? ' for that city' : ''}.</p>}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {filtered.map((t) => (
-          <div key={t.id} className="rounded-lg border border-agent-line-light p-3 shadow-sm">
-            <CatalogImage url={t.images?.[0]} />
-            <div className="mt-2 text-sm font-bold">{t.name}</div>
-            <div className="text-xs text-agent-muted">
-              {t.city || '—'} {t.category ? `· ${t.category}` : ''} {t.duration ? `· ${t.duration}` : ''}
-            </div>
-            {t.description && <p className="mt-1 line-clamp-2 text-xs text-agent-muted">{t.description}</p>}
-            <div className="mt-2">
-              <Checkbox checked={selectedTourIds.includes(t.id)} onChange={() => toggleTour(t.id)} label="Include this tour" />
+    <div>
+      <FieldLabel>Hotel</FieldLabel>
+      {currentHotel ? (
+        <div className="flex items-center justify-between rounded-md border border-agent-line-light bg-white px-3 py-2 text-xs">
+          <div>
+            <div className="font-semibold text-agent-ink">{currentHotel.name}</div>
+            <div className="text-agent-muted">
+              {currentHotel.category ? `${currentHotel.category}★ · ` : ''}
+              {currentHotel.city}
             </div>
           </div>
-        ))}
-      </div>
-    </Card>
+          <button type="button" onClick={() => onSelect('')} title="Remove" className="flex-none text-agent-muted hover:text-[#a5162d]">
+            🗑
+          </button>
+        </div>
+      ) : (
+        <p className="mb-1 text-[11px] text-agent-muted">No hotel selected for this day.</p>
+      )}
+      <Button className="mt-1.5" onClick={() => setOpen((o) => !o)}>
+        {open ? 'Close' : currentHotel ? 'Change hotel' : '+ Add hotel'}
+      </Button>
+      {open && (
+        <div className="mt-2 rounded-md border border-dashed border-agent-line-light p-2.5">
+          <p className="mb-2 text-[10px] text-agent-muted">
+            {selectedHotelIds.length} of {MAX_HOTELS} hotels used across this itinerary — the same hotel can be
+            reused on multiple days.
+          </p>
+          {inCity.length === 0 ? (
+            <p className="text-[11px] text-agent-muted">No hotels in {city}.</p>
+          ) : (
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {inCity.map((h) => {
+                const selected = h.id === currentHotelId;
+                const alreadyUsed = selectedHotelIds.includes(h.id);
+                const disabled = !selected && !alreadyUsed && capReached;
+                return (
+                  <div
+                    key={h.id}
+                    className={`rounded-md border p-2 text-xs ${
+                      selected
+                        ? 'border-agent-accent ring-1 ring-agent-accent/25'
+                        : disabled
+                          ? 'cursor-not-allowed border-agent-line-light opacity-50'
+                          : 'border-agent-line-light'
+                    }`}
+                  >
+                    <CatalogImage url={h.images?.[0]} />
+                    <div className="mt-1.5 font-semibold text-agent-ink">{h.name}</div>
+                    <div className="text-agent-muted">{h.category ? `${h.category}★` : ''}</div>
+                    <Button
+                      variant={selected ? 'accent' : 'default'}
+                      disabled={disabled}
+                      className="mt-1.5 w-full justify-center"
+                      onClick={() => {
+                        onSelect(selected ? '' : h.id);
+                        setOpen(false);
+                      }}
+                    >
+                      {selected ? 'Selected ✓' : disabled ? 'Limit reached' : 'Select'}
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
-// Step 4 — transfers (MICE-4: multi-select checkboxes, no price).
-function TransfersStep({ transfers, selectedTransferIds, toggleTransfer }) {
+const DAY_SECTION_META = {
+  tour: { label: 'Tours', addLabel: '+ Add tour' },
+  transfer: { label: 'Transfers', addLabel: '+ Add transfer' },
+  activity: { label: 'Extras', addLabel: '+ Add extra' },
+};
+
+// A day's tours/transfers/extras section — multi-add, filtered to that
+// day's city. Reusable across all three types since they share the same
+// "toggle catalog card in/out of this day" shape.
+function DayCatalogSection({ type, city, catalog, placedItems, onAdd, onRemove, onNoteChange }) {
+  const [open, setOpen] = useState(false);
+  const meta = DAY_SECTION_META[type];
+  const inCity = catalog.filter((item) => (item.city || '').toLowerCase() === city.toLowerCase());
+  const placedByItemId = new Map(placedItems.map((it) => [it.id, it]));
+
   return (
-    <Card label="Select transfers (optional, multiple allowed)" className="border-white">
-      {transfers.length === 0 && <p className="text-sm text-agent-muted">No transfers available.</p>}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {transfers.map((tr) => (
-          <div key={tr.id} className="rounded-lg border border-agent-line-light p-3 shadow-sm">
-            <div className="text-sm font-bold">{tr.name}</div>
-            <div className="text-xs text-agent-muted">
-              {tr.type ? tr.type.replace(/_/g, ' ') : '—'} {tr.vehicleClass ? `· ${tr.vehicleClass}` : ''} {tr.city ? `· ${tr.city}` : ''}
+    <div>
+      <FieldLabel>{meta.label}</FieldLabel>
+      {placedItems.length === 0 ? (
+        <p className="mb-1 text-[11px] text-agent-muted">None added for this day.</p>
+      ) : (
+        <div className="mb-1.5 space-y-1.5">
+          {placedItems.map((it) => (
+            <PlacedItemChip
+              key={it.key}
+              item={it}
+              meta={catalog.find((c) => c.id === it.id)}
+              onRemove={() => onRemove(it.key)}
+              onNoteChange={(note) => onNoteChange(it.key, note)}
+            />
+          ))}
+        </div>
+      )}
+      <Button onClick={() => setOpen((o) => !o)}>{open ? 'Close' : meta.addLabel}</Button>
+      {open && (
+        <div className="mt-2 rounded-md border border-dashed border-agent-line-light p-2.5">
+          {inCity.length === 0 ? (
+            <p className="text-[11px] text-agent-muted">
+              No {meta.label.toLowerCase()} available in {city}.
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {inCity.map((item) => {
+                const placed = placedByItemId.get(item.id);
+                return (
+                  <div
+                    key={item.id}
+                    className={`rounded-md border p-2 text-xs ${placed ? 'border-agent-accent ring-1 ring-agent-accent/25' : 'border-agent-line-light'}`}
+                  >
+                    <div className="font-semibold text-agent-ink">{item.name}</div>
+                    <div className="text-agent-muted">
+                      {type === 'tour' && `${item.category ? item.category + ' · ' : ''}${item.duration || ''}`}
+                      {type === 'transfer' && `${item.type ? item.type.replace(/_/g, ' ') : ''}${item.vehicleClass ? ' · ' + item.vehicleClass : ''}`}
+                      {type === 'activity' && (item.duration || '')}
+                    </div>
+                    <Button
+                      variant={placed ? 'accent' : 'default'}
+                      className="mt-1.5 w-full justify-center"
+                      onClick={() => (placed ? onRemove(placed.key) : onAdd(item.id))}
+                    >
+                      {placed ? 'Added ✓ (tap to remove)' : 'Add'}
+                    </Button>
+                  </div>
+                );
+              })}
             </div>
-            {tr.description && <p className="mt-1 text-xs text-agent-muted">{tr.description}</p>}
-            <div className="mt-2">
-              <Checkbox checked={selectedTransferIds.includes(tr.id)} onChange={() => toggleTransfer(tr.id)} label="Include this transfer" />
-            </div>
-          </div>
-        ))}
-      </div>
-    </Card>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
-// Step 5 — activities (MICE-3/MICE-5-style extras — team-building, gala
-// themes, etc. — multi-select, no price).
-function ActivitiesStep({ activities, selectedActivityIds, toggleActivity }) {
+// One numbered day node — mirrors PackageBuilder.jsx's DayPlanCard.
+function DayPlanCard({ dayNumber, city, items, catalogs, selectedHotelIds, notes, onNotesChange, addItem, removeItem, updateNote, setHotel, isLast }) {
+  const hotelItem = items.find((it) => it.type === 'hotel') || null;
+  const tourItems = items.filter((it) => it.type === 'tour');
+  const transferItems = items.filter((it) => it.type === 'transfer');
+  const activityItems = items.filter((it) => it.type === 'activity');
+
   return (
-    <Card label="Select activities (optional, multiple allowed)" className="border-white">
-      {activities.length === 0 && <p className="text-sm text-agent-muted">No activities available.</p>}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {activities.map((a) => (
-          <div key={a.id} className="rounded-lg border border-agent-line-light p-3 shadow-sm">
-            <CatalogImage url={a.images?.[0]} />
-            <div className="mt-2 text-sm font-bold">{a.name}</div>
-            <div className="text-xs text-agent-muted">
-              {a.city || '—'} {a.duration ? `· ${a.duration}` : ''}
-            </div>
-            {a.description && <p className="mt-1 line-clamp-2 text-xs text-agent-muted">{a.description}</p>}
-            <div className="mt-2">
-              <Checkbox checked={selectedActivityIds.includes(a.id)} onChange={() => toggleActivity(a.id)} label="Include this activity" />
-            </div>
-          </div>
-        ))}
+    <div className="relative flex gap-4 pb-6 last:pb-0">
+      {!isLast && <span className="absolute left-[15px] top-8 h-[calc(100%-1.25rem)] w-px bg-agent-line-light" />}
+      <span className="relative z-10 flex h-8 w-8 flex-none items-center justify-center rounded-full bg-agent-ink text-xs font-bold text-white shadow-sm">
+        {dayNumber}
+      </span>
+      <div className="flex-1 space-y-3 pt-0.5">
+        <div className="text-xs font-bold uppercase tracking-wide text-agent-accent-dark">
+          Day {dayNumber}
+          {city ? ` — ${city}` : ''}
+        </div>
+        {!city ? (
+          <p className="rounded-md border border-dashed border-agent-line-light bg-agent-panel/40 p-3 text-center text-[11px] text-agent-muted">
+            Add a city above to plan this day.
+          </p>
+        ) : (
+          <>
+            <DayHotelSection
+              city={city}
+              hotels={catalogs.hotels}
+              currentHotelId={hotelItem?.id || ''}
+              selectedHotelIds={selectedHotelIds}
+              onSelect={(hotelId) => setHotel(dayNumber, hotelId)}
+            />
+            <DayCatalogSection
+              type="tour"
+              city={city}
+              catalog={catalogs.tours}
+              placedItems={tourItems}
+              onAdd={(id) => addItem('tour', id)}
+              onRemove={removeItem}
+              onNoteChange={updateNote}
+            />
+            <DayCatalogSection
+              type="transfer"
+              city={city}
+              catalog={catalogs.transfers}
+              placedItems={transferItems}
+              onAdd={(id) => addItem('transfer', id)}
+              onRemove={removeItem}
+              onNoteChange={updateNote}
+            />
+            <DayCatalogSection
+              type="activity"
+              city={city}
+              catalog={catalogs.activities}
+              placedItems={activityItems}
+              onAdd={(id) => addItem('activity', id)}
+              onRemove={removeItem}
+              onNoteChange={updateNote}
+            />
+            <TextInput placeholder="Notes for this day (optional)…" value={notes} onChange={(e) => onNotesChange(e.target.value)} />
+          </>
+        )}
       </div>
-    </Card>
+    </div>
   );
 }
 
-// Step 6 — review & submit. No price/cost/markup fields anywhere (blind pricing).
-function ReviewStep({ form, selectedHotels, selectedTours, selectedTransfers, selectedActivities }) {
+function ItineraryStep({
+  dayCount,
+  cityOptions,
+  cityDays,
+  addCityRow,
+  updateCityRow,
+  removeCityRow,
+  dayCityMap,
+  itineraryItems,
+  dayNotes,
+  setDayNotes,
+  hotels,
+  tours,
+  transfers,
+  activities,
+  selectedHotelIds,
+  addItemToDay,
+  removeItemFromDay,
+  updateItemNoteByKey,
+  setHotelForDayNumber,
+}) {
+  return (
+    <div className="space-y-4">
+      <CityDaysPlanner
+        cityOptions={cityOptions}
+        cityDays={cityDays}
+        dayCount={dayCount}
+        addCityRow={addCityRow}
+        updateCityRow={updateCityRow}
+        removeCityRow={removeCityRow}
+      />
+
+      <Card label="Day-wise itinerary" className="border-white">
+        {dayCount === 0 ? (
+          <p className="rounded-md border border-dashed border-agent-line-light bg-agent-panel/40 p-4 text-center text-sm text-agent-muted">
+            Set Event start date and Event end date in Event Details to build the day-wise itinerary.
+          </p>
+        ) : cityDays.length === 0 ? (
+          <p className="rounded-md border border-dashed border-agent-line-light bg-agent-panel/40 p-4 text-center text-sm text-agent-muted">
+            Add at least one city above to start planning your days.
+          </p>
+        ) : (
+          <div>
+            {Array.from({ length: dayCount }, (_, i) => i + 1).map((dayNumber) => (
+              <DayPlanCard
+                key={dayNumber}
+                dayNumber={dayNumber}
+                city={dayCityMap[dayNumber]}
+                items={itemsForDay(itineraryItems, dayNumber)}
+                catalogs={{ hotels, tours, transfers, activities }}
+                selectedHotelIds={selectedHotelIds}
+                notes={dayNotes[dayNumber] || ''}
+                onNotesChange={(value) => setDayNotes((n) => ({ ...n, [dayNumber]: value }))}
+                addItem={(type, id) => addItemToDay(dayNumber, type, id)}
+                removeItem={removeItemFromDay}
+                updateNote={updateItemNoteByKey}
+                setHotel={setHotelForDayNumber}
+                isLast={dayNumber === dayCount}
+              />
+            ))}
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+// Step 3 — review & submit. No price/cost/markup fields anywhere (blind pricing).
+function ReviewStep({ form, days }) {
   return (
     <div className="space-y-4">
       <Card label="Event summary" className="border-white">
@@ -242,71 +640,26 @@ function ReviewStep({ form, selectedHotels, selectedTours, selectedTransfers, se
         </dl>
       </Card>
 
-      <Card label={`Selected hotels — ${selectedHotels.length} of 3`} className="border-white">
-        {selectedHotels.length === 0 ? (
-          <p className="text-sm text-agent-muted">No hotels selected.</p>
-        ) : (
-          <ul className="list-disc space-y-1 pl-5 text-sm">
-            {selectedHotels.map((h) => (
-              <li key={h.id}>
-                {h.name} — {h.city}
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
-
-      <Card label="Selected tours" className="border-white">
-        {selectedTours.length === 0 ? (
-          <p className="text-sm text-agent-muted">No tours selected.</p>
-        ) : (
-          <ul className="list-disc space-y-1 pl-5 text-sm">
-            {selectedTours.map((t) => (
-              <li key={t.id}>
-                {t.name} — {t.city}
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
-
-      <Card label="Selected transfers" className="border-white">
-        {selectedTransfers.length === 0 ? (
-          <p className="text-sm text-agent-muted">No transfers selected.</p>
-        ) : (
-          <ul className="list-disc space-y-1 pl-5 text-sm">
-            {selectedTransfers.map((t) => (
-              <li key={t.id}>{t.name}</li>
-            ))}
-          </ul>
-        )}
-      </Card>
-
-      <Card label="Selected activities" className="border-white">
-        {selectedActivities.length === 0 ? (
-          <p className="text-sm text-agent-muted">No activities selected.</p>
-        ) : (
-          <ul className="list-disc space-y-1 pl-5 text-sm">
-            {selectedActivities.map((a) => (
-              <li key={a.id}>{a.name}</li>
-            ))}
-          </ul>
-        )}
-      </Card>
+      <ItineraryTimeline days={days} emptyLabel="No day-wise itinerary added." />
     </div>
   );
 }
 
-function validateStep(step, { form, selectedHotelIds }) {
+function validateStep(step, { form, cityDays, itineraryItems }) {
   if (step === 1) {
     if (!form.destination.trim()) return 'Destination is required.';
     if (!form.eventDateFrom || !form.eventDateTo) return 'Event start and end dates are required.';
-    if (new Date(form.eventDateFrom) > new Date(form.eventDateTo)) return 'Event end date must be on or after the start date.';
+    // String comparison, not Date parsing — both are plain "YYYY-MM-DD" from
+    // <input type="date">, so lexicographic order already matches
+    // chronological order (see the matching backend refine in schemas.js).
+    if (form.eventDateTo < form.eventDateFrom) return 'Event end date must be on or after the start date.';
+    if (form.eventDateFrom < todayDateString()) return 'Event start date cannot be in the past.';
     if (!form.groupSize || Number(form.groupSize) < 1) return 'Group size is required.';
     return '';
   }
   if (step === 2) {
-    if (selectedHotelIds.length === 0) return 'Select at least one hotel to continue.';
+    if (cityDays.length === 0) return 'Add at least one city to build the itinerary.';
+    if (!itineraryItems.some((it) => it.type === 'hotel')) return 'Select at least one hotel in your itinerary.';
     return '';
   }
   return '';
@@ -328,13 +681,14 @@ export default function MiceBuilder() {
   const [activities, setActivities] = useState([]);
   const [catalogLoading, setCatalogLoading] = useState(true);
 
-  const [hotelCityFilter, setHotelCityFilter] = useState('');
-  const [tourCityFilter, setTourCityFilter] = useState('');
+  // City & Days planner — [{ id, city, days }], sum of `days` never exceeds
+  // the event's day count.
+  const [cityDays, setCityDays] = useState([]);
 
-  const [selectedHotelIds, setSelectedHotelIds] = useState([]);
-  const [selectedTourIds, setSelectedTourIds] = useState([]);
-  const [selectedTransferIds, setSelectedTransferIds] = useState([]);
-  const [selectedActivityIds, setSelectedActivityIds] = useState([]);
+  // Day-wise Itinerary Planner — items are the source of truth (hotel/tour/
+  // transfer/extra selection happens by adding an item directly onto a day).
+  const [itineraryItems, setItineraryItems] = useState([]);
+  const [dayNotes, setDayNotes] = useState({});
 
   // MICE Drafts (item 1) — "Continue Editing" opens /agent/mice-builder/:id;
   // draftId then tracks which row "Save Draft" and "Submit Request" write to.
@@ -368,7 +722,10 @@ export default function MiceBuilder() {
   }, []);
 
   // Loads a previously-saved draft's state into the wizard so "Continue
-  // Editing" resumes exactly where the agent left off.
+  // Editing" resumes exactly where the agent left off. cityDays isn't part
+  // of the persisted mice_rfq shape (only per-day items are) — it's
+  // reconstructed best-effort in a separate effect below, once catalogs have
+  // also loaded.
   useEffect(() => {
     if (!draftIdParam) return;
     api
@@ -389,36 +746,110 @@ export default function MiceBuilder() {
           avNeeds: mr.avNeeds || '',
           otherRequirements: mr.otherRequirements || '',
         });
-        setSelectedHotelIds(mr.hotels.map((h) => h.id));
-        setSelectedTourIds(mr.tours.map((t) => t.id));
-        setSelectedTransferIds(mr.transfers.map((t) => t.id));
-        setSelectedActivityIds(mr.activities.map((a) => a.id));
+        const { items, dayNotes: loadedDayNotes } = deserializeItinerary(mr.itinerary);
+        setItineraryItems(items);
+        setDayNotes(loadedDayNotes);
       })
       .catch((err) => setError(err.message || 'Unable to load this draft'))
       .finally(() => setDraftLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draftIdParam]);
 
+  // Reconstructs cityDays from the resumed draft's itineraryItems, once both
+  // the catalogs and the draft (if any) have finished loading — runs exactly
+  // once (guarded by the ref) so it never fights the agent's own edits to
+  // cityDays afterwards.
+  const cityDaysDerivedRef = useRef(false);
+  useEffect(() => {
+    if (cityDaysDerivedRef.current) return;
+    if (catalogLoading || draftLoading) return;
+    cityDaysDerivedRef.current = true;
+    if (!draftIdParam) return;
+    const loadedDayCount = computeDayCount(form.eventDateFrom, form.eventDateTo);
+    setCityDays(deriveCityDaysFromItems(itineraryItems, loadedDayCount, { hotels, tours, transfers, activities }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [catalogLoading, draftLoading]);
+
+  // If Event start date moves later than the already-picked end date, the
+  // end date is no longer valid — clear it automatically.
+  useEffect(() => {
+    if (form.eventDateFrom && form.eventDateTo && form.eventDateTo < form.eventDateFrom) {
+      setForm((f) => ({ ...f, eventDateTo: '' }));
+    }
+  }, [form.eventDateFrom]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const dayCount = computeDayCount(form.eventDateFrom, form.eventDateTo);
+  const cityOptions = distinctCities(hotels, tours, transfers, activities);
+  const dayCityMap = buildDayCityMap(cityDays, dayCount);
+
+  // Keeps itineraryItems consistent with the current city plan: drops
+  // anything sitting on a day beyond the current event length, and anything
+  // whose own city no longer matches the city now assigned to its day.
+  useEffect(() => {
+    const map = buildDayCityMap(cityDays, dayCount);
+    setItineraryItems((items) =>
+      items.filter((it) => {
+        if (it.dayNumber == null || it.dayNumber > dayCount) return false;
+        const city = map[it.dayNumber];
+        if (!city) return false;
+        const meta = resolveItemMeta(it.type, it.id, { hotels, tours, transfers, activities });
+        return !!meta && (meta.city || '').toLowerCase() === city.toLowerCase();
+      }),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cityDays, dayCount]);
+
   function update(key, value) {
     setForm((f) => ({ ...f, [key]: value }));
   }
 
-  function toggleHotel(id) {
-    setSelectedHotelIds((list) => {
-      if (list.includes(id)) return list.filter((x) => x !== id);
-      if (list.length >= 3) return list; // hard cap — MICE-2/MICE-7
-      return [...list, id];
+  function addCityRow() {
+    setCityDays((rows) => {
+      const remaining = Math.max(0, dayCount - sumCityDays(rows));
+      if (remaining === 0) return rows;
+      return [...rows, { id: nextCityRowId(), city: '', days: 1 }];
     });
   }
-  function toggleTour(id) {
-    setSelectedTourIds((list) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]));
+
+  function updateCityRow(id, field, value) {
+    setCityDays((rows) => {
+      if (field === 'city') return rows.map((r) => (r.id === id ? { ...r, city: value } : r));
+      const otherSum = rows.filter((r) => r.id !== id).reduce((total, r) => total + (Number(r.days) || 0), 0);
+      const maxAllowed = Math.max(1, dayCount - otherSum);
+      const clamped = Math.min(Math.max(1, Number(value) || 1), maxAllowed);
+      return rows.map((r) => (r.id === id ? { ...r, days: clamped } : r));
+    });
   }
-  function toggleTransfer(id) {
-    setSelectedTransferIds((list) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]));
+
+  function removeCityRow(id) {
+    setCityDays((rows) => rows.filter((r) => r.id !== id));
   }
-  function toggleActivity(id) {
-    setSelectedActivityIds((list) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]));
+
+  function addItemToDay(dayNumber, type, id) {
+    setItineraryItems((items) => addItineraryItem(items, { type, id, dayNumber }));
   }
+
+  function removeItemFromDay(key) {
+    setItineraryItems((items) => removeItineraryItemByKey(items, key));
+  }
+
+  function updateItemNoteByKey(key, note) {
+    setItineraryItems((items) => updateItineraryItemNote(items, key, note));
+  }
+
+  function setHotelForDayNumber(dayNumber, hotelId) {
+    setItineraryItems((items) =>
+      hotelId ? setHotelForDay(items, dayNumber, hotelId) : items.filter((it) => !(it.dayNumber === dayNumber && it.type === 'hotel')),
+    );
+  }
+
+  // Selection is derived from itineraryItems now, not the other way around —
+  // deduped per type since the same catalog item can be added to more than
+  // one day (most often the same hotel across a multi-day event).
+  const selectedHotelIds = dedupeIdsByType(itineraryItems, 'hotel');
+  const selectedTourIds = dedupeIdsByType(itineraryItems, 'tour');
+  const selectedTransferIds = dedupeIdsByType(itineraryItems, 'transfer');
+  const selectedActivityIds = dedupeIdsByType(itineraryItems, 'activity');
 
   // Item 1 — "Save Draft"/"Continue Editing" autosave. Deliberately skips
   // validateStep(): a half-built RFQ (no destination yet, no hotel picked)
@@ -437,6 +868,7 @@ export default function MiceBuilder() {
       tourIds: selectedTourIds,
       transferIds: selectedTransferIds,
       activityIds: selectedActivityIds,
+      itinerary: serializeItinerary(itineraryItems, dayNotes, dayCount),
     };
   }
 
@@ -460,7 +892,7 @@ export default function MiceBuilder() {
   }
 
   function goNext() {
-    const validationError = validateStep(step, { form, selectedHotelIds });
+    const validationError = validateStep(step, { form, cityDays, itineraryItems });
     if (validationError) {
       setError(validationError);
       return;
@@ -475,8 +907,8 @@ export default function MiceBuilder() {
   }
 
   async function handleSubmit() {
-    const step1Error = validateStep(1, { form, selectedHotelIds });
-    const step2Error = validateStep(2, { form, selectedHotelIds });
+    const step1Error = validateStep(1, { form, cityDays, itineraryItems });
+    const step2Error = validateStep(2, { form, cityDays, itineraryItems });
     const validationError = step1Error || step2Error;
     if (validationError) {
       setError(validationError);
@@ -498,6 +930,7 @@ export default function MiceBuilder() {
         tourIds: selectedTourIds,
         transferIds: selectedTransferIds,
         activityIds: selectedActivityIds,
+        itinerary: serializeItinerary(itineraryItems, dayNotes, dayCount),
       };
       // A draft opened via "Continue Editing" submits through its own row
       // (validated the same way — createMiceRfqSchema — just against an
@@ -517,6 +950,18 @@ export default function MiceBuilder() {
   const selectedTours = tours.filter((t) => selectedTourIds.includes(t.id));
   const selectedTransfers = transfers.filter((t) => selectedTransferIds.includes(t.id));
   const selectedActivities = activities.filter((a) => selectedActivityIds.includes(a.id));
+
+  function resolveItineraryMeta(item) {
+    return resolveItemMeta(item.type, item.id, {
+      hotels: selectedHotels,
+      tours: selectedTours,
+      transfers: selectedTransfers,
+      activities: selectedActivities,
+    });
+  }
+  // Every day 1..N, not just the ones with something on them — the Review
+  // step's ItineraryTimeline renders every day as its own row/section.
+  const fullItineraryDays = buildFullItineraryDays(itineraryItems, dayNotes, dayCount, resolveItineraryMeta);
 
   return (
     <div className="mx-auto max-w-5xl p-5 lg:p-8">
@@ -548,38 +993,29 @@ export default function MiceBuilder() {
 
           {step === 1 && <EventDetailsStep form={form} update={update} />}
           {step === 2 && (
-            <HotelsStep
+            <ItineraryStep
+              dayCount={dayCount}
+              cityOptions={cityOptions}
+              cityDays={cityDays}
+              addCityRow={addCityRow}
+              updateCityRow={updateCityRow}
+              removeCityRow={removeCityRow}
+              dayCityMap={dayCityMap}
+              itineraryItems={itineraryItems}
+              dayNotes={dayNotes}
+              setDayNotes={setDayNotes}
               hotels={hotels}
-              cityFilter={hotelCityFilter}
-              setCityFilter={setHotelCityFilter}
-              selectedHotelIds={selectedHotelIds}
-              toggleHotel={toggleHotel}
-            />
-          )}
-          {step === 3 && (
-            <ToursStep
               tours={tours}
-              cityFilter={tourCityFilter}
-              setCityFilter={setTourCityFilter}
-              selectedTourIds={selectedTourIds}
-              toggleTour={toggleTour}
+              transfers={transfers}
+              activities={activities}
+              selectedHotelIds={selectedHotelIds}
+              addItemToDay={addItemToDay}
+              removeItemFromDay={removeItemFromDay}
+              updateItemNoteByKey={updateItemNoteByKey}
+              setHotelForDayNumber={setHotelForDayNumber}
             />
           )}
-          {step === 4 && (
-            <TransfersStep transfers={transfers} selectedTransferIds={selectedTransferIds} toggleTransfer={toggleTransfer} />
-          )}
-          {step === 5 && (
-            <ActivitiesStep activities={activities} selectedActivityIds={selectedActivityIds} toggleActivity={toggleActivity} />
-          )}
-          {step === 6 && (
-            <ReviewStep
-              form={form}
-              selectedHotels={selectedHotels}
-              selectedTours={selectedTours}
-              selectedTransfers={selectedTransfers}
-              selectedActivities={selectedActivities}
-            />
-          )}
+          {step === 3 && <ReviewStep form={form} days={fullItineraryDays} />}
 
           <ErrorText>{error}</ErrorText>
 

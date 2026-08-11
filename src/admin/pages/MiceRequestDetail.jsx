@@ -3,6 +3,19 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { Badge, Card, ErrorText, FieldLabel, Select, Button, Tag, TextInput, Textarea } from '../components/ui.jsx';
 import { formatCurrency } from '../../shared/fdPackage/index.js';
+import {
+  ITINERARY_ITEM_TYPE_META,
+  buildSelectionPool,
+  computeDayCount,
+  deserializeItinerary,
+  itemsForDay,
+  moveItineraryItem,
+  reconcileItineraryItems,
+  resolveItemMeta,
+  serializeItinerary,
+  unassignedItems,
+  updateItineraryItemNote,
+} from '../../shared/itinerary/index.js';
 
 const STATUS_TONE = {
   submitted: 'amber',
@@ -346,6 +359,243 @@ function CostingAndPublishing({ miceRfq, onUpdated }) {
   );
 }
 
+// A single draggable placed/unplaced item — mirrors QuoteInboxDetail.jsx's
+// ItineraryItemChip exactly (same admin theming already shared by this
+// page). Dropping directly on a chip inserts before it, which is what lets
+// ItineraryDayCard support reordering within a day. No delete control here
+// — the admin has no UI to deselect a hotel/tour/transfer/extra from the
+// request itself, so there's nothing for a "remove from the trip entirely"
+// action to do; only its own note is editable.
+function ItineraryItemChip({ item, meta, isDragging, onDragStart, onDragEnd, onDropBefore, onNoteChange, onUnassign }) {
+  const typeMeta = ITINERARY_ITEM_TYPE_META[item.type];
+  return (
+    <div
+      draggable
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={onDropBefore}
+      className={`rounded-md border border-line-light bg-white px-2.5 py-2 text-xs shadow-sm ${isDragging ? 'opacity-40' : ''}`}
+    >
+      <div className="flex cursor-grab items-center gap-2 active:cursor-grabbing">
+        <span className="flex-none">{typeMeta?.icon}</span>
+        <div className="min-w-0 flex-1">
+          <div className="truncate font-semibold">{meta?.name || 'Unknown item'}</div>
+          <div className="truncate text-[10px] text-muted">
+            {typeMeta?.label}
+            {meta?.city ? ` · ${meta.city}` : ''}
+          </div>
+        </div>
+        {onUnassign && (
+          <button type="button" onClick={onUnassign} title="Move back to unassigned" className="flex-none text-muted hover:text-ink">
+            ×
+          </button>
+        )}
+      </div>
+      {onNoteChange && (
+        <TextInput
+          className="mt-1.5 px-2 py-1.5 text-[11px]"
+          placeholder="Add a note (optional)…"
+          value={item.note || ''}
+          onChange={(e) => onNoteChange(e.target.value)}
+        />
+      )}
+    </div>
+  );
+}
+
+// One numbered timeline node, editable — same drop-target-within-a-drop-target
+// structure as QuoteInboxDetail.jsx's ItineraryDayCard.
+function ItineraryDayCard({ dayNumber, items, notes, onNotesChange, resolveMeta, draggingKey, setDraggingKey, moveItem, updateNote, isLast }) {
+  return (
+    <div className="relative flex gap-4 pb-5 last:pb-0">
+      {!isLast && <span className="absolute left-[15px] top-8 h-[calc(100%-1.25rem)] w-px bg-line-light" />}
+      <span className="relative z-10 flex h-8 w-8 flex-none items-center justify-center rounded-full bg-ink text-xs font-bold text-white shadow-sm">
+        {dayNumber}
+      </span>
+      <div className="flex-1 pt-0.5">
+        <div className="mb-2 text-xs font-bold uppercase tracking-wide text-accent">Day {dayNumber}</div>
+        <div
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => moveItem(e.dataTransfer.getData('text/plain'), dayNumber)}
+          className="mb-2 min-h-[52px] space-y-1.5 rounded-md border border-dashed border-line-light bg-panel/40 p-2"
+        >
+          {items.length === 0 ? (
+            <p className="py-2 text-center text-[11px] text-muted">Drag items here</p>
+          ) : (
+            items.map((item, idx) => (
+              <ItineraryItemChip
+                key={item.key}
+                item={item}
+                meta={resolveMeta(item)}
+                isDragging={draggingKey === item.key}
+                onDragStart={(e) => {
+                  e.dataTransfer.setData('text/plain', item.key);
+                  setDraggingKey(item.key);
+                }}
+                onDragEnd={() => setDraggingKey(null)}
+                onDropBefore={(e) => {
+                  e.stopPropagation();
+                  moveItem(e.dataTransfer.getData('text/plain'), dayNumber, idx);
+                }}
+                onNoteChange={(note) => updateNote(item.key, note)}
+                onUnassign={() => moveItem(item.key, null)}
+              />
+            ))
+          )}
+        </div>
+        <TextInput placeholder="Notes for this day (optional)…" value={notes} onChange={(e) => onNotesChange(e.target.value)} />
+      </div>
+    </div>
+  );
+}
+
+// Day-wise Itinerary Planner — admin edit. Reuses the exact same
+// shared/itinerary helpers and drag-drop model as QuoteInboxDetail.jsx's
+// ItineraryEditor and the agent MICE Curation builder; only the day-count
+// source differs (event_date_from/to instead of date_from/to — MICE has no
+// separate travel dates). Local state is seeded once from
+// miceRfq.itinerary via lazy useState — deliberately not re-synced on every
+// miceRfq prop update, so an in-progress drag isn't wiped out by an
+// unrelated save (e.g. Lead Manager assignment) elsewhere on this page
+// re-fetching the request.
+function ItineraryEditor({ miceRfq, onUpdated }) {
+  const dayCount = computeDayCount(miceRfq.eventDateFrom, miceRfq.eventDateTo);
+  const [itineraryItems, setItineraryItems] = useState(() => deserializeItinerary(miceRfq.itinerary).items);
+  const [dayNotes, setDayNotes] = useState(() => deserializeItinerary(miceRfq.itinerary).dayNotes);
+  const [draggingKey, setDraggingKey] = useState(null);
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  // The admin can't change *which* hotel/tours/transfers/extras are on this
+  // request from here — only how they're arranged into days — so this only
+  // ever adds/removes items if the underlying selections themselves change.
+  useEffect(() => {
+    const pool = buildSelectionPool({
+      hotelIds: miceRfq.hotels.map((h) => h.id),
+      tourIds: miceRfq.tours.map((t) => t.id),
+      transferIds: miceRfq.transfers.map((t) => t.id),
+      activityIds: miceRfq.activities.map((a) => a.id),
+    });
+    setItineraryItems((items) => reconcileItineraryItems(items, pool));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [miceRfq.hotels, miceRfq.tours, miceRfq.transfers, miceRfq.activities]);
+
+  function resolveMeta(item) {
+    return resolveItemMeta(item.type, item.id, {
+      hotels: miceRfq.hotels,
+      tours: miceRfq.tours,
+      transfers: miceRfq.transfers,
+      activities: miceRfq.activities,
+    });
+  }
+
+  function moveItem(key, targetDay, targetIndex) {
+    setItineraryItems((items) => moveItineraryItem(items, key, targetDay, targetIndex));
+  }
+
+  function updateNote(key, note) {
+    setItineraryItems((items) => updateItineraryItemNote(items, key, note));
+  }
+
+  async function save() {
+    setError('');
+    setSaving(true);
+    try {
+      const { miceRfq: updated } = await api.patch(`/admin/mice-rfqs/${miceRfq.id}/itinerary`, {
+        days: serializeItinerary(itineraryItems, dayNotes, dayCount),
+      });
+      onUpdated(updated);
+    } catch (err) {
+      setError(err.message || 'Unable to save itinerary');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const pool = unassignedItems(itineraryItems);
+
+  return (
+    <Card label="Day-wise itinerary" className="border-white">
+      <p className="mb-4 text-xs text-muted">
+        Drag the agent's selected hotel, tours, transfers, and extras onto the day they happen, reorder within a day,
+        or edit the notes. Saved changes are shown back to the agent exactly as arranged here.
+      </p>
+
+      {dayCount === 0 ? (
+        <p className="rounded-md border border-dashed border-line-light bg-panel/40 p-4 text-center text-sm text-muted">
+          This request has no event dates set — the itinerary can't be built until it does.
+        </p>
+      ) : (
+        <>
+          <div className="mb-5">
+            <FieldLabel>Unassigned items</FieldLabel>
+            <div
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => moveItem(e.dataTransfer.getData('text/plain'), null)}
+              className="flex min-h-[56px] flex-wrap gap-2 rounded-md border border-dashed border-line-light bg-panel/40 p-2.5"
+            >
+              {pool.length === 0 ? (
+                <p className="py-2 text-[11px] text-muted">
+                  {itineraryItems.length === 0
+                    ? 'Nothing to place — the agent selected no hotel/tours/transfers/extras.'
+                    : 'Everything is placed on a day.'}
+                </p>
+              ) : (
+                pool.map((item) => (
+                  <div key={item.key} className="w-full sm:w-64">
+                    <ItineraryItemChip
+                      item={item}
+                      meta={resolveMeta(item)}
+                      isDragging={draggingKey === item.key}
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData('text/plain', item.key);
+                        setDraggingKey(item.key);
+                      }}
+                      onDragEnd={() => setDraggingKey(null)}
+                      onDropBefore={(e) => {
+                        e.stopPropagation();
+                        const idx = pool.findIndex((p) => p.key === item.key);
+                        moveItem(e.dataTransfer.getData('text/plain'), null, idx);
+                      }}
+                      onNoteChange={(note) => updateNote(item.key, note)}
+                    />
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div>
+            {Array.from({ length: dayCount }, (_, i) => i + 1).map((dayNumber) => (
+              <ItineraryDayCard
+                key={dayNumber}
+                dayNumber={dayNumber}
+                items={itemsForDay(itineraryItems, dayNumber)}
+                notes={dayNotes[dayNumber] || ''}
+                onNotesChange={(value) => setDayNotes((n) => ({ ...n, [dayNumber]: value }))}
+                resolveMeta={resolveMeta}
+                draggingKey={draggingKey}
+                setDraggingKey={setDraggingKey}
+                moveItem={moveItem}
+                updateNote={updateNote}
+                isLast={dayNumber === dayCount}
+              />
+            ))}
+          </div>
+        </>
+      )}
+
+      <ErrorText>{error}</ErrorText>
+      <div className="mt-4">
+        <Button variant="accent" disabled={saving || dayCount === 0} onClick={save}>
+          {saving ? 'Saving…' : 'Save Itinerary'}
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
 function ActivityHistory({ history }) {
   return (
     <Card label="Activity timeline" className="border-white">
@@ -494,6 +744,7 @@ export default function MiceRequestDetail() {
               renderMeta={(a) => `${a.city || '—'}${a.duration ? ` · ${a.duration}` : ''}`}
             />
 
+            <ItineraryEditor miceRfq={miceRfq} onUpdated={setMiceRfq} />
             <CostingAndPublishing miceRfq={miceRfq} onUpdated={setMiceRfq} />
             <ActivityHistory history={miceRfq.activityHistory} />
           </>
