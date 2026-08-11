@@ -420,9 +420,15 @@ function DayHotelSection({ city, hotels, currentHotelId, onSelect }) {
   );
 }
 
+// Tours and Transfers are marked required (matching the "*" convention used
+// elsewhere in this builder, e.g. "City *") — validateStep(2) below blocks
+// moving past Itinerary until every day has at least one of each. Extras
+// stay optional. `required` only decorates the field label — kept separate
+// from `label` itself so the lowercased "No {label} available…" empty-state
+// message below doesn't pick up a stray asterisk.
 const DAY_SECTION_META = {
-  tour: { label: 'Tours', addLabel: '+ Add tour' },
-  transfer: { label: 'Transfers', addLabel: '+ Add transfer' },
+  tour: { label: 'Tours', addLabel: '+ Add tour', required: true },
+  transfer: { label: 'Transfers', addLabel: '+ Add transfer', required: true },
   activity: { label: 'Extras', addLabel: '+ Add extra' },
 };
 
@@ -437,7 +443,10 @@ function DayCatalogSection({ type, city, catalog, placedItems, onAdd, onRemove, 
 
   return (
     <div>
-      <FieldLabel>{meta.label}</FieldLabel>
+      <FieldLabel>
+        {meta.label}
+        {meta.required && ' *'}
+      </FieldLabel>
       {placedItems.length === 0 ? (
         <p className="mb-1 text-[11px] text-agent-muted">None added for this day.</p>
       ) : (
@@ -715,7 +724,7 @@ function ReviewStep({ form, dayCount, hotels, days, selectedCounts, travelers, u
   );
 }
 
-function validateStep(step, { form, cityDays, itineraryItems, travelers }) {
+function validateStep(step, { form, cityDays, itineraryItems, travelers, dayCount }) {
   if (step === 1) {
     if (!form.destination.trim()) return 'Destination is required.';
     if (!form.dateFrom || !form.dateTo) return 'Travel start and end dates are required.';
@@ -732,6 +741,16 @@ function validateStep(step, { form, cityDays, itineraryItems, travelers }) {
     // Hotel selection now happens per day inside Itinerary (was its own
     // Trip Details gate before) — still mandatory before moving on.
     if (!itineraryItems.some((it) => it.type === 'hotel')) return 'Select at least one hotel in your itinerary.';
+    // Every day needs at least one tour and one transfer of its own, not
+    // just somewhere in the trip — mirrors the day-by-day granularity the
+    // rest of Itinerary already works at (hotel is trip-wide since the same
+    // hotel usually covers a whole city stay; tours/transfers are what
+    // actually varies day to day).
+    for (let day = 1; day <= dayCount; day++) {
+      const dayItems = itemsForDay(itineraryItems, day);
+      if (!dayItems.some((it) => it.type === 'tour')) return `Day ${day} needs at least one tour.`;
+      if (!dayItems.some((it) => it.type === 'transfer')) return `Day ${day} needs at least one transfer.`;
+    }
     return '';
   }
   if (step === 3) {
@@ -1007,7 +1026,7 @@ export default function PackageBuilder() {
   }
 
   function goNext() {
-    const validationError = validateStep(step, { form, cityDays, itineraryItems, travelers });
+    const validationError = validateStep(step, { form, cityDays, itineraryItems, travelers, dayCount });
     if (validationError) {
       setError(validationError);
       return;
