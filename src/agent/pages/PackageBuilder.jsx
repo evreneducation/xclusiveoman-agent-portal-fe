@@ -691,15 +691,19 @@ function TravelersEditor({ travelers, updateTraveler }) {
 }
 
 // Step 3 — review & submit. No price/cost/markup fields anywhere (FIT-6).
-function ReviewStep({ form, dayCount, hotels, days, selectedCounts, travelers, updateTraveler }) {
+function ReviewStep({ form, dayCount, hotels, days, selectedCounts, travelers, updateTraveler, downloadingPdf, onDownloadPdf }) {
   return (
     <div className="space-y-4">
       {/* Redesigned to read like a real client-facing itinerary document
-          (see ItineraryDocument.jsx) rather than a wizard-review checklist —
-          this is also the print/PDF surface, hence the Print button here and
-          .print:hidden below rather than inside the document itself. */}
+          (see ItineraryDocument.jsx) rather than a wizard-review checklist.
+          "Download PDF" renders this same document server-side (Puppeteer —
+          see itineraryPdf.service.js) instead of the browser's own
+          print-to-PDF, so the .print:hidden below is now just a fallback in
+          case an agent uses their browser's own Ctrl+P on this page. */}
       <div className="flex justify-end print:hidden">
-        <Button onClick={() => window.print()}>🖨️ Print / Save as PDF</Button>
+        <Button variant="accent" onClick={onDownloadPdf} disabled={downloadingPdf}>
+          {downloadingPdf ? 'Generating PDF…' : '⬇️ Download PDF'}
+        </Button>
       </div>
 
       <ItineraryDocument
@@ -808,6 +812,7 @@ export default function PackageBuilder() {
   const [draftLoading, setDraftLoading] = useState(!!draftIdParam);
   const [savingDraft, setSavingDraft] = useState(false);
   const [draftSavedAt, setDraftSavedAt] = useState(null);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -1025,6 +1030,45 @@ export default function PackageBuilder() {
     }
   }
 
+  // Server-side PDF export (itineraryPdf.service.js on the backend) replaces
+  // the old window.print() flow — that relied on the agent's own browser/OS
+  // print engine, which drifted from the on-screen Tailwind design (dropped
+  // shadows/backgrounds, different flex/grid rounding). The download
+  // endpoint renders this same package request's ItineraryDocument in a real
+  // headless Chromium instead, so it needs the request saved server-side
+  // first — syncs the current in-progress edits to the draft row (creating
+  // it if this session never saved one) immediately before requesting the
+  // PDF, so what downloads always matches what's on screen right now.
+  async function handleDownloadPdf() {
+    setError('');
+    setDownloadingPdf(true);
+    try {
+      let id = draftId;
+      if (id) {
+        await api.patch(`/package-requests/${id}`, buildDraftPayload());
+      } else {
+        const { packageRequest } = await api.post('/package-requests/draft', buildDraftPayload());
+        id = packageRequest.id;
+        setDraftId(id);
+        navigate(`/agent/package-builder/${id}`, { replace: true });
+      }
+
+      const blob = await api.getBlob(`/package-requests/${id}/itinerary.pdf`);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `itinerary-${id}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err.message || 'Unable to generate PDF');
+    } finally {
+      setDownloadingPdf(false);
+    }
+  }
+
   function goNext() {
     const validationError = validateStep(step, { form, cityDays, itineraryItems, travelers, dayCount });
     if (validationError) {
@@ -1173,6 +1217,8 @@ export default function PackageBuilder() {
               selectedCounts={selectedCounts}
               travelers={travelers}
               updateTraveler={updateTraveler}
+              downloadingPdf={downloadingPdf}
+              onDownloadPdf={handleDownloadPdf}
             />
           )}
 
