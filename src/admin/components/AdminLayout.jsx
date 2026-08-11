@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Link, Outlet, useLocation } from 'react-router-dom';
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
+  LuBell,
   LuBuilding2,
   LuChartColumn,
   LuChevronDown,
@@ -20,7 +21,25 @@ import {
   LuWallet,
 } from 'react-icons/lu';
 import { useAuth } from '../context/AuthContext.jsx';
+import { api } from '../api/client.js';
+import { getSocket } from '../lib/socket.js';
+import { NotificationBell } from '../../shared/components/NotificationBell.jsx';
 import { Button } from './ui.jsx';
+
+// Maps a notification's referenceType to an in-portal route — mirrors
+// AgentLayout.jsx's own resolveNotificationPath, just admin's own routes.
+// 'agency' (New Agent Added — see auth.controller.js's
+// notifyAdminsOfNewAgent) resolves to the Agent Approvals list: there's no
+// per-agency detail route in the admin portal yet, so the list is as close
+// as navigation can currently get.
+const REFERENCE_ROUTES = {
+  agency: () => '/admin/approvals',
+};
+
+function resolveNotificationPath(referenceType) {
+  if (!referenceType) return null;
+  return REFERENCE_ROUTES[referenceType]?.() || null;
+}
 
 // Grouped, task-oriented sidebar — 9 top-level entries. Items that used to
 // be separate top-level links (Agent Approvals, Relationship Managers,
@@ -90,6 +109,7 @@ function groupHasActiveChild(pathname, item) {
 export default function AdminLayout() {
   const { user, logout, socketConnected } = useAuth();
   const { pathname } = useLocation();
+  const navigate = useNavigate();
   // Starts collapsed (icon rail) — hovering over the sidebar expands it,
   // moving the mouse away collapses it back to give the page its width back.
   const [collapsed, setCollapsed] = useState(true);
@@ -263,6 +283,21 @@ export default function AdminLayout() {
       </motion.aside>
 
       <div className="min-w-0 flex-1">
+        {/* Slim top bar — just the notification bell for now. print:hidden so
+            pages with a printable document (e.g. the agent portal's Review &
+            Submit) that ever get reused/rendered under this layout don't pick
+            up chrome around the document; harmless here today either way. */}
+        <div className="sticky top-0 z-30 flex items-center justify-end border-b border-line-light bg-white/95 px-4 py-2.5 backdrop-blur print:hidden lg:px-8">
+          <NotificationBell
+            api={api}
+            getSocket={getSocket}
+            socketConnected={socketConnected}
+            resolvePath={resolveNotificationPath}
+            onNavigate={navigate}
+            icon={LuBell}
+            buttonClassName="h-9 w-9 rounded-full bg-accent-soft text-accent hover:bg-accent hover:text-white"
+          />
+        </div>
         <AnimatePresence mode="wait">
           <motion.main
             key={pathname}
