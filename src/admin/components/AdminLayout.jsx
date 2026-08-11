@@ -15,8 +15,6 @@ import {
   LuLayoutGrid,
   LuLogOut,
   LuMegaphone,
-  LuPanelLeftClose,
-  LuPanelLeftOpen,
   LuPresentation,
   LuReceipt,
   LuUserCheck,
@@ -90,8 +88,8 @@ function groupHasActiveChild(pathname, item) {
 export default function AdminLayout() {
   const { user, logout, socketConnected } = useAuth();
   const { pathname } = useLocation();
-  // Starts collapsed (icon rail) — click the panel toggle to pin it open;
-  // click again to collapse back and give the page content the width back.
+  // Starts collapsed (icon rail) — hovering over the sidebar expands it,
+  // moving the mouse away collapses it back to give the page its width back.
   const [collapsed, setCollapsed] = useState(true);
   const [openGroups, setOpenGroups] = useState(() =>
     NAV_ITEMS.filter((item) => item.children && groupHasActiveChild(pathname, item)).map((item) => item.key)
@@ -109,12 +107,11 @@ export default function AdminLayout() {
     setOpenGroups((groups) => (groups.includes(key) ? groups.filter((g) => g !== key) : [...groups, key]));
   }
 
-  // Clicking a group's icon while the rail is collapsed pins the sidebar
-  // open and expands straight into that group, rather than needing a
-  // separate flyout submenu for the collapsed state.
+  // Clicking a group's icon while the rail is collapsed expands straight
+  // into that group, rather than needing a separate flyout submenu for the
+  // collapsed state.
   function handleGroupClick(key) {
     if (collapsed) {
-      setCollapsed(false);
       setOpenGroups((groups) => (groups.includes(key) ? groups : [...groups, key]));
     } else {
       toggleGroup(key);
@@ -127,20 +124,10 @@ export default function AdminLayout() {
         initial={{ x: -28, opacity: 0, width: COLLAPSED_WIDTH }}
         animate={{ x: 0, opacity: 1, width: collapsed ? COLLAPSED_WIDTH : EXPANDED_WIDTH }}
         transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+        onMouseEnter={() => setCollapsed(false)}
+        onMouseLeave={() => setCollapsed(true)}
         className="sticky top-0 flex h-screen flex-none flex-col border-r border-line-light bg-white/95 backdrop-blur"
       >
-        <div className={`flex items-center border-b border-line-light px-3 py-3 ${collapsed ? 'justify-center' : 'justify-end'}`}>
-          <button
-            type="button"
-            onClick={() => setCollapsed((c) => !c)}
-            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            className="flex h-8 w-8 flex-none items-center justify-center rounded-lg text-muted hover:bg-panel hover:text-ink"
-          >
-            {collapsed ? <LuPanelLeftOpen size={17} /> : <LuPanelLeftClose size={17} />}
-          </button>
-        </div>
-
         <div className={`flex items-center gap-3 border-b border-line-light px-6 py-6 ${collapsed ? 'justify-center px-3' : ''}`}>
           <div className="flex h-11 w-11 flex-none items-center justify-center rounded-2xl bg-ink text-base font-bold text-white shadow-lg shadow-ink/20">
             XO
