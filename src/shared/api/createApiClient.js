@@ -90,6 +90,46 @@ export function createApiClient() {
     return result.data;
   }
 
+  // Binary downloads (PDF export etc.) — same Authorization header + one
+  // refresh-and-retry-on-401 contract as apiRequest above, but the response
+  // body is a Blob rather than parsed JSON, so it can't share that function's
+  // JSON-parsing return path. Error responses are still JSON ({error,
+  // message}) even though a success response is binary, so those are parsed
+  // for the message the same way apiRequest does.
+  async function rawBlobRequest(path, { method = 'GET' } = {}) {
+    const headers = {};
+    if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+    return fetch(`${BASE_URL}${path}`, { method, headers, credentials: 'include' });
+  }
+
+  async function apiBlobRequest(path, options = {}) {
+    let res = await rawBlobRequest(path, options);
+
+    if (res.status === 401 && !options._retried) {
+      const refreshed = await tryRefresh();
+      if (refreshed) {
+        res = await rawBlobRequest(path, { ...options, _retried: true });
+      } else {
+        onUnauthorized?.();
+      }
+    }
+
+    if (!res.ok) {
+      let message = `Request failed (${res.status})`;
+      try {
+        const data = await res.json();
+        message = data?.message || data?.error || message;
+      } catch {
+        // Response body wasn't JSON — keep the generic status message.
+      }
+      const error = new Error(message);
+      error.status = res.status;
+      throw error;
+    }
+
+    return res.blob();
+  }
+
   const api = {
     get: (path) => apiRequest(path, { method: 'GET' }),
     post: (path, body, options) => apiRequest(path, { method: 'POST', body, ...options }),
@@ -98,6 +138,8 @@ export function createApiClient() {
     del: (path) => apiRequest(path, { method: 'DELETE' }),
     // FormData upload — pass a FormData instance as body (e.g. NEFT slips, documents).
     postForm: (path, formData) => apiRequest(path, { method: 'POST', body: formData }),
+    // Binary download (e.g. PDF export) — resolves to a Blob, not JSON.
+    getBlob: (path) => apiBlobRequest(path, { method: 'GET' }),
   };
 
   return { api, setAccessToken, getAccessToken, setUnauthorizedHandler, tryRefresh };

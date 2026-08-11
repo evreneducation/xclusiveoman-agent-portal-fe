@@ -73,10 +73,10 @@ export default function Dashboard() {
           <Link to="/admin/mice-catalog" className="rounded-md border border-line-light px-3.5 py-2.5 hover:border-ink hover:bg-panel">
             MICE Catalog
           </Link>
-          <Link to="/admin/relationship-managers" className="rounded-md border border-line-light px-3.5 py-2.5 hover:border-ink hover:bg-panel">
+          <Link to="/admin/employees?tab=rm" className="rounded-md border border-line-light px-3.5 py-2.5 hover:border-ink hover:bg-panel">
             Relationship Managers
           </Link>
-          <Link to="/admin/sales-managers" className="rounded-md border border-line-light px-3.5 py-2.5 hover:border-ink hover:bg-panel">
+          <Link to="/admin/employees?tab=salesManager" className="rounded-md border border-line-light px-3.5 py-2.5 hover:border-ink hover:bg-panel">
             Sales Managers
           </Link>
           <Link to="/admin/transactions" className="rounded-md border border-line-light px-3.5 py-2.5 hover:border-ink hover:bg-panel">

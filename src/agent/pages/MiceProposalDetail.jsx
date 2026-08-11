@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { getSocket } from '../lib/socket.js';
 import { Badge, Button, Card, ErrorText, FieldLabel, Textarea } from '../components/ui.jsx';
+import ItineraryTimeline from '../components/ItineraryTimeline.jsx';
 import { formatCurrency } from '../../shared/fdPackage/index.js';
 
 // Item 2 — agent-facing status labels/tones match the wireframe's colour
@@ -349,6 +350,11 @@ export default function MiceProposalDetail() {
             empty="No activities selected."
             renderMeta={(a) => `${a.city || '—'}${a.duration ? ` · ${a.duration}` : ''}`}
           />
+
+          {/* Day-wise Itinerary Planner — whatever's here is exactly what was
+              submitted, or what the admin has since rearranged; both write
+              through the same rows this reads. */}
+          <ItineraryTimeline days={miceRfq.itinerary} emptyLabel="No day-wise itinerary was added for this request." />
 
           {miceRfq.status === 'published' && <AgentActions miceRfq={miceRfq} onUpdated={setMiceRfq} />}
 

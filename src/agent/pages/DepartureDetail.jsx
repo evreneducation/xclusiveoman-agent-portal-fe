@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { Badge, Button, Card, Checkbox, ErrorText, Select, StarRating, TextInput } from '../components/ui.jsx';
 import { formatCurrency, formatShortDate, getFdBadges, getSeatsLeft } from '../../shared/fdPackage/index.js';
+import { ITINERARY_ITEM_TYPE_META } from '../../shared/itinerary/index.js';
 
 // Airbnb/Booking.com-style photo grid — one large hero image on the left,
 // up to 4 more actual images on the right (no empty placeholder tiles for
@@ -131,7 +132,12 @@ function HotelInformation({ hotel }) {
 
 // Vertical timeline instead of a plain stacked list — each day gets a
 // numbered node connected by a line, which reads far more like a premium
-// travel itinerary than plain "Day 1 — ..." text rows.
+// travel itinerary than plain "Day 1 — ..." text rows. `itinerary` is the
+// wire shape composed server-side (fdPackages.model.js's composeItinerary):
+// [{ dayNumber, notes, items: [{ type, id, name, city, note }] }] — the same
+// shape the admin's Day-by-day itinerary builder now saves (see
+// admin/pages/FdPackageEditor.jsx), not the old single free-text
+// `description` per day.
 function ItineraryTimeline({ itinerary }) {
   return (
     <Card className="border-white">
@@ -145,9 +151,30 @@ function ItineraryTimeline({ itinerary }) {
             <span className="relative z-10 flex h-8 w-8 flex-none items-center justify-center rounded-full bg-agent-ink text-xs font-bold text-white shadow-sm">
               {day.dayNumber}
             </span>
-            <div className="pt-1 text-sm text-agent-ink">
-              <div className="mb-0.5 text-xs font-bold uppercase tracking-wide text-agent-accent-dark">Day {day.dayNumber}</div>
-              {day.description}
+            <div className="flex-1 pt-1 text-sm text-agent-ink">
+              <div className="mb-1.5 text-xs font-bold uppercase tracking-wide text-agent-accent-dark">Day {day.dayNumber}</div>
+              {day.items?.length > 0 && (
+                <div className="mb-2 space-y-1">
+                  {day.items.map((item, itemIdx) => {
+                    const meta = ITINERARY_ITEM_TYPE_META[item.type];
+                    return (
+                      <div
+                        key={`${item.type}:${item.id}:${itemIdx}`}
+                        className="rounded-md border border-agent-line-light bg-agent-panel px-2.5 py-1.5"
+                      >
+                        <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-agent-ink">
+                          <span>{meta?.icon}</span>
+                          {item.name || meta?.label || 'Item'}
+                          {item.city ? ` · ${item.city}` : ''}
+                        </span>
+                        {item.note && <p className="mt-0.5 pl-[1.375rem] text-[11px] text-agent-muted">{item.note}</p>}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {day.notes && <p>{day.notes}</p>}
+              {!day.items?.length && !day.notes && <p className="text-agent-muted">Nothing planned yet.</p>}
             </div>
           </div>
         ))}
