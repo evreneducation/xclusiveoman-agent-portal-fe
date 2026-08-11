@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
-  LuBriefcase,
   LuBuilding2,
   LuChartColumn,
   LuChevronDown,
@@ -29,6 +28,10 @@ import { Button } from './ui.jsx';
 // Transaction Ledger) now live as sub-items under a parent group; none of
 // those routes or their page components changed. Icons are react-icons
 // (Lucide set) rather than hand-rolled SVGs.
+//
+// Relationship Managers and Sales Managers used to be two separate sub-items
+// (each its own page) — now one "Employees" entry, whose page has a tab per
+// staff type (Employees.jsx).
 const NAV_ITEMS = [
   { key: 'dashboard', to: '/admin/dashboard', label: 'Dashboard', Icon: LuLayoutDashboard },
   {
@@ -37,8 +40,7 @@ const NAV_ITEMS = [
     Icon: LuBuilding2,
     children: [
       { to: '/admin/approvals', label: 'Agent Approvals', Icon: LuUserCheck },
-      { to: '/admin/relationship-managers', label: 'Relationship Managers', Icon: LuContact },
-      { to: '/admin/sales-managers', label: 'Sales Managers', Icon: LuBriefcase },
+      { to: '/admin/employees', label: 'Employees', Icon: LuContact },
     ],
   },
   {
