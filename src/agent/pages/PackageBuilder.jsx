@@ -420,9 +420,15 @@ function DayHotelSection({ city, hotels, currentHotelId, onSelect }) {
   );
 }
 
+// Tours and Transfers are marked required (matching the "*" convention used
+// elsewhere in this builder, e.g. "City *") — validateStep(2) below blocks
+// moving past Itinerary until every day has at least one of each. Extras
+// stay optional. `required` only decorates the field label — kept separate
+// from `label` itself so the lowercased "No {label} available…" empty-state
+// message below doesn't pick up a stray asterisk.
 const DAY_SECTION_META = {
-  tour: { label: 'Tours', addLabel: '+ Add tour' },
-  transfer: { label: 'Transfers', addLabel: '+ Add transfer' },
+  tour: { label: 'Tours', addLabel: '+ Add tour', required: true },
+  transfer: { label: 'Transfers', addLabel: '+ Add transfer', required: true },
   activity: { label: 'Extras', addLabel: '+ Add extra' },
 };
 
@@ -437,7 +443,10 @@ function DayCatalogSection({ type, city, catalog, placedItems, onAdd, onRemove, 
 
   return (
     <div>
-      <FieldLabel>{meta.label}</FieldLabel>
+      <FieldLabel>
+        {meta.label}
+        {meta.required && ' *'}
+      </FieldLabel>
       {placedItems.length === 0 ? (
         <p className="mb-1 text-[11px] text-agent-muted">None added for this day.</p>
       ) : (
@@ -682,15 +691,19 @@ function TravelersEditor({ travelers, updateTraveler }) {
 }
 
 // Step 3 — review & submit. No price/cost/markup fields anywhere (FIT-6).
-function ReviewStep({ form, dayCount, hotels, days, selectedCounts, travelers, updateTraveler }) {
+function ReviewStep({ form, dayCount, hotels, days, selectedCounts, travelers, updateTraveler, downloadingPdf, onDownloadPdf }) {
   return (
     <div className="space-y-4">
       {/* Redesigned to read like a real client-facing itinerary document
-          (see ItineraryDocument.jsx) rather than a wizard-review checklist —
-          this is also the print/PDF surface, hence the Print button here and
-          .print:hidden below rather than inside the document itself. */}
+          (see ItineraryDocument.jsx) rather than a wizard-review checklist.
+          "Download PDF" renders this same document server-side (Puppeteer —
+          see itineraryPdf.service.js) instead of the browser's own
+          print-to-PDF, so the .print:hidden below is now just a fallback in
+          case an agent uses their browser's own Ctrl+P on this page. */}
       <div className="flex justify-end print:hidden">
-        <Button onClick={() => window.print()}>🖨️ Print / Save as PDF</Button>
+        <Button variant="accent" onClick={onDownloadPdf} disabled={downloadingPdf}>
+          {downloadingPdf ? 'Generating PDF…' : '⬇️ Download PDF'}
+        </Button>
       </div>
 
       <ItineraryDocument
@@ -715,7 +728,7 @@ function ReviewStep({ form, dayCount, hotels, days, selectedCounts, travelers, u
   );
 }
 
-function validateStep(step, { form, cityDays, itineraryItems, travelers }) {
+function validateStep(step, { form, cityDays, itineraryItems, travelers, dayCount }) {
   if (step === 1) {
     if (!form.destination.trim()) return 'Destination is required.';
     if (!form.dateFrom || !form.dateTo) return 'Travel start and end dates are required.';
@@ -732,6 +745,16 @@ function validateStep(step, { form, cityDays, itineraryItems, travelers }) {
     // Hotel selection now happens per day inside Itinerary (was its own
     // Trip Details gate before) — still mandatory before moving on.
     if (!itineraryItems.some((it) => it.type === 'hotel')) return 'Select at least one hotel in your itinerary.';
+    // Every day needs at least one tour and one transfer of its own, not
+    // just somewhere in the trip — mirrors the day-by-day granularity the
+    // rest of Itinerary already works at (hotel is trip-wide since the same
+    // hotel usually covers a whole city stay; tours/transfers are what
+    // actually varies day to day).
+    for (let day = 1; day <= dayCount; day++) {
+      const dayItems = itemsForDay(itineraryItems, day);
+      if (!dayItems.some((it) => it.type === 'tour')) return `Day ${day} needs at least one tour.`;
+      if (!dayItems.some((it) => it.type === 'transfer')) return `Day ${day} needs at least one transfer.`;
+    }
     return '';
   }
   if (step === 3) {
@@ -789,6 +812,7 @@ export default function PackageBuilder() {
   const [draftLoading, setDraftLoading] = useState(!!draftIdParam);
   const [savingDraft, setSavingDraft] = useState(false);
   const [draftSavedAt, setDraftSavedAt] = useState(null);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -1006,8 +1030,47 @@ export default function PackageBuilder() {
     }
   }
 
+  // Server-side PDF export (itineraryPdf.service.js on the backend) replaces
+  // the old window.print() flow — that relied on the agent's own browser/OS
+  // print engine, which drifted from the on-screen Tailwind design (dropped
+  // shadows/backgrounds, different flex/grid rounding). The download
+  // endpoint renders this same package request's ItineraryDocument in a real
+  // headless Chromium instead, so it needs the request saved server-side
+  // first — syncs the current in-progress edits to the draft row (creating
+  // it if this session never saved one) immediately before requesting the
+  // PDF, so what downloads always matches what's on screen right now.
+  async function handleDownloadPdf() {
+    setError('');
+    setDownloadingPdf(true);
+    try {
+      let id = draftId;
+      if (id) {
+        await api.patch(`/package-requests/${id}`, buildDraftPayload());
+      } else {
+        const { packageRequest } = await api.post('/package-requests/draft', buildDraftPayload());
+        id = packageRequest.id;
+        setDraftId(id);
+        navigate(`/agent/package-builder/${id}`, { replace: true });
+      }
+
+      const blob = await api.getBlob(`/package-requests/${id}/itinerary.pdf`);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `itinerary-${id}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err.message || 'Unable to generate PDF');
+    } finally {
+      setDownloadingPdf(false);
+    }
+  }
+
   function goNext() {
-    const validationError = validateStep(step, { form, cityDays, itineraryItems, travelers });
+    const validationError = validateStep(step, { form, cityDays, itineraryItems, travelers, dayCount });
     if (validationError) {
       setError(validationError);
       return;
@@ -1154,6 +1217,8 @@ export default function PackageBuilder() {
               selectedCounts={selectedCounts}
               travelers={travelers}
               updateTraveler={updateTraveler}
+              downloadingPdf={downloadingPdf}
+              onDownloadPdf={handleDownloadPdf}
             />
           )}
 

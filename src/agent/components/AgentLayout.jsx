@@ -15,7 +15,6 @@ import {
   LogoutIcon,
   MenuIcon,
   NotificationsIcon,
-  PanelIcon,
   PaymentsIcon,
   ProfileIcon,
   QuotesIcon,
@@ -147,7 +146,8 @@ export default function AgentLayout() {
   const { socketConnected } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
   // Desktop rail starts collapsed (icon-only) to leave more room for page
-  // content — click the panel toggle to pin it open; click again to collapse.
+  // content — hovering over it expands it, moving the mouse away collapses
+  // it back.
   const [collapsed, setCollapsed] = useState(true);
   const activeItem = NAV_ITEMS.find((item) => pathname === item.to || pathname.startsWith(`${item.to}/`));
 
@@ -158,19 +158,10 @@ export default function AgentLayout() {
         initial={{ x: -28, opacity: 0, width: COLLAPSED_WIDTH }}
         animate={{ x: 0, opacity: 1, width: collapsed ? COLLAPSED_WIDTH : EXPANDED_WIDTH }}
         transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+        onMouseEnter={() => setCollapsed(false)}
+        onMouseLeave={() => setCollapsed(true)}
         className="sticky top-0 hidden h-screen flex-none flex-col bg-[linear-gradient(180deg,#0b4f4a_0%,#083a36_100%)] shadow-xl shadow-black/10 lg:flex"
       >
-        <div className={`flex items-center border-b border-white/10 px-3 py-3 ${collapsed ? 'justify-center' : 'justify-end'}`}>
-          <button
-            type="button"
-            onClick={() => setCollapsed((c) => !c)}
-            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            className="flex h-8 w-8 flex-none items-center justify-center rounded-lg text-white/70 hover:bg-white/10 hover:text-white"
-          >
-            <PanelIcon width={17} height={17} />
-          </button>
-        </div>
         <SidebarContent collapsed={collapsed} />
       </motion.aside>
 

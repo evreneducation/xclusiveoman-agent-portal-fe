@@ -18,8 +18,7 @@ import QuoteInbox from './pages/QuoteInbox.jsx';
 import QuoteInboxDetail from './pages/QuoteInboxDetail.jsx';
 import MiceRequests from './pages/MiceRequests.jsx';
 import MiceRequestDetail from './pages/MiceRequestDetail.jsx';
-import RelationshipManagers from './pages/RelationshipManagers.jsx';
-import SalesManagers from './pages/SalesManagers.jsx';
+import Employees from './pages/Employees.jsx';
 import TransactionLedger from './pages/TransactionLedger.jsx';
 import BookingsDocuments from './pages/BookingsDocuments.jsx';
 import Marketing from './pages/Marketing.jsx';
@@ -36,8 +35,12 @@ export default function App() {
             <Route element={<AdminLayout />}>
               <Route path="dashboard" element={<Dashboard />} />
               <Route path="approvals" element={<AgentApprovals />} />
-              <Route path="relationship-managers" element={<RelationshipManagers />} />
-              <Route path="sales-managers" element={<SalesManagers />} />
+              <Route path="employees" element={<Employees />} />
+              {/* Replaced by the single Employees page's tabs — kept as
+                  redirects so any old bookmarks/links still land somewhere
+                  useful instead of 404ing. */}
+              <Route path="relationship-managers" element={<Navigate to="/admin/employees?tab=rm" replace />} />
+              <Route path="sales-managers" element={<Navigate to="/admin/employees?tab=salesManager" replace />} />
               <Route path="catalog" element={<ProductCatalog />} />
               <Route path="catalog/fd-packages/:id" element={<FdPackageEditor />} />
               <Route path="catalog/hotels/:id" element={<HotelEditor />} />

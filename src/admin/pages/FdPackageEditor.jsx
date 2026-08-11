@@ -4,6 +4,14 @@ import { api } from '../api/client.js';
 import { useToast } from '../../shared/components/ToastProvider.jsx';
 import { Button, Card, Checkbox, ErrorText, FieldLabel, Select, Tag, Table, TextInput } from '../components/ui.jsx';
 import { FD_THEMES, parseDurationDays } from '../../shared/fdPackage/index.js';
+import {
+  ITINERARY_ITEM_TYPE_META,
+  deserializeItinerary,
+  itemsForDay,
+  itineraryItemKey,
+  serializeItinerary,
+  updateItineraryItemNote,
+} from '../../shared/itinerary/index.js';
 
 // The backend's validateBody() middleware already returns a human-readable
 // `message` (e.g. "Rate gold must be a valid number"). This is a fallback for
@@ -146,29 +154,6 @@ function CarouselImagesUpload({ packageId, images, onChange }) {
   );
 }
 
-function HotelPicker({ hotelId, onChange }) {
-  const [hotels, setHotels] = useState([]);
-
-  useEffect(() => {
-    api.get('/hotels').then((d) => setHotels(d.hotels));
-  }, []);
-
-  return (
-    <div>
-      <FieldLabel>Hotel</FieldLabel>
-      <Select value={hotelId || ''} onChange={(e) => onChange(e.target.value || null)}>
-        <option value="">None</option>
-        {hotels.map((h) => (
-          <option key={h.id} value={h.id}>
-            {h.name} {h.city ? `— ${h.city}` : ''}
-          </option>
-        ))}
-      </Select>
-      <p className="mt-1 text-[10px] text-muted">From the general Hotel Catalog (Product Catalog → Hotels).</p>
-    </div>
-  );
-}
-
 function BasicsForm({ form, update, packageId }) {
   return (
     <Card label="Basics" className="border-white">
@@ -191,7 +176,6 @@ function BasicsForm({ form, update, packageId }) {
             ))}
           </div>
         </div>
-        <HotelPicker hotelId={form.hotelId} onChange={(id) => update('hotelId', id)} />
         <HeroImageUpload packageId={packageId} value={form.heroImageUrl} onUploaded={(url) => update('heroImageUrl', url)} />
         {/* images (carousel) now lives in `form` like every other field —
             previously it had its own parallel `images` state that never
@@ -344,82 +328,397 @@ function DepartureDatesManager({ fdPackageId, dates, onChange }) {
   );
 }
 
-// Renumbers every row 1..N in array order — used after any add/remove so
-// dayNumber always matches position, regardless of how the rows got there
-// (loaded from the DB, grown/trimmed to match Duration, or manually added).
-function withSequentialDayNumbers(list) {
-  return list.map((day, idx) => ({ ...day, dayNumber: idx + 1 }));
-}
+// ---------------------------------------------------------------------------
+// Day-by-day itinerary builder — mirrors the agent Custom FIT Builder's
+// Itinerary step (agent/pages/PackageBuilder.jsx's DayPlanCard): a numbered
+// day-timeline where each day picks its own hotel (single-select) plus
+// tours/transfers/extras (multi-select) straight from the catalog, instead of
+// one free-text line per day. Unlike the agent builder there's no City & Days
+// planner step first — an FD package doesn't carry per-package trip dates or
+// a multi-city plan the way a Custom FIT quote does, so every day just picks
+// from the full catalog.
+//
+// NOTE: the wire shape this now saves — { dayNumber, notes, items: [{type,
+// id, note}] } — matches the Custom FIT itinerary shape already used by
+// admin/pages/QuoteInboxDetail.jsx and agent/pages/PackageBuilder.jsx (see
+// shared/itinerary/index.js). PUT /admin/fd-packages/:id/itinerary currently
+// only accepts/returns the older { dayNumber, description } shape — the
+// backend needs updating to accept/persist this richer shape before Save
+// Itinerary here round-trips end to end.
+// ---------------------------------------------------------------------------
 
-// How long to wait after the admin stops changing Duration before syncing the
-// day sections. Debounced (rather than reacting to every keystroke) so typing
-// "10 Days" doesn't briefly reconcile against "1 Day" and pop a confirmation.
+// How long to wait after the admin stops changing Duration before checking
+// whether shrinking it just orphaned any day content. Debounced (rather than
+// reacting to every keystroke) so typing "10 Days" doesn't briefly check
+// against "1 Day" and pop a confirmation.
 const DURATION_SYNC_DELAY_MS = 600;
 
+function addItineraryItem(items, { type, id, dayNumber }) {
+  const dayItems = itemsForDay(items, dayNumber);
+  const newItem = {
+    key: `${itineraryItemKey(type, id)}:${dayNumber}:${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    type,
+    id,
+    dayNumber,
+    position: dayItems.length,
+    note: '',
+  };
+  return [...items, newItem];
+}
+
+function removeItineraryItemByKey(items, key) {
+  const removing = items.find((it) => it.key === key);
+  if (!removing) return items;
+  const rest = items.filter((it) => it.key !== key);
+  const remainingInDay = itemsForDay(rest, removing.dayNumber).map((it, idx) => ({ ...it, position: idx }));
+  const others = rest.filter((it) => it.dayNumber !== removing.dayNumber);
+  return [...others, ...remainingInDay];
+}
+
+// Hotel is single-select per day — choosing a new hotel for a day replaces
+// whatever hotel was already there instead of stacking up multiple.
+function setHotelForDay(items, dayNumber, hotelId) {
+  const withoutOldHotel = items.filter((it) => !(it.dayNumber === dayNumber && it.type === 'hotel'));
+  return addItineraryItem(withoutOldHotel, { type: 'hotel', id: hotelId, dayNumber });
+}
+
+const HOTEL_STAR_CATEGORIES = [3, 4, 5];
+
+function HotelStars({ category }) {
+  return (
+    <span className="tracking-tight text-accent">
+      {'★'.repeat(category)}
+      <span className="text-line-light">{'★'.repeat(Math.max(0, 5 - category))}</span>
+    </span>
+  );
+}
+
+function CatalogImage({ url }) {
+  return url ? (
+    <img src={url} alt="" className="h-24 w-full rounded-md border border-line-light object-cover" />
+  ) : (
+    <div className="flex h-24 w-full items-center justify-center rounded-md border border-dashed border-line-light font-mono text-[9px] text-muted">
+      No image
+    </div>
+  );
+}
+
+// A placed hotel/tour/transfer/extra on a specific day.
+function PlacedItemChip({ item, meta, onNoteChange, onRemove }) {
+  const typeMeta = ITINERARY_ITEM_TYPE_META[item.type];
+  return (
+    <div className="rounded-md border border-line-light bg-white px-2.5 py-2 text-xs shadow-sm">
+      <div className="flex items-center gap-2">
+        <span className="flex-none">{typeMeta?.icon}</span>
+        <div className="min-w-0 flex-1">
+          <div className="truncate font-semibold text-ink">{meta?.name || 'Unknown item'}</div>
+          <div className="truncate text-[10px] text-muted">
+            {typeMeta?.label}
+            {meta?.city ? ` · ${meta.city}` : ''}
+          </div>
+        </div>
+        <button type="button" onClick={onRemove} title="Remove" className="flex-none text-muted hover:text-[#a5162d]">
+          🗑
+        </button>
+      </div>
+      <TextInput
+        className="mt-1.5 px-2 py-1.5 text-[11px]"
+        placeholder="Add a note (optional)…"
+        value={item.note || ''}
+        onChange={(e) => onNoteChange(e.target.value)}
+      />
+    </div>
+  );
+}
+
+// A day's hotel section — single-select, gated behind a star-category pick
+// first. Choosing a hotel replaces whatever was already selected for this day.
+function DayHotelSection({ hotels, currentHotelId, onSelect }) {
+  const [open, setOpen] = useState(false);
+  const [starCategory, setStarCategory] = useState('');
+  const filtered = starCategory ? hotels.filter((h) => h.category === starCategory) : hotels;
+  const currentHotel = hotels.find((h) => h.id === currentHotelId) || null;
+
+  return (
+    <div>
+      <FieldLabel>Hotel</FieldLabel>
+      {currentHotel ? (
+        <div className="flex items-center justify-between rounded-md border border-line-light bg-white px-3 py-2 text-xs">
+          <div>
+            <div className="font-semibold text-ink">{currentHotel.name}</div>
+            <div className="text-muted">
+              {currentHotel.category ? `${currentHotel.category}★ · ` : ''}
+              {currentHotel.city}
+            </div>
+          </div>
+          <button type="button" onClick={() => onSelect('')} title="Remove" className="flex-none text-muted hover:text-[#a5162d]">
+            🗑
+          </button>
+        </div>
+      ) : (
+        <p className="mb-1 text-[11px] text-muted">No hotel selected for this day.</p>
+      )}
+      <Button className="mt-1.5" onClick={() => setOpen((o) => !o)}>
+        {open ? 'Close' : currentHotel ? 'Change hotel' : '+ Add hotel'}
+      </Button>
+      {open && (
+        <div className="mt-2 rounded-md border border-dashed border-line-light p-2.5">
+          <div className="mb-2 flex flex-wrap gap-2">
+            {HOTEL_STAR_CATEGORIES.map((cat) => (
+              <button key={cat} type="button" onClick={() => setStarCategory((c) => (c === cat ? '' : cat))}>
+                <Tag active={starCategory === cat}>{cat}★</Tag>
+              </button>
+            ))}
+          </div>
+          {filtered.length === 0 ? (
+            <p className="text-[11px] text-muted">No hotels{starCategory ? ` at ${starCategory}★` : ''}.</p>
+          ) : (
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {filtered.map((h) => {
+                const selected = h.id === currentHotelId;
+                return (
+                  <div
+                    key={h.id}
+                    className={`rounded-md border p-2 text-xs ${selected ? 'border-accent ring-1 ring-accent/25' : 'border-line-light'}`}
+                  >
+                    <CatalogImage url={h.images?.[0]} />
+                    <div className="mt-1.5 font-semibold text-ink">{h.name}</div>
+                    <HotelStars category={h.category} />
+                    <Button
+                      variant={selected ? 'accent' : 'default'}
+                      className="mt-1.5 w-full justify-center"
+                      onClick={() => {
+                        onSelect(selected ? '' : h.id);
+                        setOpen(false);
+                      }}
+                    >
+                      {selected ? 'Selected ✓' : 'Select'}
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Tours and Transfers are marked required (mirrors the agent Custom FIT
+// Builder's per-day requirement) — findItineraryPublishError below blocks
+// publishing until every day has at least one of each. Extras stay optional.
+// `required` only decorates the field label — kept separate from `label`
+// itself so the lowercased "No {label} in the catalog yet." empty-state
+// message below doesn't pick up a stray asterisk.
+const DAY_SECTION_META = {
+  tour: { label: 'Tours', addLabel: '+ Add tour', required: true },
+  transfer: { label: 'Transfers', addLabel: '+ Add transfer', required: true },
+  activity: { label: 'Extras', addLabel: '+ Add extra' },
+};
+
+// A day's tours/transfers/extras section — multi-add. Reusable across all
+// three types since they share the same "toggle catalog card in/out of this
+// day" shape.
+function DayCatalogSection({ type, catalog, placedItems, onAdd, onRemove, onNoteChange }) {
+  const [open, setOpen] = useState(false);
+  const meta = DAY_SECTION_META[type];
+  const placedByItemId = new Map(placedItems.map((it) => [it.id, it]));
+
+  return (
+    <div>
+      <FieldLabel>
+        {meta.label}
+        {meta.required && ' *'}
+      </FieldLabel>
+      {placedItems.length === 0 ? (
+        <p className="mb-1 text-[11px] text-muted">None added for this day.</p>
+      ) : (
+        <div className="mb-1.5 space-y-1.5">
+          {placedItems.map((it) => (
+            <PlacedItemChip
+              key={it.key}
+              item={it}
+              meta={catalog.find((c) => c.id === it.id)}
+              onRemove={() => onRemove(it.key)}
+              onNoteChange={(note) => onNoteChange(it.key, note)}
+            />
+          ))}
+        </div>
+      )}
+      <Button onClick={() => setOpen((o) => !o)}>{open ? 'Close' : meta.addLabel}</Button>
+      {open && (
+        <div className="mt-2 rounded-md border border-dashed border-line-light p-2.5">
+          {catalog.length === 0 ? (
+            <p className="text-[11px] text-muted">No {meta.label.toLowerCase()} in the catalog yet.</p>
+          ) : (
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {catalog.map((item) => {
+                const placed = placedByItemId.get(item.id);
+                return (
+                  <div
+                    key={item.id}
+                    className={`rounded-md border p-2 text-xs ${placed ? 'border-accent ring-1 ring-accent/25' : 'border-line-light'}`}
+                  >
+                    <div className="font-semibold text-ink">{item.name}</div>
+                    <div className="text-muted">
+                      {item.city ? `${item.city} · ` : ''}
+                      {type === 'tour' && `${item.category ? item.category + ' · ' : ''}${item.duration || ''}`}
+                      {type === 'transfer' && `${item.type ? item.type.replace(/_/g, ' ') : ''}${item.vehicleClass ? ' · ' + item.vehicleClass : ''}`}
+                      {type === 'activity' && (item.duration || '')}
+                    </div>
+                    <Button
+                      variant={placed ? 'accent' : 'default'}
+                      className="mt-1.5 w-full justify-center"
+                      onClick={() => (placed ? onRemove(placed.key) : onAdd(item.id))}
+                    >
+                      {placed ? 'Added ✓ (tap to remove)' : 'Add'}
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// One numbered timeline node — the same layout as QuoteInboxDetail.jsx's
+// ItineraryDayCard (circle badge + connecting line + "Day N" heading), except
+// each section here adds directly from the catalog instead of dragging from
+// a pre-selected pool — an FD package has no separate "agent selection" step
+// the way a Custom FIT quote does.
+function DayPlanCard({ dayNumber, items, catalogs, notes, onNotesChange, addItem, removeItem, updateNote, setHotel, isLast }) {
+  const hotelItem = items.find((it) => it.type === 'hotel') || null;
+  const tourItems = items.filter((it) => it.type === 'tour');
+  const transferItems = items.filter((it) => it.type === 'transfer');
+  const activityItems = items.filter((it) => it.type === 'activity');
+
+  return (
+    <div className="relative flex gap-4 pb-6 last:pb-0">
+      {!isLast && <span className="absolute left-[15px] top-8 h-[calc(100%-1.25rem)] w-px bg-line-light" />}
+      <span className="relative z-10 flex h-8 w-8 flex-none items-center justify-center rounded-full bg-ink text-xs font-bold text-white shadow-sm">
+        {dayNumber}
+      </span>
+      <div className="flex-1 space-y-3 pt-0.5">
+        <div className="text-xs font-bold uppercase tracking-wide text-accent">Day {dayNumber}</div>
+        <DayHotelSection hotels={catalogs.hotels} currentHotelId={hotelItem?.id || ''} onSelect={(hotelId) => setHotel(dayNumber, hotelId)} />
+        <DayCatalogSection
+          type="tour"
+          catalog={catalogs.tours}
+          placedItems={tourItems}
+          onAdd={(id) => addItem('tour', id)}
+          onRemove={removeItem}
+          onNoteChange={updateNote}
+        />
+        <DayCatalogSection
+          type="transfer"
+          catalog={catalogs.transfers}
+          placedItems={transferItems}
+          onAdd={(id) => addItem('transfer', id)}
+          onRemove={removeItem}
+          onNoteChange={updateNote}
+        />
+        <DayCatalogSection
+          type="activity"
+          catalog={catalogs.activities}
+          placedItems={activityItems}
+          onAdd={(id) => addItem('activity', id)}
+          onRemove={removeItem}
+          onNoteChange={updateNote}
+        />
+        <TextInput placeholder="Notes for this day (optional)…" value={notes} onChange={(e) => onNotesChange(e.target.value)} />
+      </div>
+    </div>
+  );
+}
+
 function ItineraryManager({ fdPackageId, itinerary, duration, onChange }) {
-  const [days, setDays] = useState(itinerary.length ? itinerary : [{ dayNumber: 1, description: '' }]);
+  const [itineraryItems, setItineraryItems] = useState(() => deserializeItinerary(itinerary).items);
+  const [dayNotes, setDayNotes] = useState(() => deserializeItinerary(itinerary).dayNotes);
   const [saving, setSaving] = useState(false);
-  // Tracks the day count this component last generated the structure for, so
-  // we don't re-run on every render and don't touch a freshly loaded/saved
-  // itinerary just because its length happens to differ from the current
-  // Duration text (e.g. a legacy package edited before this field existed).
-  const lastSyncedDays = useRef(parseDurationDays(duration));
+
+  const [hotels, setHotels] = useState([]);
+  const [tours, setTours] = useState([]);
+  const [transfers, setTransfers] = useState([]);
+  const [activities, setActivities] = useState([]);
+  const [catalogLoading, setCatalogLoading] = useState(true);
+
+  const dayCount = parseDurationDays(duration) || 0;
+  // Tracks the day count content was last checked against, so shrinking
+  // Duration only prompts once per change rather than on every render.
+  const lastSyncedDays = useRef(dayCount);
+
+  useEffect(() => {
+    Promise.all([api.get('/hotels'), api.get('/tours'), api.get('/transfers'), api.get('/activities')])
+      .then(([h, t, tr, a]) => {
+        setHotels(h.hotels || []);
+        setTours(t.tours || []);
+        setTransfers(tr.transfers || []);
+        setActivities(a.activities || []);
+      })
+      .finally(() => setCatalogLoading(false));
+  }, []);
 
   // Reload from the DB whenever the parent hands us a freshly fetched (or
   // just-saved) itinerary — e.g. opening the editor for an existing package.
   useEffect(() => {
-    if (itinerary.length) setDays(withSequentialDayNumbers(itinerary));
+    const { items, dayNotes: loaded } = deserializeItinerary(itinerary);
+    setItineraryItems(items);
+    setDayNotes(loaded);
   }, [itinerary]);
 
-  // Auto-generate/trim day sections to match the selected package duration.
+  // Days are just 1..dayCount, rendered straight off itineraryItems/dayNotes
+  // — there's no separate "days" list to grow/trim the way the old free-text
+  // builder had. Shrinking Duration past days that already have content still
+  // needs a confirmation before that content is dropped, though.
   useEffect(() => {
-    const targetDays = parseDurationDays(duration);
-    if (!targetDays || targetDays === lastSyncedDays.current) return;
-
+    if (!dayCount || dayCount >= lastSyncedDays.current) {
+      lastSyncedDays.current = dayCount;
+      return;
+    }
     const timer = setTimeout(() => {
-      setDays((current) => {
-        if (targetDays === current.length) {
-          lastSyncedDays.current = targetDays;
-          return current;
-        }
-        if (targetDays > current.length) {
-          const added = [];
-          for (let n = current.length + 1; n <= targetDays; n++) added.push({ dayNumber: n, description: '' });
-          lastSyncedDays.current = targetDays;
-          return withSequentialDayNumbers([...current, ...added]);
-        }
-        // Duration shrank — only prompt when a day actually being removed has content.
-        const removedDays = current.slice(targetDays);
-        const hasContent = removedDays.some((d) => (d.description || '').trim());
-        if (hasContent) {
-          const label =
-            removedDays.length > 1 ? `Day ${targetDays + 1} through Day ${current.length}` : `Day ${current.length}`;
-          const ok = window.confirm(
-            `Reducing the duration removes ${label}, which already has itinerary content. Remove it?`
-          );
-          if (!ok) return current; // leave as-is; lastSyncedDays stays unset so this is retried later
-        }
-        lastSyncedDays.current = targetDays;
-        return withSequentialDayNumbers(current.slice(0, targetDays));
-      });
+      const hasOrphanedContent =
+        itineraryItems.some((it) => it.dayNumber > dayCount) ||
+        Object.entries(dayNotes).some(([day, note]) => Number(day) > dayCount && (note || '').trim());
+      if (hasOrphanedContent) {
+        const ok = window.confirm(
+          `Reducing the duration removes itinerary content on Day ${dayCount + 1} onward. Remove it?`
+        );
+        if (!ok) return; // leave as-is; retried once Duration settles on a smaller value
+      }
+      setItineraryItems((items) => items.filter((it) => it.dayNumber <= dayCount));
+      setDayNotes((notes) => Object.fromEntries(Object.entries(notes).filter(([day]) => Number(day) <= dayCount)));
+      lastSyncedDays.current = dayCount;
     }, DURATION_SYNC_DELAY_MS);
-
     return () => clearTimeout(timer);
-  }, [duration]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dayCount]);
 
-  function updateDay(idx, description) {
-    setDays((d) => d.map((day, i) => (i === idx ? { ...day, description } : day)));
+  function addItemToDay(dayNumber, type, id) {
+    setItineraryItems((items) => addItineraryItem(items, { type, id, dayNumber }));
   }
 
-  // Manual fallback for when Duration hasn't been set to a recognizable day
-  // count yet — once it is, day sections are generated automatically above.
-  function addDay() {
-    setDays((d) => withSequentialDayNumbers([...d, { dayNumber: d.length + 1, description: '' }]));
+  function removeItemFromDay(key) {
+    setItineraryItems((items) => removeItineraryItemByKey(items, key));
+  }
+
+  function updateItemNoteByKey(key, note) {
+    setItineraryItems((items) => updateItineraryItemNote(items, key, note));
+  }
+
+  function setHotelForDayNumber(dayNumber, hotelId) {
+    setItineraryItems((items) =>
+      hotelId ? setHotelForDay(items, dayNumber, hotelId) : items.filter((it) => !(it.dayNumber === dayNumber && it.type === 'hotel')),
+    );
   }
 
   async function save() {
     setSaving(true);
     try {
+      const days = serializeItinerary(itineraryItems, dayNotes, dayCount);
       const { itinerary: saved } = await api.put(`/admin/fd-packages/${fdPackageId}/itinerary`, { days });
       onChange(saved);
     } finally {
@@ -427,26 +726,40 @@ function ItineraryManager({ fdPackageId, itinerary, duration, onChange }) {
     }
   }
 
-  const targetDays = parseDurationDays(duration);
-
   return (
     <Card label="Day-by-day itinerary builder" className="border-white">
       <p className="mb-3 text-[10px] text-muted">
-        {targetDays
-          ? `Day sections are generated automatically from Duration (${targetDays} day${targetDays === 1 ? '' : 's'}). Changing Duration above adds or removes days here — removing a day with content asks for confirmation first.`
-          : 'Set a Duration above (e.g. "7N/8D") to auto-generate day sections, or add days manually below.'}
+        {dayCount
+          ? `${dayCount} day${dayCount === 1 ? '' : 's'}, generated from Duration above. Each day picks its own hotel plus tours/transfers/extras straight from the catalog.`
+          : 'Set a Duration above (e.g. "7N/8D") to generate day sections.'}
       </p>
-      <div className="space-y-2">
-        {days.map((day, idx) => (
-          <div key={day.id || idx} className="flex items-center gap-2">
-            <span className="w-14 flex-none text-xs text-muted">Day {day.dayNumber}</span>
-            <TextInput value={day.description} onChange={(e) => updateDay(idx, e.target.value)} />
-          </div>
-        ))}
-      </div>
+      {dayCount === 0 ? (
+        <p className="rounded-md border border-dashed border-line-light bg-panel/40 p-4 text-center text-sm text-muted">
+          Set a Duration above to start building the itinerary.
+        </p>
+      ) : catalogLoading ? (
+        <p className="text-sm text-muted">Loading catalog…</p>
+      ) : (
+        <div>
+          {Array.from({ length: dayCount }, (_, i) => i + 1).map((dayNumber) => (
+            <DayPlanCard
+              key={dayNumber}
+              dayNumber={dayNumber}
+              items={itemsForDay(itineraryItems, dayNumber)}
+              catalogs={{ hotels, tours, transfers, activities }}
+              notes={dayNotes[dayNumber] || ''}
+              onNotesChange={(value) => setDayNotes((n) => ({ ...n, [dayNumber]: value }))}
+              addItem={(type, id) => addItemToDay(dayNumber, type, id)}
+              removeItem={removeItemFromDay}
+              updateNote={updateItemNoteByKey}
+              setHotel={setHotelForDayNumber}
+              isLast={dayNumber === dayCount}
+            />
+          ))}
+        </div>
+      )}
       <div className="mt-3 flex gap-2">
-        {!targetDays && <Button onClick={addDay}>+ Add Day</Button>}
-        <Button variant="accent" disabled={saving} onClick={save}>
+        <Button variant="accent" disabled={saving || dayCount === 0} onClick={save}>
           {saving ? 'Saving…' : 'Save Itinerary'}
         </Button>
       </div>
@@ -588,14 +901,26 @@ export default function FdPackageEditor() {
   // requires before a package goes live (FGD-2 / ADM-6 catalog screens both
   // show the full day-by-day plan). Checked against `itinerary` — the last
   // saved state from "Save Itinerary" above — not any unsaved in-progress edit.
+  // `itinerary` is now the { dayNumber, notes, items } shape (see
+  // ItineraryManager above) — days with neither notes nor items are omitted
+  // entirely rather than kept as an empty row, so "every day has content" is
+  // checked by looking each day 1..targetDays up rather than by length.
   function findItineraryPublishError() {
     if (!itinerary.length) return 'Add the day-by-day itinerary before publishing.';
     const targetDays = parseDurationDays(form.duration);
-    if (targetDays && itinerary.length !== targetDays) {
-      return `The saved itinerary has ${itinerary.length} day(s) but Duration implies ${targetDays}. Open "Day-by-day itinerary builder" and click Save Itinerary to sync it, then publish.`;
+    if (!targetDays) return null;
+    const byDay = new Map(itinerary.map((d) => [d.dayNumber, d]));
+    for (let n = 1; n <= targetDays; n++) {
+      const day = byDay.get(n);
+      const items = day?.items || [];
+      const hasContent = (day?.notes || '').trim() || items.length > 0;
+      if (!hasContent) return `Day ${n} is missing itinerary details. Fill in every day before publishing.`;
+      // Every day needs its own tour and transfer, not just somewhere in the
+      // package — mirrors the agent Custom FIT Builder's per-day requirement
+      // (see PackageBuilder.jsx's validateStep).
+      if (!items.some((it) => it.type === 'tour')) return `Day ${n} needs at least one tour before publishing.`;
+      if (!items.some((it) => it.type === 'transfer')) return `Day ${n} needs at least one transfer before publishing.`;
     }
-    const missingDay = itinerary.find((d) => !(d.description || '').trim());
-    if (missingDay) return `Day ${missingDay.dayNumber} is missing itinerary details. Fill in every day before publishing.`;
     return null;
   }
 
