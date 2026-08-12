@@ -70,13 +70,8 @@ export default function ItineraryDocument({
       {/* 1. Header */}
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4 border-b border-agent-line-light pb-4">
         <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 flex-none items-center justify-center rounded-2xl bg-agent-ink text-base font-bold text-white shadow-sm print:shadow-none">
-            XO
-          </div>
-          <div>
-            <div className="text-base font-bold leading-tight text-agent-ink">Xclusive Oman</div>
-            <div className="text-xs text-agent-muted">Custom FIT Itinerary</div>
-          </div>
+          <img src="/Xclusive_Oman_Logo_2.png" alt="Xclusive Oman" className="h-10 w-auto flex-none object-contain" />
+          <div className="text-xs text-agent-muted">Custom FIT Itinerary</div>
         </div>
         <div className="text-right">
           <h2 className="text-2xl font-bold text-agent-ink">Detailed Itinerary</h2>

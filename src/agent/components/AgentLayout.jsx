@@ -65,15 +65,18 @@ function SidebarContent({ onNavigate, collapsed = false }) {
 
   return (
     <>
-      <div className={`flex items-center gap-3 border-b border-white/10 px-6 py-6 ${collapsed ? 'justify-center px-3' : ''}`}>
-        <div className="flex h-11 w-11 flex-none items-center justify-center rounded-2xl bg-white text-base font-bold text-agent-ink shadow-lg shadow-black/20">
-          XO
-        </div>
+      <div
+        className={`flex items-center border-b border-white/10 ${collapsed ? 'justify-center px-2 py-4' : 'justify-between px-6 py-6'}`}
+      >
+        <img
+          src={collapsed ? '/logo_scroll_closed.png' : '/Xclusive_Oman_Logo_2.png'}
+          alt="Xclusive Oman"
+          className={`w-auto flex-none object-contain ${collapsed ? 'h-10' : 'h-12'}`}
+        />
         {!collapsed && (
-          <div>
-            <div className="text-sm font-bold leading-tight text-white">Xclusive Oman</div>
-            <div className="text-xs text-white/60">Agent Portal</div>
-          </div>
+          <span className="flex-none rounded-full border border-agent-accent/40 bg-agent-accent-soft px-2.5 py-1 text-xs font-semibold uppercase text-agent-accent-dark">
+            Agent
+          </span>
         )}
       </div>
 
