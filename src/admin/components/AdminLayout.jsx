@@ -150,20 +150,18 @@ export default function AdminLayout() {
         onMouseLeave={() => setCollapsed(true)}
         className="sticky top-0 flex h-screen flex-none flex-col border-r border-line-light bg-white/95 backdrop-blur"
       >
-        <div className={`flex items-center gap-3 border-b border-line-light px-6 py-6 ${collapsed ? 'justify-center px-3' : ''}`}>
-          <div className="flex h-11 w-11 flex-none items-center justify-center rounded-2xl bg-ink text-base font-bold text-white shadow-lg shadow-ink/20">
-            XO
-          </div>
+        <div
+          className={`flex items-center border-b border-line-light ${collapsed ? 'justify-center px-2 py-4' : 'justify-between px-6 py-6'}`}
+        >
+          <img
+            src={collapsed ? '/logo_scroll_closed.png' : '/Xclusive_Oman_Logo_2.png'}
+            alt="Xclusive Oman"
+            className={`w-auto flex-none object-contain ${collapsed ? 'h-10' : 'h-12'}`}
+          />
           {!collapsed && (
-            <div>
-              <div className="flex items-center gap-2 text-sm font-bold leading-tight text-ink">
-                Xclusive Oman
-                <span className="rounded-full border border-accent/40 bg-accent-soft px-2 py-0.5 text-[9px] font-semibold uppercase text-accent">
-                  Admin
-                </span>
-              </div>
-              <div className="text-xs text-muted">Admin Console</div>
-            </div>
+            <span className="flex-none rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-semibold uppercase text-red-600">
+              Admin
+            </span>
           )}
         </div>
 

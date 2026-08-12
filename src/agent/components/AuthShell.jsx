@@ -15,10 +15,7 @@ export default function AuthShell({ eyebrow, heading, tagline, panelFooter, chil
           className="flex flex-col justify-between rounded-2xl bg-agent-ink p-8 text-white shadow-xl shadow-black/15"
         >
           <div>
-            <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-lg font-bold text-agent-ink shadow-lg shadow-black/10">
-              XO
-            </div>
-            <h1 className="text-3xl font-bold">Xclusive Oman</h1>
+            <img src="/Xclusive_Oman_Logo_2.png" alt="Xclusive Oman" className="mb-6 h-14 w-auto object-contain" />
             <div className="mt-2 text-sm text-white/70">B2B &amp; MICE Trade Portal</div>
 
             {eyebrow && (
