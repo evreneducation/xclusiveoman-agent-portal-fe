@@ -77,10 +77,7 @@ export default function Login() {
           transition={{ duration: 0.45, delay: 0.05, ease: 'easeOut' }}
           className="mb-8 text-center"
         >
-          <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-ink text-xl font-bold text-white shadow-lg shadow-black/10">
-            XO
-          </div>
-          <h1 className="text-3xl font-bold text-ink">Xclusive Oman</h1>
+          <img src="/Xclusive_Oman_Logo_2.png" alt="Xclusive Oman" className="mx-auto mb-5 h-16 w-auto object-contain" />
           <div className="mt-1.5 text-sm text-muted">Staff &amp; Admin Console</div>
         </motion.div>
 
