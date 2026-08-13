@@ -375,13 +375,6 @@ export default function DepartureDetail() {
           <Card className="border-white">
             <SectionHeading icon="📋">Booking terms</SectionHeading>
             <ul className="space-y-2 text-sm leading-relaxed text-agent-ink">
-              {departure.depositAmount != null && (
-                <li className="flex gap-2">
-                  <span className="text-agent-accent-dark">•</span>
-                  Deposit of {formatCurrency(departure.depositAmount)} due at booking; balance due{' '}
-                  {departure.balanceDueDaysBefore ?? 30} days before travel.
-                </li>
-              )}
               <li className="flex gap-2">
                 <span className="text-agent-accent-dark">•</span>
                 Full itinerary, hotel, and add-on details are as listed above.
@@ -500,12 +493,6 @@ export default function DepartureDetail() {
                 <Button className="mb-3 w-full" onClick={handleEnquireNow}>
                   💬 Enquire Now
                 </Button>
-                {departure.depositAmount != null && (
-                  <p className="text-center text-xs text-agent-muted">
-                    Deposit {formatCurrency(departure.depositAmount)} now · balance due {departure.balanceDueDaysBefore} days
-                    before travel
-                  </p>
-                )}
               </>
             )}
           </Card>

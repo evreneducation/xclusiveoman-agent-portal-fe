@@ -4,7 +4,7 @@ import { api } from '../api/client.js';
 import { useToast } from '../../shared/components/ToastProvider.jsx';
 import { Button, Card, Checkbox, FieldLabel, Select, Tag, Table, TextInput } from '../components/ui.jsx';
 import { ImageUpload } from '../components/ImageUpload.jsx';
-import { FD_THEMES, parseDurationDays } from '../../shared/fdPackage/index.js';
+import { FD_THEMES, formatCurrency, parseDurationDays } from '../../shared/fdPackage/index.js';
 import {
   ITINERARY_ITEM_TYPE_META,
   deserializeItinerary,
@@ -124,35 +124,55 @@ function BasicsForm({ form, update, packageId }) {
   );
 }
 
-function PricingForm({ form, update }) {
+// Net rate per pax is auto-calculated live from what's placed in the
+// day-by-day itinerary above (hotel nights + tours + transfers + extras —
+// see computeItineraryNetRate/computeNetRatePerPax) plus any meals selected
+// just below it, as soon as either changes — no need to click "Save
+// Itinerary" first. Admin can still set a specific sell price via Edit; that
+// override is saved with the rest of the form (Save as Draft / Publish) and
+// takes over from the computed value until "Reset to automatic" clears it.
+// Deposit amount and balance-due lead time are no longer package-level
+// settings either — every booking now uses a fixed lead time server-side.
+function PricingForm({ form, update, computedRatePerPax }) {
+  const [editing, setEditing] = useState(false);
+  const isOverridden = form.ratePerPax != null;
+  const effective = isOverridden ? form.ratePerPax : computedRatePerPax;
+
   return (
-    <Card label="Tiered net rate (per pax)" className="border-white">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-        <div>
-          <FieldLabel>Gold</FieldLabel>
-          <TextInput type="number" value={form.rateGold || ''} onChange={(e) => update('rateGold', Number(e.target.value))} />
-        </div>
-        <div>
-          <FieldLabel>Silver</FieldLabel>
-          <TextInput type="number" value={form.rateSilver || ''} onChange={(e) => update('rateSilver', Number(e.target.value))} />
-        </div>
-        <div>
-          <FieldLabel>Bronze</FieldLabel>
-          <TextInput type="number" value={form.rateBronze || ''} onChange={(e) => update('rateBronze', Number(e.target.value))} />
-        </div>
-        <div>
-          <FieldLabel>Deposit (INR)</FieldLabel>
-          <TextInput type="number" value={form.depositAmount || ''} onChange={(e) => update('depositAmount', Number(e.target.value))} />
-        </div>
-        <div>
-          <FieldLabel>Balance due (days before)</FieldLabel>
+    <Card label="Pricing" className="border-white">
+      <FieldLabel>Net rate (per pax)</FieldLabel>
+      {editing ? (
+        <div className="flex items-center gap-2">
           <TextInput
             type="number"
-            value={form.balanceDueDaysBefore ?? 30}
-            onChange={(e) => update('balanceDueDaysBefore', Number(e.target.value))}
+            className="w-40"
+            autoFocus
+            placeholder="From itinerary"
+            value={form.ratePerPax ?? ''}
+            onChange={(e) => update('ratePerPax', e.target.value === '' ? null : Number(e.target.value))}
           />
+          <Button onClick={() => setEditing(false)}>Done</Button>
         </div>
-      </div>
+      ) : (
+        <div className="flex items-center gap-2">
+          <div className="flex h-9 w-40 items-center rounded-md border border-line-light bg-panel/40 px-3 text-sm font-semibold text-ink">
+            {effective != null ? formatCurrency(effective) : '—'}
+          </div>
+          <Button onClick={() => setEditing(true)}>Edit</Button>
+          {isOverridden && (
+            <button
+              type="button"
+              className="text-[11px] text-muted underline hover:text-ink"
+              onClick={() => update('ratePerPax', null)}
+            >
+              Reset to automatic
+            </button>
+          )}
+        </div>
+      )}
+      <p className="mt-1 text-[11px] text-muted">
+        {isOverridden ? 'Manually set — saved with the rest of this form.' : 'Calculated automatically from the itinerary and meals above.'}
+      </p>
     </Card>
   );
 }
@@ -310,6 +330,24 @@ function setHotelForDay(items, dayNumber, hotelId) {
   return addItineraryItem(withoutOldHotel, { type: 'hotel', id: hotelId, dayNumber });
 }
 
+// Mirrors the backend's computeNetRatePerPax (fdPackages.model.js) so the
+// "auto" net rate updates live as items are added/removed, without waiting
+// on "Save Itinerary" or a round trip. `catalogs` is the plural
+// {hotels, tours, transfers, activities} shape ItineraryManager already
+// fetches; catalog rows come straight off the DB (snake_case), same as the
+// backend reads them.
+const ITINERARY_CATALOG_KEY = { hotel: 'hotels', tour: 'tours', transfer: 'transfers', activity: 'activities' };
+const ITINERARY_PRICE_FIELD = { hotel: 'price_per_night', tour: 'price', transfer: 'price', activity: 'price_per_pax' };
+
+function computeItineraryNetRate(items, catalogs) {
+  return items.reduce((total, it) => {
+    const list = catalogs[ITINERARY_CATALOG_KEY[it.type]] || [];
+    const field = ITINERARY_PRICE_FIELD[it.type];
+    const ref = list.find((c) => c.id === it.id);
+    return total + (ref ? Number(ref[field]) || 0 : 0);
+  }, 0);
+}
+
 const HOTEL_STAR_CATEGORIES = [3, 4, 5];
 
 function HotelStars({ category }) {
@@ -334,6 +372,8 @@ function CatalogImage({ url }) {
 // A placed hotel/tour/transfer/extra on a specific day.
 function PlacedItemChip({ item, meta, onNoteChange, onRemove }) {
   const typeMeta = ITINERARY_ITEM_TYPE_META[item.type];
+  const priceField = ITINERARY_PRICE_FIELD[item.type];
+  const price = meta?.[priceField];
   return (
     <div className="rounded-md border border-line-light bg-white px-2.5 py-2 text-xs shadow-sm">
       <div className="flex items-center gap-2">
@@ -345,6 +385,7 @@ function PlacedItemChip({ item, meta, onNoteChange, onRemove }) {
             {meta?.city ? ` · ${meta.city}` : ''}
           </div>
         </div>
+        {price != null && <span className="flex-none text-[11px] font-semibold text-ink">{formatCurrency(price)}</span>}
         <button type="button" onClick={onRemove} title="Remove" className="flex-none text-muted hover:text-[#a5162d]">
           🗑
         </button>
@@ -379,9 +420,14 @@ function DayHotelSection({ hotels, currentHotelId, onSelect }) {
               {currentHotel.city}
             </div>
           </div>
-          <button type="button" onClick={() => onSelect('')} title="Remove" className="flex-none text-muted hover:text-[#a5162d]">
-            🗑
-          </button>
+          <div className="flex items-center gap-2">
+            {currentHotel.price_per_night != null && (
+              <span className="font-semibold text-ink">{formatCurrency(currentHotel.price_per_night)}/night</span>
+            )}
+            <button type="button" onClick={() => onSelect('')} title="Remove" className="flex-none text-muted hover:text-[#a5162d]">
+              🗑
+            </button>
+          </div>
         </div>
       ) : (
         <p className="mb-1 text-[11px] text-muted">No hotel selected for this day.</p>
@@ -411,7 +457,10 @@ function DayHotelSection({ hotels, currentHotelId, onSelect }) {
                   >
                     <CatalogImage url={h.images?.[0]} />
                     <div className="mt-1.5 font-semibold text-ink">{h.name}</div>
-                    <HotelStars category={h.category} />
+                    <div className="flex items-center justify-between">
+                      <HotelStars category={h.category} />
+                      {h.price_per_night != null && <span className="font-semibold text-ink">{formatCurrency(h.price_per_night)}/night</span>}
+                    </div>
                     <Button
                       variant={selected ? 'accent' : 'default'}
                       className="mt-1.5 w-full justify-center"
@@ -488,11 +537,16 @@ function DayCatalogSection({ type, catalog, placedItems, onAdd, onRemove, onNote
                     key={item.id}
                     className={`rounded-md border p-2 text-xs ${placed ? 'border-accent ring-1 ring-accent/25' : 'border-line-light'}`}
                   >
-                    <div className="font-semibold text-ink">{item.name}</div>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="font-semibold text-ink">{item.name}</div>
+                      {item[ITINERARY_PRICE_FIELD[type]] != null && (
+                        <span className="flex-none font-semibold text-ink">{formatCurrency(item[ITINERARY_PRICE_FIELD[type]])}</span>
+                      )}
+                    </div>
                     <div className="text-muted">
                       {item.city ? `${item.city} · ` : ''}
                       {type === 'tour' && `${item.category ? item.category + ' · ' : ''}${item.duration || ''}`}
-                      {type === 'transfer' && `${item.type ? item.type.replace(/_/g, ' ') : ''}${item.vehicleClass ? ' · ' + item.vehicleClass : ''}`}
+                      {type === 'transfer' && `${item.type ? item.type.replace(/_/g, ' ') : ''}${item.vehicle_class ? ' · ' + item.vehicle_class : ''}`}
                       {type === 'activity' && (item.duration || '')}
                     </div>
                     <Button
@@ -563,7 +617,7 @@ function DayPlanCard({ dayNumber, items, catalogs, notes, onNotesChange, addItem
   );
 }
 
-function ItineraryManager({ fdPackageId, itinerary, duration, onChange }) {
+function ItineraryManager({ fdPackageId, itinerary, duration, onChange, onComputedRateChange }) {
   const [itineraryItems, setItineraryItems] = useState(() => deserializeItinerary(itinerary).items);
   const [dayNotes, setDayNotes] = useState(() => deserializeItinerary(itinerary).dayNotes);
   const [saving, setSaving] = useState(false);
@@ -589,6 +643,15 @@ function ItineraryManager({ fdPackageId, itinerary, duration, onChange }) {
       })
       .finally(() => setCatalogLoading(false));
   }, []);
+
+  // Recomputed live on every itinerary edit — no need to click "Save
+  // Itinerary" first. Skipped until catalogs finish loading so the price
+  // doesn't flash to ₹0 while hotels/tours/transfers/activities are still
+  // in flight.
+  useEffect(() => {
+    if (catalogLoading) return;
+    onComputedRateChange?.(computeItineraryNetRate(itineraryItems, { hotels, tours, transfers, activities }));
+  }, [itineraryItems, hotels, tours, transfers, activities, catalogLoading, onComputedRateChange]);
 
   // Reload from the DB whenever the parent hands us a freshly fetched (or
   // just-saved) itinerary — e.g. opening the editor for an existing package.
@@ -780,19 +843,169 @@ function AddonsManager({ fdPackageId, addons, onChange }) {
   );
 }
 
+// One meal type's fields (Lunch or Dinner) — just a headcount and a day
+// count; there's no picking a specific catalog entry, `meal` is resolved
+// automatically by MealsManager (the one meals-catalog row of that
+// meal_type). Reusable since Lunch and Dinner are otherwise identical. Shows
+// the live cost (price_per_day × people × days — mirrors computeMealsCost on
+// the backend; the catalog only captures a "price for 1 day" now, treated as
+// the per-person-per-day rate). `enabled` is separate local UI state in the
+// parent so checking the box doesn't depend on a price already existing, and
+// Checkbox itself renders no children — the detail fields are a sibling,
+// shown only while enabled.
+function MealSection({ label, meal, enabled, onToggle, people, days, onFieldChange }) {
+  const cost = meal && people && days ? Number(meal.price_per_day) * Number(people) * Number(days) : 0;
+
+  return (
+    <div>
+      <Checkbox checked={enabled} onChange={onToggle} label={label} />
+      {enabled &&
+        (meal ? (
+          <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <FieldLabel>Number of people</FieldLabel>
+              <TextInput type="number" value={people ?? ''} onChange={(e) => onFieldChange({ people: e.target.value, days })} />
+            </div>
+            <div>
+              <FieldLabel>Number of {label.toLowerCase()} days</FieldLabel>
+              <TextInput type="number" value={days ?? ''} onChange={(e) => onFieldChange({ people, days: e.target.value })} />
+            </div>
+            <p className="sm:col-span-2 text-[11px] text-muted">
+              {formatCurrency(meal.price_per_day)}/person/day · {label} cost: {formatCurrency(cost)}
+            </p>
+          </div>
+        ) : (
+          <p className="mt-2 text-[11px] text-muted">No {label.toLowerCase()} price configured in the catalog yet.</p>
+        ))}
+    </div>
+  );
+}
+
+// Optional lunch/dinner add-ons — either, both, or neither. Just a headcount
+// and a day count per type; the price comes straight from that meal_type's
+// catalog entry (see meals tab), not a picker. The combined cost feeds live
+// into the auto-computed Net rate (see PricingForm) the same way the
+// itinerary does, via onComputedRateChange; nothing here is persisted
+// separately, it's just more fields on `form` saved with Save as Draft/Publish.
+function MealsManager({ form, update, onComputedRateChange }) {
+  const [meals, setMeals] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [lunchEnabled, setLunchEnabled] = useState(false);
+  const [dinnerEnabled, setDinnerEnabled] = useState(false);
+
+  useEffect(() => {
+    api.get('/meals').then((d) => setMeals(d.meals || [])).finally(() => setLoading(false));
+  }, []);
+
+  // Sync the toggles once this package's data has actually loaded (form.id
+  // shows up) — not on every keystroke elsewhere in the form, and not before
+  // there's anything to sync from.
+  useEffect(() => {
+    if (form.id == null) return;
+    setLunchEnabled(form.lunchMealId != null);
+    setDinnerEnabled(form.dinnerMealId != null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.id]);
+
+  // "The" lunch/dinner entry — one catalog row is expected per meal_type
+  // (see the meals tab), so there's nothing for the admin to choose between.
+  const lunchMeal = meals.find((m) => m.meal_type === 'lunch');
+  const dinnerMeal = meals.find((m) => m.meal_type === 'dinner');
+
+  function mealCost(meal, people, days) {
+    return meal && people && days ? Number(meal.price_per_day) * Number(people) * Number(days) : 0;
+  }
+  const mealsTotal = mealCost(lunchMeal, form.lunchPeople, form.lunchDays) + mealCost(dinnerMeal, form.dinnerPeople, form.dinnerDays);
+
+  useEffect(() => {
+    if (loading) return;
+    onComputedRateChange?.(mealsTotal);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mealsTotal, loading]);
+
+  function toggleMeal(prefix, setEnabled, meal, checked) {
+    setEnabled(checked);
+    if (checked) {
+      update(`${prefix}MealId`, meal?.id ?? null);
+    } else {
+      update(`${prefix}MealId`, null);
+      update(`${prefix}People`, null);
+      update(`${prefix}Days`, null);
+    }
+  }
+
+  function fieldChange(prefix, { people, days }) {
+    update(`${prefix}People`, people === '' ? null : Number(people));
+    update(`${prefix}Days`, days === '' ? null : Number(days));
+  }
+
+  return (
+    <Card label="Meals" className="border-white">
+      {loading ? (
+        <p className="text-sm text-muted">Loading meal options…</p>
+      ) : (
+        <div className="space-y-3">
+          <MealSection
+            label="Lunch"
+            meal={lunchMeal}
+            enabled={lunchEnabled}
+            onToggle={(checked) => toggleMeal('lunch', setLunchEnabled, lunchMeal, checked)}
+            people={form.lunchPeople}
+            days={form.lunchDays}
+            onFieldChange={(next) => fieldChange('lunch', next)}
+          />
+          <MealSection
+            label="Dinner"
+            meal={dinnerMeal}
+            enabled={dinnerEnabled}
+            onToggle={(checked) => toggleMeal('dinner', setDinnerEnabled, dinnerMeal, checked)}
+            people={form.dinnerPeople}
+            days={form.dinnerDays}
+            onFieldChange={(next) => fieldChange('dinner', next)}
+          />
+          {(lunchEnabled || dinnerEnabled) && (
+            <p className="text-sm font-semibold text-ink">Meals total: {formatCurrency(mealsTotal)}</p>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// The backend's `ratePerPax` is the resolved/effective price (override, or
+// the itinerary total when there isn't one) — useful for display elsewhere,
+// but the editor needs to know whether an override actually exists so it can
+// decide "auto" vs "edit" mode. Reshape it into `ratePerPax: rateOverride`
+// (raw, nullable) so `form.ratePerPax` always means exactly what a PATCH
+// will persist to rate_per_pax, matching PricingForm's expectations.
+function toFormState(fdPackage) {
+  return { ...fdPackage, ratePerPax: fdPackage.rateOverride ?? null };
+}
+
 export default function FdPackageEditor() {
   const { id } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
   const isNew = id === 'new';
 
-  const [form, setForm] = useState({ balanceDueDaysBefore: 30 });
+  const [form, setForm] = useState({});
   const [packageId, setPackageId] = useState(isNew ? null : id);
   const [dates, setDates] = useState([]);
   const [itinerary, setItinerary] = useState([]);
   const [addons, setAddons] = useState([]);
   const [addonsEnabled, setAddonsEnabled] = useState(false);
   const [submitting, setSubmitting] = useState('');
+  // Live "auto" net rate — the itinerary total (ItineraryManager) plus any
+  // selected meals (MealsManager), each reported independently as they're
+  // edited so neither has to wait on the other or on a save round trip.
+  // Both start at null ("still calculating") rather than 0, so the Net rate
+  // field shows "—" instead of flashing ₹0 before either has finished its
+  // first pass. Kept separate from `form` so this never gets sent back to
+  // the server as if it were the override.
+  const [itineraryRatePerPax, setItineraryRatePerPax] = useState(null);
+  const [mealsRatePerPax, setMealsRatePerPax] = useState(null);
+  const computedRatePerPax =
+    itineraryRatePerPax == null || mealsRatePerPax == null ? null : itineraryRatePerPax + mealsRatePerPax;
 
   useEffect(() => {
     if (isNew) {
@@ -803,7 +1016,7 @@ export default function FdPackageEditor() {
       api
         .post('/admin/fd-packages', { title: 'New FD Package', status: 'draft' })
         .then(({ fdPackage }) => {
-          setForm(fdPackage);
+          setForm(toFormState(fdPackage));
           setPackageId(fdPackage.id);
           navigate(`/admin/catalog/fd-packages/${fdPackage.id}`, { replace: true });
         })
@@ -811,7 +1024,7 @@ export default function FdPackageEditor() {
       return;
     }
     api.get(`/admin/fd-packages/${id}`).then(({ fdPackage }) => {
-      setForm(fdPackage);
+      setForm(toFormState(fdPackage));
       setPackageId(fdPackage.id);
       setDates(fdPackage.departureDates || []);
       setItinerary(fdPackage.itinerary || []);
@@ -869,7 +1082,7 @@ export default function FdPackageEditor() {
         navigate(`/admin/catalog/fd-packages/${fdPackage.id}`, { replace: true });
       } else {
         const { fdPackage } = await api.patch(`/admin/fd-packages/${packageId}`, payload);
-        setForm(fdPackage);
+        setForm(toFormState(fdPackage));
       }
       toast.success(status === 'published' ? 'FD package published' : 'Draft saved');
     } catch (err) {
@@ -888,17 +1101,31 @@ export default function FdPackageEditor() {
         <h2 className="text-3xl font-bold">{isNew ? 'Add FD Package' : `Edit — ${form.title || ''}`}</h2>
 
         <BasicsForm form={form} update={update} packageId={packageId} />
-        <PricingForm form={form} update={update} />
         <MerchandisingForm form={form} update={update} addonsEnabled={addonsEnabled} onToggleAddons={setAddonsEnabled} />
 
         {packageId && (
           <>
             <DepartureDatesManager fdPackageId={packageId} dates={dates} onChange={setDates} />
-            <ItineraryManager fdPackageId={packageId} itinerary={itinerary} duration={form.duration} onChange={setItinerary} />
+            <ItineraryManager
+              fdPackageId={packageId}
+              itinerary={itinerary}
+              duration={form.duration}
+              onChange={setItinerary}
+              onComputedRateChange={setItineraryRatePerPax}
+            />
             {addonsEnabled && <AddonsManager fdPackageId={packageId} addons={addons} onChange={setAddons} />}
           </>
         )}
         {!packageId && <p className="text-xs text-muted">Setting up…</p>}
+
+        {/* Just above Pricing — its live cost feeds into the same computed
+            Net rate, alongside the itinerary total above. */}
+        <MealsManager form={form} update={update} onComputedRateChange={setMealsRatePerPax} />
+
+        {/* Rendered last — the net rate is computed from the itinerary and
+            meals above, so it reads naturally as a summary once everything
+            else is set. */}
+        <PricingForm form={form} update={update} computedRatePerPax={computedRatePerPax} />
 
         <div className="flex justify-end gap-2">
           <Button disabled={!!submitting} onClick={() => handleSave('draft')}>

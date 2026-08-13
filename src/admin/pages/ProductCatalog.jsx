@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { api } from '../api/client.js';
-import { Badge, Button, Table, TextInput } from '../components/ui.jsx';
-import { FD_STATUS_TONE, formatCurrency, formatDateRange, getFdBadges, getStartingRate } from '../../shared/fdPackage/index.js';
+import { Badge, Button, Card, ErrorText, FieldLabel, Table, TextInput } from '../components/ui.jsx';
+import { FD_STATUS_TONE, formatCurrency, formatDateRange, getFdBadges } from '../../shared/fdPackage/index.js';
 
 const TABS = [
   { key: 'fdPackages', label: 'FD Packages' },
@@ -11,6 +11,7 @@ const TABS = [
   { key: 'tours', label: 'Tours' },
   { key: 'activities', label: 'Activities' },
   { key: 'transfers', label: 'Transfers' },
+  { key: 'meals', label: 'Meals' },
 ];
 
 function FdPackageCard({ pkg }) {
@@ -19,7 +20,6 @@ function FdPackageCard({ pkg }) {
   const seatsLeft = Math.max(seatsTotal - seatsBooked, 0);
   const bookedPct = seatsTotal > 0 ? Math.min((seatsBooked / seatsTotal) * 100, 100) : 0;
   const dateRange = formatDateRange(pkg.firstDepartureDate, pkg.lastDepartureDate);
-  const rate = getStartingRate(pkg);
   const badges = getFdBadges(pkg);
 
   return (
@@ -77,8 +77,8 @@ function FdPackageCard({ pkg }) {
 
         <div className="mt-3 flex flex-1 items-end justify-between gap-2">
           <div>
-            <div className="text-[10px] text-muted">Starting at</div>
-            <div className="text-base font-bold">{formatCurrency(rate)}</div>
+            <div className="text-[10px] text-muted">Net rate</div>
+            <div className="text-base font-bold">{formatCurrency(pkg.ratePerPax)}</div>
           </div>
           <Link to={`/admin/catalog/fd-packages/${pkg.id}`}>
             <Button variant="accent">Edit</Button>
@@ -406,6 +406,137 @@ function TransfersTab() {
   );
 }
 
+// Meals are a simple ancillary rate (no photos, no dedicated edit page) —
+// unlike Activities/Transfers above, this stays as one self-contained tab
+// with an inline add form, closer to the old pre-photo catalog pattern.
+// Lunch and Dinner are independent entries — their own sub-tab, their own
+// list, their own save — rather than one row holding both prices, since the
+// two are managed independently (mirrors 0038_meals_split_type.sql on the
+// backend). Only "price for 1 day" is captured/shown here — FdPackageEditor's
+// Meals section treats it as the per-person-per-day rate, multiplying it by
+// both headcount and day count (see computeMealsCost). The catalog's
+// `price_per_person` column still exists but is no longer set from this UI.
+const MEAL_TYPES = [
+  { key: 'lunch', label: 'Lunch' },
+  { key: 'dinner', label: 'Dinner' },
+];
+
+// Only one price entry is ever kept per meal type — this form both creates
+// it (nothing exists yet for this mealType) and edits it in place (`existing`
+// is that one row), rather than offering a separate "Add" flow that could
+// pile up duplicates.
+function MealForm({ mealType, existing, onSaved }) {
+  const [price, setPrice] = useState('');
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  // Re-seed whenever the sub-tab changes or a freshly loaded `existing`
+  // shows up — a half-edited Lunch price must never get saved as Dinner (or
+  // silently carry over onto a different entry) just because either changed.
+  useEffect(() => {
+    setPrice(existing ? String(existing.pricePerDay ?? existing.price_per_day ?? '') : '');
+    setError('');
+  }, [mealType, existing]);
+
+  const label = mealType === 'lunch' ? 'Lunch' : 'Dinner';
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError('');
+    setSubmitting(true);
+    try {
+      const payload = {
+        // Name/mealType only matter on create — FdPackageEditor's Meals
+        // section resolves "the" lunch/dinner entry by mealType alone, not
+        // by name, so name is just satisfying the backend's required field.
+        ...(existing ? {} : { name: label, mealType }),
+        ...(price !== '' ? { pricePerDay: Number(price) } : {}),
+      };
+      const { meal: saved } = existing
+        ? await api.patch(`/admin/meals/${existing.id}`, payload)
+        : await api.post('/admin/meals', payload);
+      onSaved(saved);
+    } catch (err) {
+      setError(err.message || 'Unable to save meal price');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Card label={existing ? `Edit ${label.toLowerCase()} price` : `Add ${label.toLowerCase()}`} className="mt-4 border-white">
+      <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div>
+          <FieldLabel>{label} price for 1 day (₹)</FieldLabel>
+          <TextInput type="number" min="0" value={price} onChange={(e) => setPrice(e.target.value)} />
+        </div>
+        <div className="sm:col-span-2">
+          <ErrorText>{error}</ErrorText>
+          <Button variant="accent" type="submit" disabled={submitting} className="mt-2">
+            {submitting ? 'Saving…' : 'Save'}
+          </Button>
+        </div>
+      </form>
+    </Card>
+  );
+}
+
+function MealsTab() {
+  const [mealType, setMealType] = useState('lunch');
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  function load() {
+    setLoading(true);
+    api
+      .get(`/meals?${new URLSearchParams({ mealType }).toString()}`)
+      .then(({ meals }) => setItems(meals))
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(load, [mealType]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Only one entry is ever kept per meal type — MealForm above edits it in
+  // place once it exists, rather than adding another.
+  const existing = items[0] || null;
+  const label = mealType === 'lunch' ? 'Lunch' : 'Dinner';
+
+  async function handleDelete() {
+    await api.del(`/admin/meals/${existing.id}`);
+    setItems([]);
+  }
+
+  return (
+    <div>
+      <div className="mb-4 flex flex-wrap gap-2">
+        {MEAL_TYPES.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setMealType(t.key)}
+            className={`rounded-full border px-4 py-2 text-xs font-semibold ${
+              mealType === t.key ? 'border-ink bg-ink text-white' : 'border-line-light bg-white text-[#666]'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {loading ? (
+        <p className="text-xs text-muted">Loading…</p>
+      ) : (
+        <>
+          <MealForm mealType={mealType} existing={existing} onSaved={(saved) => setItems([saved])} />
+          {existing && (
+            <button onClick={handleDelete} className="mt-2 text-xs text-[#a5162d] hover:underline">
+              Delete {label.toLowerCase()} price
+            </button>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function ProductCatalog() {
   const [tab, setTab] = useState('fdPackages');
 
@@ -435,8 +566,10 @@ export default function ProductCatalog() {
           <ToursTab />
         ) : tab === 'activities' ? (
           <ActivitiesTab />
-        ) : (
+        ) : tab === 'transfers' ? (
           <TransfersTab />
+        ) : (
+          <MealsTab />
         )}
       </div>
     </div>
