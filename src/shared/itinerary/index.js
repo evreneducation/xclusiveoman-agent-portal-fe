@@ -94,6 +94,15 @@ export function updateItineraryItemNote(items, key, note) {
   return items.map((it) => (it.key === key ? { ...it, note } : it));
 }
 
+// Same shape, for a hotel item's occupancy (Single/Double/Triple — Custom
+// FIT only, see roomsForOccupancy) — used by the admin's Quote Inbox
+// itinerary editor (QuoteInboxDetail.jsx), which edits existing items by key
+// rather than by (dayNumber, type) the way the agent builder's own dedicated
+// hotel section does.
+export function updateItineraryItemOccupancy(items, key, occupancy) {
+  return items.map((it) => (it.key === key ? { ...it, occupancy } : it));
+}
+
 // Sends anything assigned to a day beyond the current trip length back to
 // the unassigned tray instead of silently discarding it — e.g. shortening
 // Travel End Date after Day 5 already had a tour on it.
@@ -144,7 +153,19 @@ export function moveItineraryItem(items, key, targetDay, targetIndex) {
 export function serializeItinerary(items, dayNotes, dayCount) {
   const days = [];
   for (let n = 1; n <= dayCount; n++) {
-    const dayItems = itemsForDay(items, n).map((it) => ({ type: it.type, id: it.id, note: it.note || '' }));
+    const dayItems = itemsForDay(items, n).map((it) => ({
+      type: it.type,
+      id: it.id,
+      note: it.note || '',
+      // Hotel occupancy — two different shapes, each set by only one
+      // builder (see schemas.js's itineraryDaySchema for the full story):
+      // `adults` — FD packages (admin/pages/FdPackageEditor.jsx).
+      // `occupancy` — Custom FIT (agent/pages/PackageBuilder.jsx,
+      // admin/pages/QuoteInboxDetail.jsx). Omitted otherwise so neither
+      // rides along on the other builder's items, or on MICE's.
+      ...(it.type === 'hotel' && it.adults ? { adults: it.adults } : {}),
+      ...(it.type === 'hotel' && it.occupancy ? { occupancy: it.occupancy } : {}),
+    }));
     const notes = (dayNotes[n] || '').trim();
     if (!notes && dayItems.length === 0) continue;
     days.push({ dayNumber: n, notes, items: dayItems });
@@ -195,6 +216,9 @@ export function deserializeItinerary(itinerary) {
         dayNumber: day.dayNumber,
         position: idx,
         note: it.note || '',
+        // Hotel occupancy — see serializeItinerary above.
+        ...(it.type === 'hotel' && it.adults ? { adults: it.adults } : {}),
+        ...(it.type === 'hotel' && it.occupancy ? { occupancy: it.occupancy } : {}),
       });
     });
   }

@@ -167,6 +167,11 @@ function ItineraryTimeline({ itinerary }) {
                           {item.name || meta?.label || 'Item'}
                           {item.city ? ` · ${item.city}` : ''}
                         </span>
+                        {item.type === 'hotel' && item.adults != null && (
+                          <p className="mt-0.5 pl-[1.375rem] text-[11px] text-agent-muted">
+                            {item.adults} {item.adults === 1 ? 'adult' : 'adults'} · {item.rooms} {item.rooms === 1 ? 'room' : 'rooms'}
+                          </p>
+                        )}
                         {item.note && <p className="mt-0.5 pl-[1.375rem] text-[11px] text-agent-muted">{item.note}</p>}
                       </div>
                     );
@@ -176,6 +181,32 @@ function ItineraryTimeline({ itinerary }) {
               {day.notes && <p>{day.notes}</p>}
               {!day.items?.length && !day.notes && <p className="text-agent-muted">Nothing planned yet.</p>}
             </div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+// Read-only mirror of the admin's Meals section (FdPackageEditor.jsx) —
+// already folded into departure.ratePerPax server-side (resolveRatePerPax),
+// this is purely informational so the agent can see what's included and why.
+function MealsSummary({ meals }) {
+  if (!meals?.length) return null;
+  return (
+    <Card className="border-white">
+      <SectionHeading icon="🍽️">Meals</SectionHeading>
+      <div className="space-y-2">
+        {meals.map((meal) => (
+          <div key={meal.type} className="flex items-center justify-between rounded-xl border border-agent-line-light px-3.5 py-2.5">
+            <div>
+              <div className="text-sm font-semibold text-agent-ink">{meal.label}</div>
+              <div className="text-xs text-agent-muted">
+                {meal.people} {meal.people === 1 ? 'person' : 'people'} · {meal.days} {meal.days === 1 ? 'day' : 'days'} ·{' '}
+                {formatCurrency(meal.pricePerDay)}/person/day
+              </div>
+            </div>
+            <div className="text-sm font-bold text-agent-ink">{formatCurrency(meal.cost)}</div>
           </div>
         ))}
       </div>
@@ -345,6 +376,8 @@ export default function DepartureDetail() {
 
           {departure.itinerary?.length > 0 && <ItineraryTimeline itinerary={departure.itinerary} />}
 
+          <MealsSummary meals={departure.meals} />
+
           <HotelInformation hotel={departure.hotel} />
 
           {departure.addons?.length > 0 && (
@@ -375,13 +408,6 @@ export default function DepartureDetail() {
           <Card className="border-white">
             <SectionHeading icon="📋">Booking terms</SectionHeading>
             <ul className="space-y-2 text-sm leading-relaxed text-agent-ink">
-              {departure.depositAmount != null && (
-                <li className="flex gap-2">
-                  <span className="text-agent-accent-dark">•</span>
-                  Deposit of {formatCurrency(departure.depositAmount)} due at booking; balance due{' '}
-                  {departure.balanceDueDaysBefore ?? 30} days before travel.
-                </li>
-              )}
               <li className="flex gap-2">
                 <span className="text-agent-accent-dark">•</span>
                 Full itinerary, hotel, and add-on details are as listed above.
@@ -500,12 +526,6 @@ export default function DepartureDetail() {
                 <Button className="mb-3 w-full" onClick={handleEnquireNow}>
                   💬 Enquire Now
                 </Button>
-                {departure.depositAmount != null && (
-                  <p className="text-center text-xs text-agent-muted">
-                    Deposit {formatCurrency(departure.depositAmount)} now · balance due {departure.balanceDueDaysBefore} days
-                    before travel
-                  </p>
-                )}
               </>
             )}
           </Card>
