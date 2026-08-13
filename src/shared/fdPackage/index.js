@@ -52,12 +52,6 @@ export function parseDurationDays(duration) {
   return Number.isFinite(days) && days > 0 ? days : null;
 }
 
-// The cheapest tier is the headline "Starting at" price on admin's catalog card.
-export function getStartingRate(pkg) {
-  const rates = [pkg.rateGold, pkg.rateSilver, pkg.rateBronze].filter((r) => r != null);
-  return rates.length ? Math.min(...rates) : null;
-}
-
 // Accepts departure-date rows in either shape that flows through this app:
 // the agent API's per-date { seatsLeft }, or admin's aggregate
 // { seatsTotal, seatsBooked }. Returns the most seats bookable right now.

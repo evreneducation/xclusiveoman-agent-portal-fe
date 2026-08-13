@@ -14,6 +14,7 @@ import {
   resolveItemMeta,
   serializeItinerary,
   unassignedItems,
+  updateItineraryItemOccupancy,
   updateItineraryItemNote,
 } from '../../shared/itinerary/index.js';
 
@@ -125,6 +126,38 @@ function sumPrices(items, key) {
   return (items || []).reduce((total, item) => total + (Number(item[key]) || 0), 0);
 }
 
+// capacity = adults per room for that occupancy type — mirrors the backend's
+// roomsForOccupancy (src/utils/occupancy.js). Unset/unrecognized defaults to
+// 'double' (2/room), same baseline the backend falls back to.
+const OCCUPANCY_CAPACITY = { single: 1, double: 2, triple: 3 };
+
+function roomsForOccupancy(totalAdults, occupancy) {
+  const capacity = OCCUPANCY_CAPACITY[occupancy] || OCCUPANCY_CAPACITY.double;
+  const n = Number(totalAdults) || 0;
+  return n > 0 ? Math.ceil(n / capacity) : 1;
+}
+
+// Hotels are occupancy-aware and priced per itinerary-day placement (a hotel
+// used on 3 days counts 3 times), unlike tours/transfers/extras below which
+// still sum once per selected item — mirrors the backend's
+// computeHotelCostAuto (packageRequestsAdmin.controller.js) so the two never
+// drift. Uses each item's already-server-computed `rooms` (composeItinerary
+// resolved it against packageRequest.paxAdults) rather than re-deriving it,
+// since this reads the last-saved itinerary, not any in-progress edit in
+// ItineraryEditor below (a separate component with its own local state).
+function computeHotelAuto(itinerary, hotels) {
+  let total = 0;
+  for (const day of itinerary || []) {
+    for (const item of day.items || []) {
+      if (item.type !== 'hotel') continue;
+      const hotel = (hotels || []).find((h) => h.id === item.id);
+      if (!hotel || hotel.pricePerNight == null) continue;
+      total += Number(hotel.pricePerNight) * (item.rooms || 1);
+    }
+  }
+  return total;
+}
+
 // One Landing Cost Breakdown row: the Product Catalog auto total for this
 // component, an editable override, and the effective total (override if
 // set, otherwise auto) — matches item 2's "Auto: ₹60,000 / Editable: ₹58,500"
@@ -168,6 +201,7 @@ function CostingAndPublishing({ packageRequest, onUpdated }) {
   const [tourCost, setTourCost] = useState(packageRequest.costing?.tours?.override ?? '');
   const [transferCost, setTransferCost] = useState(packageRequest.costing?.transfers?.override ?? '');
   const [extraCost, setExtraCost] = useState(packageRequest.costing?.extras?.override ?? '');
+  const [mealCost, setMealCost] = useState(packageRequest.costing?.meals?.override ?? '');
   const [markupType, setMarkupType] = useState(packageRequest.markupType || 'percentage');
   const [markupValue, setMarkupValue] = useState(packageRequest.markupValue ?? '');
   const [internalNotes, setInternalNotes] = useState(packageRequest.internalNotes || '');
@@ -177,18 +211,24 @@ function CostingAndPublishing({ packageRequest, onUpdated }) {
   // Computed straight from the Product Catalog prices already on
   // packageRequest.hotels/tours/transfers/activities — recalculates on every
   // keystroke without a round trip, then persisted verbatim by the backend
-  // (same formula) on save so the two never drift.
+  // (same formula) on save so the two never drift. Meals is the one
+  // exception — nothing on this page can change the agent's lunch/dinner
+  // selection live, so its auto figure is just read straight off
+  // packageRequest.mealsCostAuto (computed fresh server-side on every GET)
+  // rather than mirrored client-side like the other four.
   const totalPax = (packageRequest.paxAdults || 0) + (packageRequest.paxChildren || 0);
-  const hotelAuto = sumPrices(packageRequest.hotels, 'pricePerNight');
+  const hotelAuto = computeHotelAuto(packageRequest.itinerary, packageRequest.hotels);
   const tourAuto = sumPrices(packageRequest.tours, 'price');
   const transferAuto = sumPrices(packageRequest.transfers, 'price');
   const extraAuto = sumPrices(packageRequest.activities, 'pricePerPax') * Math.max(totalPax, 1);
+  const mealAuto = packageRequest.mealsCostAuto || 0;
 
   const hotelTotal = hotelCost !== '' ? Number(hotelCost) : hotelAuto;
   const tourTotal = tourCost !== '' ? Number(tourCost) : tourAuto;
   const transferTotal = transferCost !== '' ? Number(transferCost) : transferAuto;
   const extraTotal = extraCost !== '' ? Number(extraCost) : extraAuto;
-  const landingCost = hotelTotal + tourTotal + transferTotal + extraTotal;
+  const mealTotal = mealCost !== '' ? Number(mealCost) : mealAuto;
+  const landingCost = hotelTotal + tourTotal + transferTotal + extraTotal + mealTotal;
 
   const markupNumber = Number(markupValue) || 0;
   const markupAmount = markupType === 'percentage' ? (landingCost * markupNumber) / 100 : markupNumber;
@@ -202,6 +242,7 @@ function CostingAndPublishing({ packageRequest, onUpdated }) {
       tourCost: tourCost === '' ? null : Number(tourCost),
       transferCost: transferCost === '' ? null : Number(transferCost),
       extraCost: extraCost === '' ? null : Number(extraCost),
+      mealCost: mealCost === '' ? null : Number(mealCost),
       markupType,
       markupValue: markupNumber,
       internalNotes,
@@ -260,6 +301,7 @@ function CostingAndPublishing({ packageRequest, onUpdated }) {
           <CostComponentField label="Tours" auto={tourAuto} value={tourCost} onChange={setTourCost} />
           <CostComponentField label="Transfers" auto={transferAuto} value={transferCost} onChange={setTransferCost} />
           <CostComponentField label="Extras" auto={extraAuto} value={extraCost} onChange={setExtraCost} />
+          <CostComponentField label="Meals" auto={mealAuto} value={mealCost} onChange={setMealCost} />
         </div>
         <div className="mt-4 flex items-center justify-between rounded-md bg-panel px-4 py-3">
           <span className="text-sm font-semibold">Landing Cost</span>
@@ -341,15 +383,27 @@ function CostingAndPublishing({ packageRequest, onUpdated }) {
   );
 }
 
+const OCCUPANCY_OPTIONS = [
+  { value: 'single', label: 'Single' },
+  { value: 'double', label: 'Double' },
+  { value: 'triple', label: 'Triple' },
+];
+
 // A single draggable placed/unplaced item — mirrors the agent builder's
 // ItineraryItemChip (agent/pages/PackageBuilder.jsx), themed for the admin
 // console. Dropping directly on a chip inserts before it, which is what lets
 // ItineraryDayCard support reordering within a day. No delete control here
 // (unlike the agent's chip) — the admin has no UI to deselect a hotel/tour/
 // transfer/extra from the request itself, so there's nothing for a "remove
-// from the trip entirely" action to do; only its own note is editable.
-function ItineraryItemChip({ item, meta, isDragging, onDragStart, onDragEnd, onDropBefore, onNoteChange, onUnassign }) {
+// from the trip entirely" action to do; only its own note (and, for hotels,
+// occupancy) is editable. Occupancy drives the Landing Cost Breakdown's
+// hotelAuto (see computeHotelAuto above) — the admin can correct what the
+// agent set, same as they can override the note. `paxAdults` (Trip Details'
+// fixed headcount) is what the occupancy pick actually divides into rooms —
+// see roomsForOccupancy.
+function ItineraryItemChip({ item, meta, isDragging, onDragStart, onDragEnd, onDropBefore, onNoteChange, onOccupancyChange, onUnassign, paxAdults }) {
   const typeMeta = ITINERARY_ITEM_TYPE_META[item.type];
+  const rooms = roomsForOccupancy(paxAdults, item.occupancy);
   return (
     <div
       draggable
@@ -374,6 +428,25 @@ function ItineraryItemChip({ item, meta, isDragging, onDragStart, onDragEnd, onD
           </button>
         )}
       </div>
+      {item.type === 'hotel' && onOccupancyChange && (
+        <div className="mt-1.5 flex items-center gap-1.5">
+          <span className="text-[10px] font-semibold uppercase text-muted">Occupancy</span>
+          <Select
+            className="w-24 px-1.5 py-1 text-[11px]"
+            value={item.occupancy || 'double'}
+            onChange={(e) => onOccupancyChange(e.target.value)}
+          >
+            {OCCUPANCY_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </Select>
+          <span className="text-[10px] text-muted">
+            {rooms} room{rooms === 1 ? '' : 's'}
+          </span>
+        </div>
+      )}
       {onNoteChange && (
         <TextInput
           className="mt-1.5 px-2 py-1.5 text-[11px]"
@@ -388,7 +461,7 @@ function ItineraryItemChip({ item, meta, isDragging, onDragStart, onDragEnd, onD
 
 // One numbered timeline node, editable — same drop-target-within-a-drop-target
 // structure as the agent builder's ItineraryDayCard.
-function ItineraryDayCard({ dayNumber, items, notes, onNotesChange, resolveMeta, draggingKey, setDraggingKey, moveItem, updateNote, isLast }) {
+function ItineraryDayCard({ dayNumber, items, notes, onNotesChange, resolveMeta, draggingKey, setDraggingKey, moveItem, updateNote, updateOccupancy, paxAdults, isLast }) {
   return (
     <div className="relative flex gap-4 pb-5 last:pb-0">
       {!isLast && <span className="absolute left-[15px] top-8 h-[calc(100%-1.25rem)] w-px bg-line-light" />}
@@ -421,7 +494,9 @@ function ItineraryDayCard({ dayNumber, items, notes, onNotesChange, resolveMeta,
                   moveItem(e.dataTransfer.getData('text/plain'), dayNumber, idx);
                 }}
                 onNoteChange={(note) => updateNote(item.key, note)}
+                onOccupancyChange={(occupancy) => updateOccupancy(item.key, occupancy)}
                 onUnassign={() => moveItem(item.key, null)}
+                paxAdults={paxAdults}
               />
             ))
           )}
@@ -479,6 +554,10 @@ function ItineraryEditor({ packageRequest, onUpdated }) {
 
   function updateNote(key, note) {
     setItineraryItems((items) => updateItineraryItemNote(items, key, note));
+  }
+
+  function updateOccupancy(key, occupancy) {
+    setItineraryItems((items) => updateItineraryItemOccupancy(items, key, occupancy));
   }
 
   async function save() {
@@ -542,6 +621,8 @@ function ItineraryEditor({ packageRequest, onUpdated }) {
                         moveItem(e.dataTransfer.getData('text/plain'), null, idx);
                       }}
                       onNoteChange={(note) => updateNote(item.key, note)}
+                      onOccupancyChange={(occupancy) => updateOccupancy(item.key, occupancy)}
+                      paxAdults={packageRequest.paxAdults}
                     />
                   </div>
                 ))
@@ -562,6 +643,8 @@ function ItineraryEditor({ packageRequest, onUpdated }) {
                 setDraggingKey={setDraggingKey}
                 moveItem={moveItem}
                 updateNote={updateNote}
+                updateOccupancy={updateOccupancy}
+                paxAdults={packageRequest.paxAdults}
                 isLast={dayNumber === dayCount}
               />
             ))}

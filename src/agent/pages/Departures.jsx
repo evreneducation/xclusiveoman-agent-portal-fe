@@ -129,7 +129,7 @@ export default function Departures() {
     <div className="mx-auto max-w-6xl p-5 lg:p-8">
       <h2 className="mb-1 text-2xl font-bold text-agent-ink">Fixed Group Departures</h2>
       <p className="mb-5 text-sm text-agent-muted">
-        Net rate reflects your agency's tier automatically. Featured and Bestseller packages are set by Xclusive Oman.
+        Net rate is calculated from each package's day-by-day itinerary. Featured and Bestseller packages are set by Xclusive Oman.
       </p>
 
       <Card className="mb-5 border-white">

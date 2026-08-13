@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api/client.js';
-import { Button, Card, ErrorText, FieldLabel, Select, Tag, TextInput } from '../components/ui.jsx';
+import { Button, Card, Checkbox, ErrorText, FieldLabel, Select, Tag, TextInput } from '../components/ui.jsx';
 import ItineraryDocument from '../components/ItineraryDocument.jsx';
 import {
   ITINERARY_ITEM_TYPE_META,
@@ -200,10 +200,43 @@ function removeItineraryItemByKey(items, key) {
 }
 
 // Hotel is single-select per day — choosing a new hotel for a day replaces
-// whatever hotel was already there instead of stacking up multiple.
+// whatever hotel was already there instead of stacking up multiple. Carries
+// over the previous hotel's occupancy (if any) rather than resetting it, so
+// swapping hotels on a day doesn't silently drop an occupancy already set.
 function setHotelForDay(items, dayNumber, hotelId) {
+  const existingHotel = items.find((it) => it.dayNumber === dayNumber && it.type === 'hotel');
   const withoutOldHotel = items.filter((it) => !(it.dayNumber === dayNumber && it.type === 'hotel'));
-  return addItineraryItem(withoutOldHotel, { type: 'hotel', id: hotelId, dayNumber });
+  const withNewHotel = addItineraryItem(withoutOldHotel, { type: 'hotel', id: hotelId, dayNumber });
+  const lastIdx = withNewHotel.length - 1;
+  withNewHotel[lastIdx] = { ...withNewHotel[lastIdx], occupancy: existingHotel?.occupancy ?? DEFAULT_OCCUPANCY };
+  return withNewHotel;
+}
+
+function updateHotelOccupancy(items, dayNumber, occupancy) {
+  return items.map((it) => (it.dayNumber === dayNumber && it.type === 'hotel' ? { ...it, occupancy } : it));
+}
+
+// A fresh hotel placement with no occupancy set yet defaults to Double —
+// matches roomsForOccupancy's own unset-fallback (src/utils/occupancy.js),
+// just made explicit here so the Occupancy field never opens blank.
+const DEFAULT_OCCUPANCY = 'double';
+
+const OCCUPANCY_OPTIONS = [
+  { value: 'single', label: 'Single' },
+  { value: 'double', label: 'Double' },
+  { value: 'triple', label: 'Triple' },
+];
+const OCCUPANCY_CAPACITY = { single: 1, double: 2, triple: 3 };
+
+// Mirrors the backend's roomsForOccupancy (src/utils/occupancy.js): headcount
+// is already known from Trip Details (paxAdults) — the Occupancy pick just
+// says how that fixed headcount splits into rooms. This builder never shows
+// price (Xclusive Oman prices the request after submission — see the page
+// header), so this only drives the "N room(s)" display, not any cost figure.
+function roomsForOccupancy(paxAdults, occupancy) {
+  const capacity = OCCUPANCY_CAPACITY[occupancy] || OCCUPANCY_CAPACITY.double;
+  const n = Number(paxAdults) || 0;
+  return n > 0 ? Math.ceil(n / capacity) : 1;
 }
 
 function dedupeIdsByType(items, type) {
@@ -343,29 +376,53 @@ function PlacedItemChip({ item, meta, onNoteChange, onRemove }) {
 
 // A day's hotel section — single-select, filtered to that day's city, gated
 // behind a star-category pick first (matching the old HotelsStep). Choosing
-// a hotel replaces whatever was already selected for this day.
-function DayHotelSection({ city, hotels, currentHotelId, onSelect }) {
+// a hotel replaces whatever was already selected for this day. Occupancy
+// lives here too — Single/Double/Triple, since headcount is already known
+// from Trip Details (paxAdults). No price shown anywhere in this builder
+// (Xclusive Oman prices the request after submission), so this only shows
+// the resulting room count, not a cost.
+function DayHotelSection({ city, hotels, currentHotelId, currentOccupancy, paxAdults, onSelect, onOccupancyChange }) {
   const [open, setOpen] = useState(false);
   const [starCategory, setStarCategory] = useState('');
   const inCity = hotels.filter((h) => (h.city || '').toLowerCase() === city.toLowerCase());
   const filtered = starCategory ? inCity.filter((h) => h.category === starCategory) : inCity;
   const currentHotel = hotels.find((h) => h.id === currentHotelId) || null;
+  const rooms = roomsForOccupancy(paxAdults, currentOccupancy);
 
   return (
     <div>
       <FieldLabel>Hotel</FieldLabel>
       {currentHotel ? (
-        <div className="flex items-center justify-between rounded-md border border-agent-line-light bg-white px-3 py-2 text-xs">
-          <div>
-            <div className="font-semibold text-agent-ink">{currentHotel.name}</div>
-            <div className="text-agent-muted">
-              {currentHotel.category ? `${currentHotel.category}★ · ` : ''}
-              {currentHotel.city}
+        <div className="rounded-md border border-agent-line-light bg-white px-3 py-2 text-xs">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="font-semibold text-agent-ink">{currentHotel.name}</div>
+              <div className="text-agent-muted">
+                {currentHotel.category ? `${currentHotel.category}★ · ` : ''}
+                {currentHotel.city}
+              </div>
             </div>
+            <button type="button" onClick={() => onSelect('')} title="Remove" className="flex-none text-agent-muted hover:text-[#a5162d]">
+              🗑
+            </button>
           </div>
-          <button type="button" onClick={() => onSelect('')} title="Remove" className="flex-none text-agent-muted hover:text-[#a5162d]">
-            🗑
-          </button>
+          <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-agent-line-light pt-2">
+            <span className="text-[11px] font-semibold uppercase text-agent-muted">Occupancy</span>
+            <Select
+              className="w-28 px-2 py-1.5 text-xs"
+              value={currentOccupancy || DEFAULT_OCCUPANCY}
+              onChange={(e) => onOccupancyChange(e.target.value)}
+            >
+              {OCCUPANCY_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </Select>
+            <span className="text-[11px] text-agent-muted">
+              {rooms} room{rooms === 1 ? '' : 's'} for {paxAdults || 0} adult{paxAdults === 1 ? '' : 's'}
+            </span>
+          </div>
         </div>
       ) : (
         <p className="mb-1 text-[11px] text-agent-muted">No hotel selected for this day.</p>
@@ -505,7 +562,7 @@ function DayCatalogSection({ type, city, catalog, placedItems, onAdd, onRemove, 
 // One numbered day node — mirrors the old ItineraryDayCard's timeline
 // layout, but each section adds directly from that day's city-filtered
 // catalog instead of dragging from a shared unassigned tray.
-function DayPlanCard({ dayNumber, city, items, catalogs, notes, onNotesChange, addItem, removeItem, updateNote, setHotel, isLast }) {
+function DayPlanCard({ dayNumber, city, items, catalogs, notes, onNotesChange, addItem, removeItem, updateNote, setHotel, setHotelOccupancy, paxAdults, isLast }) {
   const hotelItem = items.find((it) => it.type === 'hotel') || null;
   const tourItems = items.filter((it) => it.type === 'tour');
   const transferItems = items.filter((it) => it.type === 'transfer');
@@ -532,7 +589,10 @@ function DayPlanCard({ dayNumber, city, items, catalogs, notes, onNotesChange, a
               city={city}
               hotels={catalogs.hotels}
               currentHotelId={hotelItem?.id || ''}
+              currentOccupancy={hotelItem?.occupancy}
+              paxAdults={paxAdults}
               onSelect={(hotelId) => setHotel(dayNumber, hotelId)}
+              onOccupancyChange={(occupancy) => setHotelOccupancy(dayNumber, occupancy)}
             />
             <DayCatalogSection
               type="tour"
@@ -569,6 +629,122 @@ function DayPlanCard({ dayNumber, city, items, catalogs, notes, onNotesChange, a
   );
 }
 
+// One meal type's fields (Lunch or Dinner) — just a headcount and a day
+// count, same as FD Packages' MealSection (admin/pages/FdPackageEditor.jsx):
+// there's no picking a specific catalog entry, `meal` is resolved
+// automatically (the one meals-catalog row of that meal_type, admin-priced —
+// see the Meals tab in Product Catalog). No price shown anywhere — Xclusive
+// Oman prices this after submission, same as every other component in this
+// builder. `maxPeople` is the trip's own total pax (Trip Details) — meals
+// can't feed more people than are actually going.
+function CustomFitMealSection({ label, meal, enabled, onToggle, people, days, maxPeople, onFieldChange }) {
+  return (
+    <div>
+      <Checkbox checked={enabled} onChange={onToggle} label={label} />
+      {enabled &&
+        (meal ? (
+          <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <FieldLabel>Number of people</FieldLabel>
+              <TextInput
+                type="number"
+                min="1"
+                max={maxPeople || undefined}
+                value={people ?? ''}
+                onChange={(e) => onFieldChange({ people: e.target.value, days })}
+              />
+              {maxPeople > 0 && <p className="mt-1 text-[10px] text-agent-muted">Up to {maxPeople} (this trip's total pax).</p>}
+            </div>
+            <div>
+              <FieldLabel>Number of {label.toLowerCase()} days</FieldLabel>
+              <TextInput type="number" min="1" value={days ?? ''} onChange={(e) => onFieldChange({ people, days: e.target.value })} />
+            </div>
+          </div>
+        ) : (
+          <p className="mt-2 text-[11px] text-agent-muted">No {label.toLowerCase()} option in the catalog yet.</p>
+        ))}
+    </div>
+  );
+}
+
+// Optional lunch/dinner add-ons — either, both, or neither. Mirrors FD
+// Packages' MealsManager, minus any price (this builder never shows cost —
+// see the page header). Fields live directly on `form` (lunchMealId/People/
+// Days, dinnerMealId/People/Days) so they ride along with every existing
+// Save Draft/Submit payload without a separate save step.
+function MealsCard({ meals, form, update }) {
+  const [lunchEnabled, setLunchEnabled] = useState(false);
+  const [dinnerEnabled, setDinnerEnabled] = useState(false);
+
+  // Seeds once on mount from `form` (the lifted, already-loaded source of
+  // truth — this whole step only ever mounts after both the catalog and any
+  // resumed draft have finished loading, see PackageBuilder's
+  // catalogLoading/draftLoading gate). Re-fires correctly if the agent
+  // navigates away from Step 2 and back, since ItineraryStep unmounts too.
+  useEffect(() => {
+    setLunchEnabled(form.lunchMealId != null);
+    setDinnerEnabled(form.dinnerMealId != null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const lunchMeal = meals.find((m) => m.meal_type === 'lunch');
+  const dinnerMeal = meals.find((m) => m.meal_type === 'dinner');
+  // Trip Details' own headcount — meals feed everyone traveling, not just
+  // adults (unlike hotel occupancy, which is adults-only room capacity).
+  const maxPeople = Math.max(0, (Number(form.paxAdults) || 0) + (Number(form.paxChildren) || 0));
+
+  function toggleMeal(prefix, setEnabled, meal, checked) {
+    setEnabled(checked);
+    if (checked) {
+      update(`${prefix}MealId`, meal?.id ?? null);
+      // Defaults to "everyone going" rather than opening blank — already
+      // within the cap by construction, the agent can only lower it from here.
+      update(`${prefix}People`, maxPeople || null);
+    } else {
+      update(`${prefix}MealId`, null);
+      update(`${prefix}People`, null);
+      update(`${prefix}Days`, null);
+    }
+  }
+
+  function fieldChange(prefix, { people, days }) {
+    const peopleNumber = people === '' ? null : Math.min(Number(people), maxPeople || Number(people));
+    update(`${prefix}People`, peopleNumber);
+    update(`${prefix}Days`, days === '' ? null : Number(days));
+  }
+
+  return (
+    <Card label="Meals" className="border-white">
+      <p className="mb-3 text-xs text-agent-muted">
+        Optional lunch/dinner add-ons for this trip — Xclusive Oman prices these after submission, same as
+        everything else here.
+      </p>
+      <div className="space-y-3">
+        <CustomFitMealSection
+          label="Lunch"
+          meal={lunchMeal}
+          enabled={lunchEnabled}
+          onToggle={(checked) => toggleMeal('lunch', setLunchEnabled, lunchMeal, checked)}
+          people={form.lunchPeople}
+          days={form.lunchDays}
+          maxPeople={maxPeople}
+          onFieldChange={(next) => fieldChange('lunch', next)}
+        />
+        <CustomFitMealSection
+          label="Dinner"
+          meal={dinnerMeal}
+          enabled={dinnerEnabled}
+          onToggle={(checked) => toggleMeal('dinner', setDinnerEnabled, dinnerMeal, checked)}
+          people={form.dinnerPeople}
+          days={form.dinnerDays}
+          maxPeople={maxPeople}
+          onFieldChange={(next) => fieldChange('dinner', next)}
+        />
+      </div>
+    </Card>
+  );
+}
+
 // Step 2 — City & Days planner + day-wise itinerary built from it (FIT-5).
 function ItineraryStep({
   dayCount,
@@ -585,10 +761,14 @@ function ItineraryStep({
   tours,
   transfers,
   activities,
+  meals,
+  form,
+  update,
   addItemToDay,
   removeItemFromDay,
   updateItemNoteByKey,
   setHotelForDayNumber,
+  setHotelOccupancyForDayNumber,
 }) {
   return (
     <div className="space-y-4">
@@ -625,12 +805,16 @@ function ItineraryStep({
                 removeItem={removeItemFromDay}
                 updateNote={updateItemNoteByKey}
                 setHotel={setHotelForDayNumber}
+                setHotelOccupancy={setHotelOccupancyForDayNumber}
+                paxAdults={Number(form.paxAdults) || 0}
                 isLast={dayNumber === dayCount}
               />
             ))}
           </div>
         )}
       </Card>
+
+      <MealsCard meals={meals} form={form} update={update} />
     </div>
   );
 }
@@ -789,6 +973,7 @@ export default function PackageBuilder() {
   const [tours, setTours] = useState([]);
   const [transfers, setTransfers] = useState([]);
   const [activities, setActivities] = useState([]);
+  const [meals, setMeals] = useState([]);
   const [catalogLoading, setCatalogLoading] = useState(true);
 
   // City & Days planner (FIT-1/FIT-5 merge) — [{ id, city, days }], sum of
@@ -819,12 +1004,13 @@ export default function PackageBuilder() {
   const [submittedId, setSubmittedId] = useState('');
 
   useEffect(() => {
-    Promise.all([api.get('/hotels'), api.get('/tours'), api.get('/transfers'), api.get('/activities')])
-      .then(([h, t, tr, a]) => {
+    Promise.all([api.get('/hotels'), api.get('/tours'), api.get('/transfers'), api.get('/activities'), api.get('/meals')])
+      .then(([h, t, tr, a, m]) => {
         setHotels(h.hotels || []);
         setTours(t.tours || []);
         setTransfers(tr.transfers || []);
         setActivities(a.activities || []);
+        setMeals(m.meals || []);
       })
       .catch((err) => setError(err.message || 'Unable to load catalog'))
       .finally(() => setCatalogLoading(false));
@@ -850,6 +1036,12 @@ export default function PackageBuilder() {
           dateTo: pr.dateTo ? pr.dateTo.slice(0, 10) : '',
           paxAdults: pr.paxAdults || 1,
           paxChildren: pr.paxChildren || 0,
+          lunchMealId: pr.lunchMealId ?? null,
+          lunchPeople: pr.lunchPeople ?? null,
+          lunchDays: pr.lunchDays ?? null,
+          dinnerMealId: pr.dinnerMealId ?? null,
+          dinnerPeople: pr.dinnerPeople ?? null,
+          dinnerDays: pr.dinnerDays ?? null,
         });
         // Bucket by isChild rather than array position — DB order isn't
         // guaranteed to match adults-then-children (see migration 0023).
@@ -984,6 +1176,10 @@ export default function PackageBuilder() {
     );
   }
 
+  function setHotelOccupancyForDayNumber(dayNumber, occupancy) {
+    setItineraryItems((items) => updateHotelOccupancy(items, dayNumber, occupancy));
+  }
+
   // Selection is derived from itineraryItems now, not the other way around —
   // deduped per type since the same catalog item can be added to more than
   // one day (most often the same hotel across a multi-day city stay).
@@ -1008,6 +1204,12 @@ export default function PackageBuilder() {
       activityIds: selectedActivityIds,
       travelers: travelers.map((t) => ({ name: t.name, passportNo: t.passportNo || undefined, isChild: t.type === 'child' })),
       itinerary: serializeItinerary(itineraryItems, dayNotes, dayCount),
+      lunchMealId: form.lunchMealId ?? null,
+      lunchPeople: form.lunchPeople ?? null,
+      lunchDays: form.lunchDays ?? null,
+      dinnerMealId: form.dinnerMealId ?? null,
+      dinnerPeople: form.dinnerPeople ?? null,
+      dinnerDays: form.dinnerDays ?? null,
     };
   }
 
@@ -1107,6 +1309,12 @@ export default function PackageBuilder() {
         // has a name (and adults have a passport), so all rows are real.
         travelers: travelers.map((t) => ({ name: t.name, passportNo: t.passportNo || undefined, isChild: t.type === 'child' })),
         itinerary: serializeItinerary(itineraryItems, dayNotes, dayCount),
+        lunchMealId: form.lunchMealId ?? null,
+        lunchPeople: form.lunchPeople ?? null,
+        lunchDays: form.lunchDays ?? null,
+        dinnerMealId: form.dinnerMealId ?? null,
+        dinnerPeople: form.dinnerPeople ?? null,
+        dinnerDays: form.dinnerDays ?? null,
       };
       // A draft opened via "Continue Editing" submits through its own row
       // (validated the same way — createPackageRequestSchema — just against
@@ -1202,10 +1410,14 @@ export default function PackageBuilder() {
               tours={tours}
               transfers={transfers}
               activities={activities}
+              meals={meals}
+              form={form}
+              update={update}
               addItemToDay={addItemToDay}
               removeItemFromDay={removeItemFromDay}
               updateItemNoteByKey={updateItemNoteByKey}
               setHotelForDayNumber={setHotelForDayNumber}
+              setHotelOccupancyForDayNumber={setHotelOccupancyForDayNumber}
             />
           )}
           {step === 3 && (
