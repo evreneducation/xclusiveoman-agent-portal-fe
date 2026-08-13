@@ -323,11 +323,35 @@ function removeItineraryItemByKey(items, key) {
   return [...others, ...remainingInDay];
 }
 
+// A fresh hotel placement with no occupancy set yet defaults to 2 adults (1
+// room) — matches roomsForAdults' own "unset = 1 room" fallback used for
+// pricing, just made explicit here so the Adults field never opens blank.
+const DEFAULT_HOTEL_ADULTS = 2;
+
 // Hotel is single-select per day — choosing a new hotel for a day replaces
-// whatever hotel was already there instead of stacking up multiple.
+// whatever hotel was already there instead of stacking up multiple. Carries
+// over the previous hotel's occupancy (if any) rather than resetting it, so
+// swapping hotels on a day doesn't silently drop an adults count the admin
+// already set.
 function setHotelForDay(items, dayNumber, hotelId) {
+  const existingHotel = items.find((it) => it.dayNumber === dayNumber && it.type === 'hotel');
   const withoutOldHotel = items.filter((it) => !(it.dayNumber === dayNumber && it.type === 'hotel'));
-  return addItineraryItem(withoutOldHotel, { type: 'hotel', id: hotelId, dayNumber });
+  const withNewHotel = addItineraryItem(withoutOldHotel, { type: 'hotel', id: hotelId, dayNumber });
+  const lastIdx = withNewHotel.length - 1;
+  withNewHotel[lastIdx] = { ...withNewHotel[lastIdx], adults: existingHotel?.adults ?? DEFAULT_HOTEL_ADULTS };
+  return withNewHotel;
+}
+
+function updateHotelAdults(items, dayNumber, adults) {
+  return items.map((it) => (it.dayNumber === dayNumber && it.type === 'hotel' ? { ...it, adults } : it));
+}
+
+// Mirrors the backend's roomsForAdults (fdPackages.model.js): a room holds
+// up to 2 adults at the hotel's single price_per_night rate; 3+ adults just
+// means more rooms, not a higher rate per room. Unset defaults to 1 room.
+function roomsForAdults(adults) {
+  const n = Number(adults) || 0;
+  return n > 0 ? Math.ceil(n / 2) : 1;
 }
 
 // Mirrors the backend's computeNetRatePerPax (fdPackages.model.js) so the
@@ -344,7 +368,10 @@ function computeItineraryNetRate(items, catalogs) {
     const list = catalogs[ITINERARY_CATALOG_KEY[it.type]] || [];
     const field = ITINERARY_PRICE_FIELD[it.type];
     const ref = list.find((c) => c.id === it.id);
-    return total + (ref ? Number(ref[field]) || 0 : 0);
+    if (!ref) return total;
+    const price = Number(ref[field]) || 0;
+    const multiplier = it.type === 'hotel' ? roomsForAdults(it.adults) : 1;
+    return total + price * multiplier;
   }, 0);
 }
 
@@ -401,32 +428,51 @@ function PlacedItemChip({ item, meta, onNoteChange, onRemove }) {
 }
 
 // A day's hotel section — single-select, gated behind a star-category pick
-// first. Choosing a hotel replaces whatever was already selected for this day.
-function DayHotelSection({ hotels, currentHotelId, onSelect }) {
+// first. Choosing a hotel replaces whatever was already selected for this
+// day. Occupancy (adults sharing the room) lives here too, right under the
+// selected hotel — price_per_night is a single-room rate (up to 2 adults),
+// so the line total shown is price_per_night × rooms, not the flat nightly
+// rate, once occupancy pushes it past 1 room (see roomsForAdults).
+function DayHotelSection({ hotels, currentHotelId, currentAdults, onSelect, onAdultsChange }) {
   const [open, setOpen] = useState(false);
   const [starCategory, setStarCategory] = useState('');
   const filtered = starCategory ? hotels.filter((h) => h.category === starCategory) : hotels;
   const currentHotel = hotels.find((h) => h.id === currentHotelId) || null;
+  const rooms = roomsForAdults(currentAdults);
+  const hotelTotal = currentHotel?.price_per_night != null ? Number(currentHotel.price_per_night) * rooms : null;
 
   return (
     <div>
       <FieldLabel>Hotel</FieldLabel>
       {currentHotel ? (
-        <div className="flex items-center justify-between rounded-md border border-line-light bg-white px-3 py-2 text-xs">
-          <div>
-            <div className="font-semibold text-ink">{currentHotel.name}</div>
-            <div className="text-muted">
-              {currentHotel.category ? `${currentHotel.category}★ · ` : ''}
-              {currentHotel.city}
+        <div className="rounded-md border border-line-light bg-white px-3 py-2 text-xs">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="font-semibold text-ink">{currentHotel.name}</div>
+              <div className="text-muted">
+                {currentHotel.category ? `${currentHotel.category}★ · ` : ''}
+                {currentHotel.city}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {hotelTotal != null && <span className="font-semibold text-ink">{formatCurrency(hotelTotal)}</span>}
+              <button type="button" onClick={() => onSelect('')} title="Remove" className="flex-none text-muted hover:text-[#a5162d]">
+                🗑
+              </button>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            {currentHotel.price_per_night != null && (
-              <span className="font-semibold text-ink">{formatCurrency(currentHotel.price_per_night)}/night</span>
-            )}
-            <button type="button" onClick={() => onSelect('')} title="Remove" className="flex-none text-muted hover:text-[#a5162d]">
-              🗑
-            </button>
+          <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-line-light pt-2">
+            <span className="text-[11px] font-semibold uppercase text-muted">Adults</span>
+            <TextInput
+              type="number"
+              min="1"
+              className="w-20 px-2 py-1.5 text-xs"
+              value={currentAdults ?? ''}
+              onChange={(e) => onAdultsChange(e.target.value === '' ? null : Number(e.target.value))}
+            />
+            <span className="text-[11px] text-muted">
+              {rooms} room{rooms === 1 ? '' : 's'} at {formatCurrency(currentHotel.price_per_night)}/room/night
+            </span>
           </div>
         </div>
       ) : (
@@ -572,7 +618,7 @@ function DayCatalogSection({ type, catalog, placedItems, onAdd, onRemove, onNote
 // each section here adds directly from the catalog instead of dragging from
 // a pre-selected pool — an FD package has no separate "agent selection" step
 // the way a Custom FIT quote does.
-function DayPlanCard({ dayNumber, items, catalogs, notes, onNotesChange, addItem, removeItem, updateNote, setHotel, isLast }) {
+function DayPlanCard({ dayNumber, items, catalogs, notes, onNotesChange, addItem, removeItem, updateNote, setHotel, setHotelAdults, isLast }) {
   const hotelItem = items.find((it) => it.type === 'hotel') || null;
   const tourItems = items.filter((it) => it.type === 'tour');
   const transferItems = items.filter((it) => it.type === 'transfer');
@@ -586,7 +632,13 @@ function DayPlanCard({ dayNumber, items, catalogs, notes, onNotesChange, addItem
       </span>
       <div className="flex-1 space-y-3 pt-0.5">
         <div className="text-xs font-bold uppercase tracking-wide text-accent">Day {dayNumber}</div>
-        <DayHotelSection hotels={catalogs.hotels} currentHotelId={hotelItem?.id || ''} onSelect={(hotelId) => setHotel(dayNumber, hotelId)} />
+        <DayHotelSection
+          hotels={catalogs.hotels}
+          currentHotelId={hotelItem?.id || ''}
+          currentAdults={hotelItem?.adults}
+          onSelect={(hotelId) => setHotel(dayNumber, hotelId)}
+          onAdultsChange={(adults) => setHotelAdults(dayNumber, adults)}
+        />
         <DayCatalogSection
           type="tour"
           catalog={catalogs.tours}
@@ -706,6 +758,10 @@ function ItineraryManager({ fdPackageId, itinerary, duration, onChange, onComput
     );
   }
 
+  function setHotelAdultsForDayNumber(dayNumber, adults) {
+    setItineraryItems((items) => updateHotelAdults(items, dayNumber, adults));
+  }
+
   async function save() {
     setSaving(true);
     try {
@@ -744,6 +800,7 @@ function ItineraryManager({ fdPackageId, itinerary, duration, onChange, onComput
               removeItem={removeItemFromDay}
               updateNote={updateItemNoteByKey}
               setHotel={setHotelForDayNumber}
+              setHotelAdults={setHotelAdultsForDayNumber}
               isLast={dayNumber === dayCount}
             />
           ))}
