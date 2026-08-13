@@ -14,7 +14,7 @@ const TABS = [
   { key: 'meals', label: 'Meals' },
 ];
 
-function FdPackageCard({ pkg }) {
+function FdPackageCard({ pkg, onDeleteRequest }) {
   const seatsTotal = pkg.seatsTotal ?? 0;
   const seatsBooked = pkg.seatsBooked ?? 0;
   const seatsLeft = Math.max(seatsTotal - seatsBooked, 0);
@@ -80,12 +80,77 @@ function FdPackageCard({ pkg }) {
             <div className="text-[10px] text-muted">Net rate</div>
             <div className="text-base font-bold">{formatCurrency(pkg.ratePerPax)}</div>
           </div>
-          <Link to={`/admin/catalog/fd-packages/${pkg.id}`}>
-            <Button variant="accent">Edit</Button>
-          </Link>
+          <div className="flex items-center gap-3">
+            <button type="button" onClick={() => onDeleteRequest(pkg)} className="text-xs text-[#a5162d] hover:underline">
+              Delete
+            </button>
+            <Link to={`/admin/catalog/fd-packages/${pkg.id}`}>
+              <Button variant="accent">Edit</Button>
+            </Link>
+          </div>
         </div>
       </div>
     </motion.div>
+  );
+}
+
+// No generic modal exists anywhere in the admin console yet (see the same
+// note on Marketing.jsx's local Modal) — this is a small local one (overlay
+// + centered Card-styled panel, same tokens as everywhere else) rather than
+// the browser's native window.confirm, so the warning and any failure (e.g.
+// a 409 because real bookings still exist — see deleteFdPackage's comment)
+// render in-app instead of a native dialog/alert.
+function DeleteFdPackageModal({ pkg, onCancel, onConfirmed }) {
+  const [error, setError] = useState('');
+  const [deleting, setDeleting] = useState(false);
+
+  async function handleConfirm() {
+    setError('');
+    setDeleting(true);
+    try {
+      await api.del(`/admin/fd-packages/${pkg.id}`);
+      onConfirmed(pkg.id);
+    } catch (err) {
+      setError(err.message || 'Unable to delete FD package');
+      setDeleting(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 bg-black/30" onClick={deleting ? undefined : onCancel} />
+      <div className="relative z-10 w-full max-w-md rounded-lg border border-line-light bg-white p-5 shadow-lg sm:p-6">
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <h3 className="text-lg font-bold text-ink">Delete FD package?</h3>
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={deleting}
+            aria-label="Close"
+            className="text-lg leading-none text-muted hover:text-ink"
+          >
+            ×
+          </button>
+        </div>
+        <p className="text-sm text-ink">
+          Delete <span className="font-semibold">“{pkg.title}”</span>? This also removes its itinerary, departure dates, and
+          add-ons. This can’t be undone.
+        </p>
+        {error && (
+          <div className="mt-3">
+            <ErrorText>{error}</ErrorText>
+          </div>
+        )}
+        <div className="mt-5 flex flex-wrap justify-end gap-2 border-t border-line-light pt-4">
+          <Button onClick={onCancel} disabled={deleting}>
+            Cancel
+          </Button>
+          <Button variant="danger" onClick={handleConfirm} disabled={deleting}>
+            {deleting ? 'Deleting…' : 'Delete'}
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -93,6 +158,7 @@ function FdPackagesTab() {
   const [items, setItems] = useState([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [pendingDelete, setPendingDelete] = useState(null);
 
   useEffect(() => {
     api
@@ -118,9 +184,19 @@ function FdPackagesTab() {
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((pkg) => (
-            <FdPackageCard key={pkg.id} pkg={pkg} />
+            <FdPackageCard key={pkg.id} pkg={pkg} onDeleteRequest={setPendingDelete} />
           ))}
         </div>
+      )}
+      {pendingDelete && (
+        <DeleteFdPackageModal
+          pkg={pendingDelete}
+          onCancel={() => setPendingDelete(null)}
+          onConfirmed={(id) => {
+            setItems((list) => list.filter((i) => i.id !== id));
+            setPendingDelete(null);
+          }}
+        />
       )}
     </div>
   );
@@ -421,24 +497,35 @@ const MEAL_TYPES = [
   { key: 'dinner', label: 'Dinner' },
 ];
 
+function mealPriceString(meal) {
+  return meal ? String(meal.pricePerDay ?? meal.price_per_day ?? '') : '';
+}
+
 // Only one price entry is ever kept per meal type — this form both creates
 // it (nothing exists yet for this mealType) and edits it in place (`existing`
 // is that one row), rather than offering a separate "Add" flow that could
-// pile up duplicates.
+// pile up duplicates. Save is disabled until the field actually differs from
+// what's persisted, and once it matches again (on load, or right after a
+// successful save re-seeds it) shows "Saved" instead.
 function MealForm({ mealType, existing, onSaved }) {
   const [price, setPrice] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  // Re-seed whenever the sub-tab changes or a freshly loaded `existing`
-  // shows up — a half-edited Lunch price must never get saved as Dinner (or
-  // silently carry over onto a different entry) just because either changed.
+  // Re-seed whenever the sub-tab changes or a freshly loaded/just-saved
+  // `existing` shows up — a half-edited Lunch price must never get saved as
+  // Dinner (or silently carry over onto a different entry) just because
+  // either changed. onSaved below hands the parent the fresh row, which
+  // flows back in as this same `existing` prop, so a successful save clears
+  // the dirty state without a separate "last saved" copy to keep in sync.
   useEffect(() => {
-    setPrice(existing ? String(existing.pricePerDay ?? existing.price_per_day ?? '') : '');
+    setPrice(mealPriceString(existing));
     setError('');
   }, [mealType, existing]);
 
   const label = mealType === 'lunch' ? 'Lunch' : 'Dinner';
+  const savedPrice = mealPriceString(existing);
+  const isDirty = price !== savedPrice;
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -470,11 +557,14 @@ function MealForm({ mealType, existing, onSaved }) {
           <FieldLabel>{label} price for 1 day (₹)</FieldLabel>
           <TextInput type="number" min="0" value={price} onChange={(e) => setPrice(e.target.value)} />
         </div>
-        <div className="sm:col-span-2">
-          <ErrorText>{error}</ErrorText>
-          <Button variant="accent" type="submit" disabled={submitting} className="mt-2">
+        <div className="mt-2 flex items-center gap-3 sm:col-span-2">
+          <Button variant="accent" type="submit" disabled={submitting || !isDirty}>
             {submitting ? 'Saving…' : 'Save'}
           </Button>
+          {!submitting && !isDirty && savedPrice !== '' && <span className="text-xs font-semibold text-[#227647]">✓ Saved</span>}
+        </div>
+        <div className="sm:col-span-2">
+          <ErrorText>{error}</ErrorText>
         </div>
       </form>
     </Card>
