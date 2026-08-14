@@ -12,6 +12,8 @@ const TABS = [
   { key: 'activities', label: 'Activities' },
   { key: 'transfers', label: 'Transfers' },
   { key: 'meals', label: 'Meals' },
+  { key: 'visa', label: 'Visa' },
+  { key: 'inclusionsExclusions', label: 'Inclusions & Exclusions' },
 ];
 
 function FdPackageCard({ pkg, onDeleteRequest }) {
@@ -627,6 +629,228 @@ function MealsTab() {
   );
 }
 
+// Product Catalog "Visa" tab — a single flat rate (per person), not a list
+// like Meals' lunch/dinner types: there's only ever the one row, edited in
+// place the same "create it if nothing exists yet, otherwise patch it"
+// pattern as MealForm above, just without a type to switch between. Used by
+// the agent Custom FIT Builder's Visa add-on (agent/pages/PackageBuilder.jsx)
+// — the agent only ever sees a checkbox + headcount, never this price
+// (blind pricing, same as every other catalog rate in that builder).
+function visaPriceString(visa) {
+  return visa ? String(visa.pricePerPerson ?? visa.price_per_person ?? '') : '';
+}
+
+function VisaForm({ existing, onSaved }) {
+  const [price, setPrice] = useState('');
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    setPrice(visaPriceString(existing));
+    setError('');
+  }, [existing]);
+
+  const savedPrice = visaPriceString(existing);
+  const isDirty = price !== savedPrice;
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError('');
+    setSubmitting(true);
+    try {
+      const payload = price !== '' ? { pricePerPerson: Number(price) } : {};
+      const { visa: saved } = existing
+        ? await api.patch(`/admin/visas/${existing.id}`, payload)
+        : await api.post('/admin/visas', payload);
+      onSaved(saved);
+    } catch (err) {
+      setError(err.message || 'Unable to save visa price');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Card label={existing ? 'Edit visa price' : 'Add visa price'} className="border-white">
+      <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div>
+          <FieldLabel>Visa price per person (₹)</FieldLabel>
+          <TextInput type="number" min="0" value={price} onChange={(e) => setPrice(e.target.value)} />
+        </div>
+        <div className="mt-2 flex items-center gap-3 sm:col-span-2">
+          <Button variant="accent" type="submit" disabled={submitting || !isDirty}>
+            {submitting ? 'Saving…' : 'Save'}
+          </Button>
+          {!submitting && !isDirty && savedPrice !== '' && <span className="text-xs font-semibold text-[#227647]">✓ Saved</span>}
+        </div>
+        <div className="sm:col-span-2">
+          <ErrorText>{error}</ErrorText>
+        </div>
+      </form>
+    </Card>
+  );
+}
+
+function VisaTab() {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  function load() {
+    setLoading(true);
+    api
+      .get('/visas')
+      .then(({ visas }) => setItems(visas || []))
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(load, []);
+
+  // Only one entry is ever kept — VisaForm above edits it in place once it
+  // exists, rather than adding another.
+  const existing = items[0] || null;
+
+  async function handleDelete() {
+    await api.del(`/admin/visas/${existing.id}`);
+    setItems([]);
+  }
+
+  return (
+    <div>
+      <p className="mb-4 text-xs text-muted">
+        One flat rate, per person — this is what's used when an agent adds a Visa to a Custom FIT package.
+      </p>
+      {loading ? (
+        <p className="text-xs text-muted">Loading…</p>
+      ) : (
+        <>
+          <VisaForm existing={existing} onSaved={(saved) => setItems([saved])} />
+          {existing && (
+            <button onClick={handleDelete} className="mt-2 text-xs text-[#a5162d] hover:underline">
+              Delete visa price
+            </button>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// Product Catalog "Inclusions & Exclusions" tab, next to Meals — reusable,
+// name-only phrases the admin curates once (e.g. "Daily breakfast",
+// "International flights") for reference when typing a quotation's
+// client-facing Inclusions/Exclusions text in the Quote Inbox's Costing
+// panel (agent/pages/QuoteDetail.jsx shows the final text there, read-only).
+// Unlike Meals, there's no "one entry per type" limit — this is a plain
+// growable list: add a name, remove it, nothing else to edit — so one
+// component is reused for both Inclusions and Exclusions rather than two
+// near-identical tabs.
+const INCLUSION_EXCLUSION_TYPES = [
+  { entityPath: 'inclusions', label: 'Inclusion' },
+  { entityPath: 'exclusions', label: 'Exclusion' },
+];
+
+function NameOnlyCatalogList({ entityPath, label }) {
+  const [items, setItems] = useState([]);
+  const [name, setName] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    setLoading(true);
+    api
+      .get(`/${entityPath}`)
+      .then((data) => setItems(data[entityPath] || []))
+      .finally(() => setLoading(false));
+  }, [entityPath]);
+
+  async function handleAdd(e) {
+    e.preventDefault();
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setError('');
+    setSubmitting(true);
+    try {
+      // Singular response key, same convention as every other catalog
+      // entity (e.g. POST /admin/meals -> { meal }) — catalogHandlersFor
+      // derives it as entityPath.slice(0, -1).
+      const data = await api.post(`/admin/${entityPath}`, { name: trimmed });
+      setItems((list) => [data[entityPath.slice(0, -1)], ...list]);
+      setName('');
+    } catch (err) {
+      setError(err.message || `Unable to add this ${label.toLowerCase()}`);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleRemove(id) {
+    await api.del(`/admin/${entityPath}/${id}`);
+    setItems((list) => list.filter((i) => i.id !== id));
+  }
+
+  return (
+    <div>
+      <form onSubmit={handleAdd} className="mb-4 flex flex-wrap items-end gap-3">
+        <div className="max-w-xs flex-1">
+          <FieldLabel>{label} name</FieldLabel>
+          <TextInput
+            placeholder={label === 'Inclusion' ? 'e.g. Daily breakfast' : 'e.g. International flights'}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </div>
+        <Button variant="accent" type="submit" disabled={submitting || !name.trim()}>
+          {submitting ? 'Adding…' : `+ Add ${label.toLowerCase()}`}
+        </Button>
+      </form>
+      <ErrorText>{error}</ErrorText>
+      {loading ? (
+        <p className="text-xs text-muted">Loading…</p>
+      ) : items.length === 0 ? (
+        <p className="text-xs text-muted">No {label.toLowerCase()}s added yet.</p>
+      ) : (
+        <ul className="divide-y divide-line-light rounded-lg border border-line-light bg-white">
+          {items.map((item) => (
+            <li key={item.id} className="flex items-center justify-between px-4 py-2.5 text-sm">
+              <span>{item.name}</span>
+              <button onClick={() => handleRemove(item.id)} className="text-xs text-[#a5162d] hover:underline">
+                Remove
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function InclusionsExclusionsTab() {
+  const [entityPath, setEntityPath] = useState('inclusions');
+  const active = INCLUSION_EXCLUSION_TYPES.find((t) => t.entityPath === entityPath);
+
+  return (
+    <div>
+      <div className="mb-4 flex flex-wrap gap-2">
+        {INCLUSION_EXCLUSION_TYPES.map((t) => (
+          <button
+            key={t.entityPath}
+            onClick={() => setEntityPath(t.entityPath)}
+            className={`rounded-full border px-4 py-2 text-xs font-semibold ${
+              entityPath === t.entityPath ? 'border-ink bg-ink text-white' : 'border-line-light bg-white text-[#666]'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {/* key= forces a clean remount on switch — each list's own loading/
+          error/draft-name state should never carry over from the other. */}
+      <NameOnlyCatalogList key={entityPath} entityPath={entityPath} label={active.label} />
+    </div>
+  );
+}
+
 export default function ProductCatalog() {
   const [tab, setTab] = useState('fdPackages');
 
@@ -658,8 +882,12 @@ export default function ProductCatalog() {
           <ActivitiesTab />
         ) : tab === 'transfers' ? (
           <TransfersTab />
-        ) : (
+        ) : tab === 'meals' ? (
           <MealsTab />
+        ) : tab === 'visa' ? (
+          <VisaTab />
+        ) : (
+          <InclusionsExclusionsTab />
         )}
       </div>
     </div>

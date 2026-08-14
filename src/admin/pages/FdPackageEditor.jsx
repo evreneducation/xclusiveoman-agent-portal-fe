@@ -4,6 +4,7 @@ import { api } from '../api/client.js';
 import { useToast } from '../../shared/components/ToastProvider.jsx';
 import { Button, Card, Checkbox, FieldLabel, Select, Tag, Table, TextInput } from '../components/ui.jsx';
 import { ImageUpload } from '../components/ImageUpload.jsx';
+import { InclusionExclusionList, itineraryHasItemType, linesFromText, textFromLines } from '../components/InclusionExclusionList.jsx';
 import { FD_THEMES, formatCurrency, parseDurationDays } from '../../shared/fdPackage/index.js';
 import {
   ITINERARY_ITEM_TYPE_META,
@@ -1029,6 +1030,34 @@ function MealsManager({ form, update, onComputedRateChange }) {
   );
 }
 
+// Inclusions/Exclusions — client-facing, shown read-only to the agent once
+// this package is published (agent/pages/DepartureDetail.jsx), same
+// dropdown-from-catalog + editable-list behavior as the Custom FIT Quote
+// Inbox (admin/pages/QuoteInboxDetail.jsx) via the shared
+// InclusionExclusionList. Persisted as plain fields on `form` — one
+// newline-delimited string each — so they ride along with the rest of Save
+// as Draft/Publish Package, no separate save step.
+function InclusionsExclusionsForm({ form, update }) {
+  return (
+    <Card label="Inclusions & Exclusions" className="border-white">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <InclusionExclusionList
+          catalogEntityPath="inclusions"
+          label="Inclusions"
+          items={linesFromText(form.inclusions)}
+          onItemsChange={(items) => update('inclusions', textFromLines(items))}
+        />
+        <InclusionExclusionList
+          catalogEntityPath="exclusions"
+          label="Exclusions"
+          items={linesFromText(form.exclusions)}
+          onItemsChange={(items) => update('exclusions', textFromLines(items))}
+        />
+      </div>
+    </Card>
+  );
+}
+
 // The backend's `ratePerPax` is the resolved/effective price (override, or
 // the itinerary total when there isn't one) — useful for display elsewhere,
 // but the editor needs to know whether an override actually exists so it can
@@ -1094,6 +1123,31 @@ export default function FdPackageEditor() {
   function update(key, value) {
     setForm((f) => ({ ...f, [key]: value }));
   }
+
+  // Inclusions default-seed — same idea as the Custom FIT Quote Inbox
+  // (QuoteInboxDetail.jsx's CostingAndPublishing): while Inclusions is
+  // completely empty, keep it filled in from what's actually in the
+  // package — a hotel on any day adds "Accommodation", a tour adds "Tour as
+  // per itinerary", a transfer adds "Travel as per itinerary", an activity
+  // adds "Activity as per itinerary", a selected lunch/dinner add-on adds
+  // "Meals" (no Visa here — that's a Custom FIT-only add-on the agent
+  // toggles in PackageBuilder.jsx, FD Packages have no agent-facing request
+  // step). Re-evaluated whenever the itinerary/meals change (unlike the
+  // Quote Inbox's one-shot seed on mount) since this editor builds up the
+  // itinerary progressively in the same session rather than loading it
+  // fully formed already — stops the moment Inclusions has any point of its
+  // own, admin-added or previously seeded.
+  useEffect(() => {
+    if (linesFromText(form.inclusions).length > 0) return;
+    const seeded = [];
+    if (itineraryHasItemType(itinerary, 'hotel')) seeded.push('Accommodation');
+    if (itineraryHasItemType(itinerary, 'tour')) seeded.push('Tour as per itinerary');
+    if (itineraryHasItemType(itinerary, 'transfer')) seeded.push('Travel as per itinerary');
+    if (itineraryHasItemType(itinerary, 'activity')) seeded.push('Activity as per itinerary');
+    if (form.lunchMealId || form.dinnerMealId) seeded.push('Meals');
+    if (seeded.length > 0) update('inclusions', textFromLines(seeded));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itinerary, form.lunchMealId, form.dinnerMealId, form.inclusions]);
 
   // Blind pricing aside, the itinerary is the one thing PRD explicitly
   // requires before a package goes live (FGD-2 / ADM-6 catalog screens both
@@ -1178,6 +1232,10 @@ export default function FdPackageEditor() {
         {/* Just above Pricing — its live cost feeds into the same computed
             Net rate, alongside the itinerary total above. */}
         <MealsManager form={form} update={update} onComputedRateChange={setMealsRatePerPax} />
+
+        {/* Summarizes what's already been built above (itinerary + meals) —
+            same reason it's pre-seeded from those, see the effect above. */}
+        <InclusionsExclusionsForm form={form} update={update} />
 
         {/* Rendered last — the net rate is computed from the itinerary and
             meals above, so it reads naturally as a summary once everything

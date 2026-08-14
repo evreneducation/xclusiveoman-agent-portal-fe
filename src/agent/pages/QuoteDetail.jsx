@@ -5,7 +5,6 @@ import { getSocket } from '../lib/socket.js';
 import { Badge, Button, Card, ErrorText, FieldLabel, Table, Textarea } from '../components/ui.jsx';
 import ItineraryTimeline from '../components/ItineraryTimeline.jsx';
 import { formatCurrency } from '../../shared/fdPackage/index.js';
-import { inclusionTexts } from '../../shared/inclusions/index.js';
 
 // Item 2 — agent-facing status labels/tones match the wireframe's colour
 // language (green = good, amber = in progress, red = stop).
@@ -288,6 +287,25 @@ export default function QuoteDetail() {
             </Card>
           )}
 
+          {/* Inclusions/Exclusions — admin-authored free text set alongside
+              costing when the quotation was prepared (Quote Inbox's Costing
+              panel), read-only here, same gating as the Published Quote
+              card above (not shown until the admin has actually published). */}
+          {isPublishedOrLater && (packageRequest.inclusions || packageRequest.exclusions) && (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {packageRequest.inclusions && (
+                <Card label="Inclusions" className="border-white">
+                  <p className="whitespace-pre-line text-sm text-agent-ink">{packageRequest.inclusions}</p>
+                </Card>
+              )}
+              {packageRequest.exclusions && (
+                <Card label="Exclusions" className="border-white">
+                  <p className="whitespace-pre-line text-sm text-agent-ink">{packageRequest.exclusions}</p>
+                </Card>
+              )}
+            </div>
+          )}
+
           <LeadManagerCard leadManager={packageRequest.leadManager} />
 
           <Card label="Traveller details" className="border-white">
@@ -341,21 +359,6 @@ export default function QuoteDetail() {
             days={packageRequest.itinerary}
             emptyLabel="No day-wise itinerary was added for this request."
           />
-
-          {/* Package Inclusions — the same client-facing bullet list the
-              builder's Review step and PDF show under "Inclusions"
-              (shared/inclusions/index.js), read-only here. */}
-          <Card label="Inclusions" className="border-white">
-            {inclusionTexts(packageRequest.inclusions?.items || []).length === 0 ? (
-              <p className="text-sm text-agent-muted">No inclusions were added for this request.</p>
-            ) : (
-              <ul className="list-disc space-y-1 pl-5 text-sm text-agent-ink">
-                {inclusionTexts(packageRequest.inclusions?.items || []).map((text, idx) => (
-                  <li key={idx}>{text}</li>
-                ))}
-              </ul>
-            )}
-          </Card>
 
           {packageRequest.status === 'published' && <AgentActions packageRequest={packageRequest} onUpdated={setPackageRequest} />}
 
