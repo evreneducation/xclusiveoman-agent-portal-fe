@@ -4,6 +4,8 @@ import ProtectedRoute from './routes/ProtectedRoute.jsx';
 import AgentLayout from './components/AgentLayout.jsx';
 import Login from './pages/Login.jsx';
 import Register from './pages/Register.jsx';
+import ForgotPassword from './pages/ForgotPassword.jsx';
+import ResetPassword from './pages/ResetPassword.jsx';
 import ItineraryPrint from './pages/ItineraryPrint.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import Departures from './pages/Departures.jsx';
@@ -27,6 +29,8 @@ export default function App() {
       <Routes>
         <Route path="login" element={<Login />} />
         <Route path="register" element={<Register />} />
+        <Route path="forgot-password" element={<ForgotPassword />} />
+        <Route path="reset-password" element={<ResetPassword />} />
         {/* Not wrapped in ProtectedRoute/AgentLayout — this is the target the
             backend's Puppeteer PDF service navigates to (see
             itineraryPdf.service.js). Authenticates itself via the short-lived
