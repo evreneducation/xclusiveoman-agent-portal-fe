@@ -214,6 +214,49 @@ function MealsSummary({ meals }) {
   );
 }
 
+// Client-facing Inclusions/Exclusions the admin curated in FdPackageEditor.jsx
+// (dropdown-from-catalog + editable list, admin/components/
+// InclusionExclusionList.jsx) — persisted as one newline-delimited string
+// each, so this just splits it back into bullets for display. Read-only,
+// same as MealsSummary above.
+function splitLines(text) {
+  return (text || '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+function InclusionsExclusionsSummary({ inclusions, exclusions }) {
+  const inclusionLines = splitLines(inclusions);
+  const exclusionLines = splitLines(exclusions);
+  if (inclusionLines.length === 0 && exclusionLines.length === 0) return null;
+
+  return (
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      {inclusionLines.length > 0 && (
+        <Card className="border-white">
+          <SectionHeading icon="✅">Inclusions</SectionHeading>
+          <ul className="list-disc space-y-1 pl-5 text-sm text-agent-ink">
+            {inclusionLines.map((line, idx) => (
+              <li key={idx}>{line}</li>
+            ))}
+          </ul>
+        </Card>
+      )}
+      {exclusionLines.length > 0 && (
+        <Card className="border-white">
+          <SectionHeading icon="🚫">Exclusions</SectionHeading>
+          <ul className="list-disc space-y-1 pl-5 text-sm text-agent-ink">
+            {exclusionLines.map((line, idx) => (
+              <li key={idx}>{line}</li>
+            ))}
+          </ul>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 export default function DepartureDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -377,6 +420,8 @@ export default function DepartureDetail() {
           {departure.itinerary?.length > 0 && <ItineraryTimeline itinerary={departure.itinerary} />}
 
           <MealsSummary meals={departure.meals} />
+
+          <InclusionsExclusionsSummary inclusions={departure.inclusions} exclusions={departure.exclusions} />
 
           <HotelInformation hotel={departure.hotel} />
 

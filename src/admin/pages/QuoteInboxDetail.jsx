@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { Badge, Button, Card, ErrorText, FieldLabel, Select, Table, Tag, TextInput, Textarea } from '../components/ui.jsx';
+import { InclusionExclusionList, itineraryHasItemType, linesFromText, textFromLines } from '../components/InclusionExclusionList.jsx';
 import { formatCurrency } from '../../shared/fdPackage/index.js';
 import {
   ITINERARY_ITEM_TYPE_META,
@@ -196,15 +197,52 @@ const MARKUP_TYPES = [
 // Landing Cost Breakdown, Editable Costing, Pricing & Markup, Quote Summary,
 // Internal Notes, and Save Draft / Publish Quote (items 1-6) — one component
 // since they all share the same live-recalculated figures and the same save.
+// Inclusions/Exclusions editing (linesFromText/textFromLines/
+// itineraryHasItemType/InclusionExclusionList) lives in admin/components/
+// InclusionExclusionList.jsx — shared with FdPackageEditor.jsx, which needs
+// the exact same behavior.
+
 function CostingAndPublishing({ packageRequest, onUpdated }) {
   const [hotelCost, setHotelCost] = useState(packageRequest.costing?.hotels?.override ?? '');
   const [tourCost, setTourCost] = useState(packageRequest.costing?.tours?.override ?? '');
   const [transferCost, setTransferCost] = useState(packageRequest.costing?.transfers?.override ?? '');
   const [extraCost, setExtraCost] = useState(packageRequest.costing?.extras?.override ?? '');
   const [mealCost, setMealCost] = useState(packageRequest.costing?.meals?.override ?? '');
+  const [visaCost, setVisaCost] = useState(packageRequest.costing?.visa?.override ?? '');
   const [markupType, setMarkupType] = useState(packageRequest.markupType || 'percentage');
   const [markupValue, setMarkupValue] = useState(packageRequest.markupValue ?? '');
   const [internalNotes, setInternalNotes] = useState(packageRequest.internalNotes || '');
+  // Inclusions/Exclusions — client-facing, unlike internalNotes above: shown
+  // read-only on the agent's own quote view once this quote is published
+  // (agent/pages/QuoteDetail.jsx), same as Final Selling Price. Each is a
+  // list of individually add/edit/removable points (InclusionExclusionList
+  // below), not raw text — persisted as one point per line.
+  //
+  // A brand-new quote (nothing saved yet) seeds Inclusions from what the
+  // agent actually put together — a hotel on any day adds "Accommodation", a
+  // tour adds "Tour as per itinerary", a transfer adds "Travel as per
+  // itinerary", an activity adds "Activity as per itinerary", a selected
+  // lunch/dinner add-on adds "Meals", and the Visa checkbox adds "Visa" — so
+  // the admin starts from a sensible default instead of a blank list, and
+  // can still add more from the catalog dropdown or edit/remove any of
+  // these same as a manually-added point (InclusionExclusionList below) —
+  // the two ways of building this list aren't exclusive. Only fires once,
+  // for an empty starting point; a quote that already has saved inclusions
+  // (including one where the admin deliberately removed one of these) is
+  // left exactly as saved.
+  const [inclusions, setInclusions] = useState(() => {
+    const saved = linesFromText(packageRequest.inclusions);
+    if (saved.length > 0) return saved;
+    const seeded = [];
+    if (itineraryHasItemType(packageRequest.itinerary, 'hotel')) seeded.push('Accommodation');
+    if (itineraryHasItemType(packageRequest.itinerary, 'tour')) seeded.push('Tour as per itinerary');
+    if (itineraryHasItemType(packageRequest.itinerary, 'transfer')) seeded.push('Travel as per itinerary');
+    if (itineraryHasItemType(packageRequest.itinerary, 'activity')) seeded.push('Activity as per itinerary');
+    if (packageRequest.lunchMealId || packageRequest.dinnerMealId) seeded.push('Meals');
+    if (packageRequest.visaEnabled) seeded.push('Visa');
+    return seeded;
+  });
+  const [exclusions, setExclusions] = useState(() => linesFromText(packageRequest.exclusions));
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState('');
 
@@ -215,20 +253,24 @@ function CostingAndPublishing({ packageRequest, onUpdated }) {
   // exception — nothing on this page can change the agent's lunch/dinner
   // selection live, so its auto figure is just read straight off
   // packageRequest.mealsCostAuto (computed fresh server-side on every GET)
-  // rather than mirrored client-side like the other four.
+  // rather than mirrored client-side like the other four. Visa (visaAuto) is
+  // the same story — its headcount is fixed once the agent submits, nothing
+  // here changes it live either.
   const totalPax = (packageRequest.paxAdults || 0) + (packageRequest.paxChildren || 0);
   const hotelAuto = computeHotelAuto(packageRequest.itinerary, packageRequest.hotels);
   const tourAuto = sumPrices(packageRequest.tours, 'price');
   const transferAuto = sumPrices(packageRequest.transfers, 'price');
   const extraAuto = sumPrices(packageRequest.activities, 'pricePerPax') * Math.max(totalPax, 1);
   const mealAuto = packageRequest.mealsCostAuto || 0;
+  const visaAuto = packageRequest.visaCostAuto || 0;
 
   const hotelTotal = hotelCost !== '' ? Number(hotelCost) : hotelAuto;
   const tourTotal = tourCost !== '' ? Number(tourCost) : tourAuto;
   const transferTotal = transferCost !== '' ? Number(transferCost) : transferAuto;
   const extraTotal = extraCost !== '' ? Number(extraCost) : extraAuto;
   const mealTotal = mealCost !== '' ? Number(mealCost) : mealAuto;
-  const landingCost = hotelTotal + tourTotal + transferTotal + extraTotal + mealTotal;
+  const visaTotal = visaCost !== '' ? Number(visaCost) : visaAuto;
+  const landingCost = hotelTotal + tourTotal + transferTotal + extraTotal + mealTotal + visaTotal;
 
   const markupNumber = Number(markupValue) || 0;
   const markupAmount = markupType === 'percentage' ? (landingCost * markupNumber) / 100 : markupNumber;
@@ -243,9 +285,12 @@ function CostingAndPublishing({ packageRequest, onUpdated }) {
       transferCost: transferCost === '' ? null : Number(transferCost),
       extraCost: extraCost === '' ? null : Number(extraCost),
       mealCost: mealCost === '' ? null : Number(mealCost),
+      visaCost: visaCost === '' ? null : Number(visaCost),
       markupType,
       markupValue: markupNumber,
       internalNotes,
+      inclusions: textFromLines(inclusions),
+      exclusions: textFromLines(exclusions),
     };
   }
 
@@ -302,6 +347,7 @@ function CostingAndPublishing({ packageRequest, onUpdated }) {
           <CostComponentField label="Transfers" auto={transferAuto} value={transferCost} onChange={setTransferCost} />
           <CostComponentField label="Extras" auto={extraAuto} value={extraCost} onChange={setExtraCost} />
           <CostComponentField label="Meals" auto={mealAuto} value={mealCost} onChange={setMealCost} />
+          <CostComponentField label="Visa" auto={visaAuto} value={visaCost} onChange={setVisaCost} />
         </div>
         <div className="mt-4 flex items-center justify-between rounded-md bg-panel px-4 py-3">
           <span className="text-sm font-semibold">Landing Cost</span>
@@ -352,6 +398,19 @@ function CostingAndPublishing({ packageRequest, onUpdated }) {
             <dd className="text-base font-bold text-accent">{formatCurrency(sellPrice)}</dd>
           </div>
         </dl>
+      </Card>
+
+      {/* Inclusions/Exclusions — client-facing, shown read-only on the
+          agent's own quote view once this quote is published (agent/pages/
+          QuoteDetail.jsx), same as Final Selling Price above. Each point is
+          picked from the Product Catalog's Inclusions/Exclusions tab (or
+          pre-seeded from the itinerary — see itineraryHasItemType above),
+          then freely editable/removable in place. */}
+      <Card label="Inclusions & Exclusions — shown to the agent once published" className="border-white">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <InclusionExclusionList catalogEntityPath="inclusions" label="Inclusions" items={inclusions} onItemsChange={setInclusions} />
+          <InclusionExclusionList catalogEntityPath="exclusions" label="Exclusions" items={exclusions} onItemsChange={setExclusions} />
+        </div>
       </Card>
 
       <Card label="Internal notes — admin only, never shown to the agent" className="border-white">
