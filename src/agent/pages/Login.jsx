@@ -1,16 +1,20 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { FiMail } from 'react-icons/fi';
 import { useAuth } from '../context/AuthContext.jsx';
-import { Button, ErrorText, FieldLabel, PasswordInput, TextInput } from '../components/ui.jsx';
+import { Button, Checkbox, ErrorText, FieldLabel, PasswordInput, TextInput } from '../components/ui.jsx';
 import AuthShell from '../components/AuthShell.jsx';
 
-const CITIES = ['Muscat', 'Nizwa', 'Salalah'];
-
+// Matches the reference design exactly: logo + tagline centered up top, then
+// just the two fields the account actually needs — Email and Password, no
+// extra fields. Remember me / Forgot password / Sign up are the only other
+// interactive pieces, same as the reference.
 export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -29,56 +33,58 @@ export default function Login() {
   }
 
   return (
-    <AuthShell
-      eyebrow="Welcome back"
-      heading="Sign in to manage your quotes, bookings & departures"
-      tagline="Track FIT and MICE requests, message your Relationship Manager, and stay on top of every payment — all in one place."
-      panelFooter={
-        <div className="grid grid-cols-3 gap-3 text-sm text-white/75">
-          {CITIES.map((c) => (
-            <div key={c} className="rounded-lg border border-white/10 bg-white/5 px-3 py-3 text-center">
-              {c}
-            </div>
-          ))}
+    <AuthShell>
+      <div className="mx-auto w-full max-w-sm">
+        <div className="flex flex-col items-center text-center">
+          <img src="/Xclusive_Oman_Logo_2.png" alt="Xclusive Oman" className="h-11 w-auto object-contain" />
+          <p className="mt-2 text-sm text-agent-muted">Your trade gateway to exclusive Oman experiences</p>
         </div>
-      }
-    >
-      <div className="mx-auto w-full max-w-md rounded-2xl border border-agent-line-light bg-white/95 p-7 shadow-xl shadow-black/5 sm:p-8">
-        <h2 className="text-xl font-bold text-agent-ink">Sign in</h2>
-        <p className="mt-1 text-sm text-agent-muted">Enter your credentials to access your agent portal.</p>
 
-        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+        <form onSubmit={handleSubmit} className="mt-8 space-y-4 text-left">
           <div>
-            <FieldLabel>Email address</FieldLabel>
-            <TextInput
-              type="email"
-              required
-              autoFocus
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@agency.com"
-            />
+            <FieldLabel>Email*</FieldLabel>
+            <div className="relative">
+              <FiMail className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-agent-muted" size={16} />
+              <TextInput
+                type="email"
+                required
+                autoFocus
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Enter your email"
+                className="pl-9"
+              />
+            </div>
           </div>
+
           <div>
-            <FieldLabel>Password</FieldLabel>
-            <PasswordInput
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-            />
+            <FieldLabel>Password*</FieldLabel>
+            <PasswordInput required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Enter password" />
           </div>
+
+          <div className="flex items-center justify-between">
+            <Checkbox checked={rememberMe} onChange={setRememberMe} label="Remember me" />
+            <Link to="/agent/forgot-password" className="text-xs font-semibold text-agent-accent-dark hover:underline">
+              Forgot password?
+            </Link>
+          </div>
+
           <ErrorText>{error}</ErrorText>
-          <Button variant="solid" type="submit" className="w-full py-2.5 text-center text-sm" disabled={submitting}>
-            {submitting ? 'Signing in…' : 'Sign In'}
+
+          <Button variant="solid" type="submit" className="w-full justify-center rounded-full py-2.5 text-sm" disabled={submitting}>
+            {submitting ? 'Logging in…' : 'Log in'}
           </Button>
         </form>
 
-        <p className="mt-6 text-center text-sm text-agent-muted">
-          New to Xclusive Oman?{' '}
+        <p className="mt-5 text-center text-sm text-agent-muted">
+          Don't have an account?{' '}
           <Link to="/agent/register" className="font-semibold text-agent-accent-dark hover:underline">
-            Create an agency account
+            Sign up
           </Link>
+        </p>
+
+        <p className="mt-6 text-center text-[11px] leading-relaxed text-agent-muted">
+          By logging in, you agree to Xclusive Oman's current Terms of Service and Privacy Policy.
         </p>
       </div>
     </AuthShell>

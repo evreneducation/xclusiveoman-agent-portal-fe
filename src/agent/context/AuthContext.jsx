@@ -66,6 +66,14 @@ export function AuthProvider({ children }) {
     return api.post('/auth/register', payload, { skipAuth: true });
   }, []);
 
+  const forgotPassword = useCallback(async (email) => {
+    return api.post('/auth/forgot-password', { email }, { skipAuth: true });
+  }, []);
+
+  const resetPassword = useCallback(async ({ token, password }) => {
+    return api.post('/auth/reset-password', { token, password }, { skipAuth: true });
+  }, []);
+
   const logout = useCallback(async () => {
     try {
       await api.post('/auth/logout');
@@ -81,6 +89,8 @@ export function AuthProvider({ children }) {
     socketConnected,
     login,
     register,
+    forgotPassword,
+    resetPassword,
     logout,
   };
 
