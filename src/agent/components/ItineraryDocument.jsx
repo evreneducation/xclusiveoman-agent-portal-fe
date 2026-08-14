@@ -57,6 +57,7 @@ export default function ItineraryDocument({
   hotels,
   days,
   selectedCounts,
+  inclusions,
 }) {
   const nights = Math.max(dayCount - 1, 0);
   const totalPax = (paxAdults || 0) + (paxChildren || 0);
@@ -190,7 +191,24 @@ export default function ItineraryDocument({
         )}
       </div>
 
-      {/* 5. Summary — FIT-6 blind pricing: counts only, never a price. */}
+      {/* 5. Inclusions — the agent's own editable summary of everything added
+          to the itinerary/meals above (shared/inclusions/index.js), printed
+          the same on screen and in the exported PDF (ItineraryPrint.jsx
+          passes this same `inclusions` array through unchanged). */}
+      <div className="mb-6">
+        <SectionBar>Inclusions</SectionBar>
+        {!inclusions || inclusions.length === 0 ? (
+          <p className="text-sm text-agent-muted">Nothing added yet.</p>
+        ) : (
+          <ul className="list-disc space-y-1 pl-5 text-sm text-agent-ink">
+            {inclusions.map((text, idx) => (
+              <li key={idx}>{text}</li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {/* 6. Summary — FIT-6 blind pricing: counts only, never a price. */}
       <div>
         <SectionBar>Package Summary</SectionBar>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
