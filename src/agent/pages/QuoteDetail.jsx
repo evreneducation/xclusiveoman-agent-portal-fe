@@ -5,6 +5,7 @@ import { getSocket } from '../lib/socket.js';
 import { Badge, Button, Card, ErrorText, FieldLabel, Table, Textarea } from '../components/ui.jsx';
 import ItineraryTimeline from '../components/ItineraryTimeline.jsx';
 import { formatCurrency } from '../../shared/fdPackage/index.js';
+import { inclusionTexts } from '../../shared/inclusions/index.js';
 
 // Item 2 — agent-facing status labels/tones match the wireframe's colour
 // language (green = good, amber = in progress, red = stop).
@@ -340,6 +341,21 @@ export default function QuoteDetail() {
             days={packageRequest.itinerary}
             emptyLabel="No day-wise itinerary was added for this request."
           />
+
+          {/* Package Inclusions — the same client-facing bullet list the
+              builder's Review step and PDF show under "Inclusions"
+              (shared/inclusions/index.js), read-only here. */}
+          <Card label="Inclusions" className="border-white">
+            {inclusionTexts(packageRequest.inclusions?.items || []).length === 0 ? (
+              <p className="text-sm text-agent-muted">No inclusions were added for this request.</p>
+            ) : (
+              <ul className="list-disc space-y-1 pl-5 text-sm text-agent-ink">
+                {inclusionTexts(packageRequest.inclusions?.items || []).map((text, idx) => (
+                  <li key={idx}>{text}</li>
+                ))}
+              </ul>
+            )}
+          </Card>
 
           {packageRequest.status === 'published' && <AgentActions packageRequest={packageRequest} onUpdated={setPackageRequest} />}
 

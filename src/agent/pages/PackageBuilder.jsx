@@ -14,6 +14,16 @@ import {
   serializeItinerary,
   updateItineraryItemNote,
 } from '../../shared/itinerary/index.js';
+import {
+  addCustomInclusion,
+  buildDefaultInclusions,
+  deserializeInclusions,
+  inclusionTexts,
+  reconcileInclusions,
+  removeInclusion,
+  serializeInclusions,
+  updateInclusionText,
+} from '../../shared/inclusions/index.js';
 
 // Today, as a "YYYY-MM-DD" string in the browser's local timezone — matches
 // what <input type="date"> reads/writes, so it can be used directly as a
@@ -745,6 +755,47 @@ function MealsCard({ meals, form, update }) {
   );
 }
 
+// Package Inclusions — a client-facing bullet list auto-populated from
+// whatever's been added above (day-wise itinerary + Meals), shown under an
+// "Inclusions" heading in the Review step's document and the exported PDF
+// (see shared/inclusions/index.js). Every line is editable in place, and
+// removable regardless of whether its source item is still selected —
+// Inclusions is the agent's own editable summary, not a live mirror.
+function InclusionsCard({ inclusions, onTextChange, onRemove, onAdd }) {
+  return (
+    <Card label="Inclusions" className="border-white">
+      <p className="mb-3 text-xs text-agent-muted">
+        Auto-added as you build the itinerary and meals above — edit the wording or remove a line here. This is what
+        prints under "Inclusions" in the client-facing document and PDF.
+      </p>
+      {inclusions.length === 0 ? (
+        <p className="text-sm text-agent-muted">
+          Nothing added yet — hotels, tours, transfers, extras and meals you add above will show up here.
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {inclusions.map((inc) => (
+            <div key={inc.id} className="flex items-center gap-2">
+              <TextInput className="flex-1" value={inc.text} onChange={(e) => onTextChange(inc.id, e.target.value)} />
+              <button
+                type="button"
+                onClick={() => onRemove(inc.id)}
+                title="Remove from Inclusions"
+                className="flex-none text-agent-muted hover:text-[#a5162d]"
+              >
+                🗑
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <Button className="mt-3" onClick={onAdd}>
+        + Add inclusion
+      </Button>
+    </Card>
+  );
+}
+
 // Step 2 — City & Days planner + day-wise itinerary built from it (FIT-5).
 function ItineraryStep({
   dayCount,
@@ -769,6 +820,10 @@ function ItineraryStep({
   updateItemNoteByKey,
   setHotelForDayNumber,
   setHotelOccupancyForDayNumber,
+  inclusions,
+  updateInclusion,
+  removeInclusionLine,
+  addInclusionLine,
 }) {
   return (
     <div className="space-y-4">
@@ -815,6 +870,13 @@ function ItineraryStep({
       </Card>
 
       <MealsCard meals={meals} form={form} update={update} />
+
+      <InclusionsCard
+        inclusions={inclusions}
+        onTextChange={updateInclusion}
+        onRemove={removeInclusionLine}
+        onAdd={addInclusionLine}
+      />
     </div>
   );
 }
@@ -875,7 +937,7 @@ function TravelersEditor({ travelers, updateTraveler }) {
 }
 
 // Step 3 — review & submit. No price/cost/markup fields anywhere (FIT-6).
-function ReviewStep({ form, dayCount, hotels, days, selectedCounts, travelers, updateTraveler, downloadingPdf, onDownloadPdf }) {
+function ReviewStep({ form, dayCount, hotels, days, selectedCounts, inclusions, travelers, updateTraveler, downloadingPdf, onDownloadPdf }) {
   return (
     <div className="space-y-4">
       {/* Redesigned to read like a real client-facing itinerary document
@@ -900,6 +962,7 @@ function ReviewStep({ form, dayCount, hotels, days, selectedCounts, travelers, u
         hotels={hotels}
         days={days}
         selectedCounts={selectedCounts}
+        inclusions={inclusions}
       />
 
       {/* Traveller details is data entry, not part of the client-facing
@@ -991,6 +1054,14 @@ export default function PackageBuilder() {
   const [itineraryItems, setItineraryItems] = useState([]);
   const [dayNotes, setDayNotes] = useState({});
 
+  // Package Inclusions — the Review step's editable "Inclusions" bullet list
+  // (also printed on the PDF), auto-populated from itineraryItems/Meals and
+  // reconciled on every change (see the effect below). `dismissedInclusionKeys`
+  // is what keeps a line the agent removed from being silently re-added while
+  // its source item is still selected — see shared/inclusions/index.js.
+  const [inclusions, setInclusions] = useState([]);
+  const [dismissedInclusionKeys, setDismissedInclusionKeys] = useState([]);
+
   // Draft Quotes (item 1) — "Continue Editing" opens /agent/package-builder/:id;
   // draftId then tracks which row "Save Draft" and "Submit Request" write to.
   const [draftId, setDraftId] = useState(draftIdParam || '');
@@ -1058,6 +1129,9 @@ export default function PackageBuilder() {
         const { items, dayNotes: loadedDayNotes } = deserializeItinerary(pr.itinerary);
         setItineraryItems(items);
         setDayNotes(loadedDayNotes);
+        const { inclusions: loadedInclusions, dismissedKeys: loadedDismissedKeys } = deserializeInclusions(pr.inclusions);
+        setInclusions(loadedInclusions);
+        setDismissedInclusionKeys(loadedDismissedKeys);
       })
       .catch((err) => setError(err.message || 'Unable to load this draft'))
       .finally(() => setDraftLoading(false));
@@ -1128,6 +1202,18 @@ export default function PackageBuilder() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cityDays, dayCount]);
 
+  // Keeps Inclusions in sync with the itinerary/meals: adds one line per
+  // newly-added item/meal, never touches an already-present line's (possibly
+  // agent-edited) text, and never re-adds a line the agent removed while its
+  // source is still selected (dismissedInclusionKeys — see
+  // shared/inclusions/index.js). reconcileInclusions returns the same array
+  // reference when there's nothing new, so this is a no-op render otherwise.
+  useEffect(() => {
+    const defaults = buildDefaultInclusions(itineraryItems, { hotels, tours, transfers, activities }, form);
+    setInclusions((current) => reconcileInclusions(current, defaults, dismissedInclusionKeys));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itineraryItems, hotels, tours, transfers, activities, form.lunchMealId, form.lunchPeople, form.lunchDays, form.dinnerMealId, form.dinnerPeople, form.dinnerDays, dismissedInclusionKeys]);
+
   function update(key, value) {
     setForm((f) => ({ ...f, [key]: value }));
   }
@@ -1180,6 +1266,27 @@ export default function PackageBuilder() {
     setItineraryItems((items) => updateHotelOccupancy(items, dayNumber, occupancy));
   }
 
+  function updateInclusion(id, text) {
+    setInclusions((list) => updateInclusionText(list, id, text));
+  }
+
+  // Removing a line is permanent even while its source item stays in the
+  // itinerary — records the sourceKey as dismissed so the reconciliation
+  // effect above doesn't just add it straight back on the next itinerary edit.
+  function removeInclusionLine(id) {
+    setInclusions((list) => {
+      const removing = list.find((i) => i.id === id);
+      if (removing?.sourceKey) {
+        setDismissedInclusionKeys((keys) => (keys.includes(removing.sourceKey) ? keys : [...keys, removing.sourceKey]));
+      }
+      return removeInclusion(list, id);
+    });
+  }
+
+  function addInclusionLine() {
+    setInclusions((list) => addCustomInclusion(list, ''));
+  }
+
   // Selection is derived from itineraryItems now, not the other way around —
   // deduped per type since the same catalog item can be added to more than
   // one day (most often the same hotel across a multi-day city stay).
@@ -1204,6 +1311,7 @@ export default function PackageBuilder() {
       activityIds: selectedActivityIds,
       travelers: travelers.map((t) => ({ name: t.name, passportNo: t.passportNo || undefined, isChild: t.type === 'child' })),
       itinerary: serializeItinerary(itineraryItems, dayNotes, dayCount),
+      inclusions: serializeInclusions(inclusions, dismissedInclusionKeys),
       lunchMealId: form.lunchMealId ?? null,
       lunchPeople: form.lunchPeople ?? null,
       lunchDays: form.lunchDays ?? null,
@@ -1309,6 +1417,7 @@ export default function PackageBuilder() {
         // has a name (and adults have a passport), so all rows are real.
         travelers: travelers.map((t) => ({ name: t.name, passportNo: t.passportNo || undefined, isChild: t.type === 'child' })),
         itinerary: serializeItinerary(itineraryItems, dayNotes, dayCount),
+        inclusions: serializeInclusions(inclusions, dismissedInclusionKeys),
         lunchMealId: form.lunchMealId ?? null,
         lunchPeople: form.lunchPeople ?? null,
         lunchDays: form.lunchDays ?? null,
@@ -1418,6 +1527,10 @@ export default function PackageBuilder() {
               updateItemNoteByKey={updateItemNoteByKey}
               setHotelForDayNumber={setHotelForDayNumber}
               setHotelOccupancyForDayNumber={setHotelOccupancyForDayNumber}
+              inclusions={inclusions}
+              updateInclusion={updateInclusion}
+              removeInclusionLine={removeInclusionLine}
+              addInclusionLine={addInclusionLine}
             />
           )}
           {step === 3 && (
@@ -1427,6 +1540,7 @@ export default function PackageBuilder() {
               hotels={hotelsForDocument}
               days={fullItineraryDays}
               selectedCounts={selectedCounts}
+              inclusions={inclusionTexts(inclusions)}
               travelers={travelers}
               updateTraveler={updateTraveler}
               downloadingPdf={downloadingPdf}

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import ItineraryDocument from '../components/ItineraryDocument.jsx';
 import { computeDayCount } from '../../shared/itinerary/index.js';
+import { inclusionTexts } from '../../shared/inclusions/index.js';
 
 // Same base-URL resolution as shared/api/createApiClient.js — deliberately
 // not that module (or the agent `api` singleton it backs): this page
@@ -136,6 +137,7 @@ export default function ItineraryPrint() {
         hotels={hotelsForDocument}
         days={fillItineraryDays(packageRequest.itinerary, dayCount)}
         selectedCounts={selectedCounts}
+        inclusions={inclusionTexts(packageRequest.inclusions?.items || [])}
       />
     </div>
   );
