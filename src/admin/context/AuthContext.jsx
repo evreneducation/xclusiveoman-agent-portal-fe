@@ -63,28 +63,6 @@ export function AuthProvider({ children }) {
     })();
   }, [clearSession, wireSocket]);
 
-  const login = useCallback(
-    async ({ email, password }) => {
-      const { accessToken, user: loggedInUser } = await api.post('/auth/login', { email, password }, { skipAuth: true });
-
-      if (!isStaffUser(loggedInUser)) {
-        // Log the session out immediately — this account belongs to an agency,
-        // not internal staff, so it has no business holding a session here.
-        setAccessToken(accessToken);
-        await api.post('/auth/logout').catch(() => {});
-        setAccessToken(null);
-        throw new Error('This account is an agent account. Use the agent portal to sign in.');
-      }
-
-      setAccessToken(accessToken);
-      setUser(loggedInUser);
-      setStatus('authenticated');
-      wireSocket(accessToken);
-      return loggedInUser;
-    },
-    [wireSocket]
-  );
-
   const logout = useCallback(async () => {
     try {
       await api.post('/auth/logout');
@@ -99,7 +77,6 @@ export function AuthProvider({ children }) {
     isAuthenticated: status === 'authenticated',
     isSuperAdmin: user?.role === 'super_admin',
     socketConnected,
-    login,
     logout,
   };
 

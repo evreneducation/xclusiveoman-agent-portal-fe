@@ -17,6 +17,7 @@ import {
   LuMegaphone,
   LuPresentation,
   LuReceipt,
+  LuTruck,
   LuUserCheck,
   LuWallet,
 } from 'react-icons/lu';
@@ -32,8 +33,15 @@ import { Button } from './ui.jsx';
 // notifyAdminsOfNewAgent) resolves to the Agent Approvals list: there's no
 // per-agency detail route in the admin portal yet, so the list is as close
 // as navigation can currently get.
+// 'marketing_campaign' (Marketing campaign scheduled/sent/partially failed/
+// failed/cancelled — backend's marketingActivity.service.js#recordCampaignEvent,
+// Task 8) resolves to the Marketing Center; Campaign History (Task 7) is a
+// tab there, not its own route, so this lands as close as the current
+// routing supports — same "list, not per-record detail route" reasoning as
+// 'agency' above.
 const REFERENCE_ROUTES = {
   agency: () => '/admin/approvals',
+  marketing_campaign: () => '/admin/marketing',
 };
 
 function resolveNotificationPath(referenceType) {
@@ -81,6 +89,7 @@ const NAV_ITEMS = [
     ],
   },
   { key: 'bookings-documents', to: '/admin/bookings-documents', label: 'Bookings & Documents', Icon: LuClipboardCheck },
+  { key: 'operations', to: '/admin/operations', label: 'FD Operations', Icon: LuTruck },
   {
     key: 'finance',
     label: 'Finance',
