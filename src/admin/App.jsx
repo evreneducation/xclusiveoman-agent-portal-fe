@@ -27,6 +27,7 @@ import OperationsList from './pages/OperationsList.jsx';
 import OperationsDetail from './pages/OperationsDetail.jsx';
 import Analytics from './pages/Analytics.jsx';
 import Support from './pages/Support.jsx';
+import SupportTicketDetail from './pages/SupportTicketDetail.jsx';
 
 export default function App() {
   return (
@@ -64,6 +65,7 @@ export default function App() {
               <Route path="operations/:departureDateId" element={<OperationsDetail />} />
               <Route path="analytics" element={<Analytics />} />
               <Route path="support" element={<Support />} />
+              <Route path="support/:ticketId" element={<SupportTicketDetail />} />
             </Route>
           </Route>
           <Route index element={<Navigate to="dashboard" replace />} />
