@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { Badge, ErrorText, Table } from '../components/ui.jsx';
 
@@ -43,7 +44,7 @@ export default function Bookings() {
         <p className="text-sm text-agent-muted">No bookings yet.</p>
       ) : (
         <Table
-          columns={['Booking', 'Type', 'Pax', 'Total', 'Balance Due', 'Status', 'Created']}
+          columns={['Booking', 'Type', 'Pax', 'Total', 'Balance Due', 'Status', 'Created', '']}
           rows={bookings}
           renderRow={(b) => (
             <tr key={b.id} className="border-b border-agent-line-light last:border-0">
@@ -56,6 +57,15 @@ export default function Bookings() {
                 <Badge tone={STATUS_TONE[b.status] || 'grey'}>{b.status?.replace(/_/g, ' ')}</Badge>
               </td>
               <td className="px-3 py-2">{new Date(b.createdAt).toLocaleDateString()}</td>
+              <td className="px-3 py-2 text-right">
+                {/* Documents (Task 14) only exist for FD bookings today — see
+                    documents.model.js's own FD-only scoping. */}
+                {b.sourceType === 'fd_package' && (
+                  <Link to={`/bookings/${b.id}`} className="text-agent-accent hover:underline">
+                    Documents
+                  </Link>
+                )}
+              </td>
             </tr>
           )}
         />
