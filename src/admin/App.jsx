@@ -21,7 +21,10 @@ import MiceRequestDetail from './pages/MiceRequestDetail.jsx';
 import Employees from './pages/Employees.jsx';
 import TransactionLedger from './pages/TransactionLedger.jsx';
 import BookingsDocuments from './pages/BookingsDocuments.jsx';
+import BookingDetailAdmin from './pages/BookingDetailAdmin.jsx';
 import Marketing from './pages/Marketing.jsx';
+import OperationsList from './pages/OperationsList.jsx';
+import OperationsDetail from './pages/OperationsDetail.jsx';
 import Analytics from './pages/Analytics.jsx';
 import Support from './pages/Support.jsx';
 
@@ -55,7 +58,10 @@ export default function App() {
               <Route path="neft-verification" element={<NeftVerification />} />
               <Route path="transactions" element={<TransactionLedger />} />
               <Route path="bookings-documents" element={<BookingsDocuments />} />
+              <Route path="bookings/:bookingId" element={<BookingDetailAdmin />} />
               <Route path="marketing" element={<Marketing />} />
+              <Route path="operations" element={<OperationsList />} />
+              <Route path="operations/:departureDateId" element={<OperationsDetail />} />
               <Route path="analytics" element={<Analytics />} />
               <Route path="support" element={<Support />} />
             </Route>

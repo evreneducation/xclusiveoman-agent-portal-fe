@@ -17,6 +17,7 @@ import {
   LuMegaphone,
   LuPresentation,
   LuReceipt,
+  LuTruck,
   LuUserCheck,
   LuWallet,
 } from 'react-icons/lu';
@@ -88,6 +89,7 @@ const NAV_ITEMS = [
     ],
   },
   { key: 'bookings-documents', to: '/admin/bookings-documents', label: 'Bookings & Documents', Icon: LuClipboardCheck },
+  { key: 'operations', to: '/admin/operations', label: 'FD Operations', Icon: LuTruck },
   {
     key: 'finance',
     label: 'Finance',
