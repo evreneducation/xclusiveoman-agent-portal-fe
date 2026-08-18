@@ -50,18 +50,6 @@ export function AuthProvider({ children }) {
     })();
   }, [clearSession, wireSocket]);
 
-  const login = useCallback(
-    async ({ email, password }) => {
-      const { accessToken, user: loggedInUser } = await api.post('/auth/login', { email, password }, { skipAuth: true });
-      setAccessToken(accessToken);
-      setUser(loggedInUser);
-      setStatus('authenticated');
-      wireSocket(accessToken);
-      return loggedInUser;
-    },
-    [wireSocket]
-  );
-
   const register = useCallback(async (payload) => {
     return api.post('/auth/register', payload, { skipAuth: true });
   }, []);
@@ -87,7 +75,6 @@ export function AuthProvider({ children }) {
     status,
     isAuthenticated: status === 'authenticated',
     socketConnected,
-    login,
     register,
     forgotPassword,
     resetPassword,
