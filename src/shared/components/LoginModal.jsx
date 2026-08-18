@@ -52,7 +52,7 @@
 // unmounts AgentApp and mounts AdminApp fresh) alike.
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { FiEye, FiEyeOff, FiMail } from 'react-icons/fi';
+import { FiCheckCircle, FiEye, FiEyeOff, FiMail } from 'react-icons/fi';
 import { createApiClient } from '../api/createApiClient.js';
 
 // A fresh, dedicated client — not shared with (and never touching the
@@ -121,6 +121,22 @@ const FOOTER_NOTE = "By logging in, you agree to Xclusive Oman's current Terms o
 const FORGOT_PASSWORD_HREF = '/agent/forgot-password';
 const SIGN_UP_HREF = '/agent/register';
 
+// Visual-panel copy only (Phase: LoginModal restyle) — presentational text,
+// not a prop, not read by any logic on this page. Adapted from the master
+// documentation's own Executive Summary (§1) and feature summaries (§6),
+// not invented: the three pricing models, MICE, and dedicated Relationship
+// Manager are all real, already-shipped features elsewhere in this app.
+const HERO_IMAGE_SRC = '/oman_pic.jpg';
+const HERO_HEADLINE = 'Your trade gateway to exclusive Oman experiences';
+const HERO_SUBTEXT =
+  "From Muscat's coastline to the dunes of the interior, Oman rewards the traveller who goes looking for it — and Xclusive Oman is how you sell that experience. Fixed group departures, bespoke FIT itineraries, and full MICE proposals, priced and booked in one place.";
+const HERO_FEATURES = [
+  'Transparent, tiered net rates on Fixed Group Departures — see your price instantly',
+  'Curate personalised FIT itineraries for your clients, built day by day',
+  'End-to-end MICE proposals backed by real supplier quotes',
+  'A dedicated Relationship Manager for every agency, every step of the way',
+];
+
 /**
  * Props — deliberately just the two post-login destinations, nothing
  * visual: adminDestination / agentDestination, where each role lands after
@@ -157,80 +173,119 @@ export function LoginModal({
   }
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[radial-gradient(circle_at_top_left,#f7d8c6_0,#f6eee9_28%,#edf1f0_58%,#e7e5e0_100%)] px-4 py-10">
-      <div className="pointer-events-none absolute -left-24 -top-24 h-96 w-96 rounded-full blur-3xl" style={{ background: `${ACCENT}33` }} />
-      <div className="pointer-events-none absolute -bottom-32 -right-16 h-[28rem] w-[28rem] rounded-full blur-3xl" style={{ background: `${INK}1a` }} />
+    <div className="flex min-h-screen bg-[#0b1424]">
+      {/* Visual/brand panel — presentational only, hidden below lg. Real
+          photo (public/oman_pic.jpg, already shipped), copy adapted from
+          the master documentation's own Executive Summary/feature list —
+          see this file's own HERO_* constants for exactly which section
+          each line comes from. */}
+      <div className="relative hidden w-[46%] flex-none overflow-hidden lg:block">
+        <img src={HERO_IMAGE_SRC} alt="" className="absolute inset-0 h-full w-full object-cover" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#0b1424] via-[#0b1424]/80 to-[#0b1424]/30" />
+        <div className="absolute inset-0 bg-[#0b1424]/10" />
 
-      <div className="relative z-10 w-full max-w-[440px]">
-        <div className="mb-8 text-center">
-          <img src={logoSrc} alt="Xclusive Oman" className="mx-auto mb-4 h-14 w-auto object-contain" />
-          <p className="text-sm text-slate-500">{TAGLINE}</p>
+        <div className="relative z-10 flex h-full flex-col justify-between p-12 xl:p-16">
+          <img src={logoSrc} alt="Xclusive Oman" className="h-11 w-auto object-contain" />
+
+          <div>
+            <h1 className="max-w-md text-[2.15rem] font-bold leading-[1.15] text-white xl:text-4xl">{HERO_HEADLINE}</h1>
+            <p className="mt-4 max-w-md text-sm leading-relaxed text-white/75">{HERO_SUBTEXT}</p>
+
+            <ul className="mt-8 space-y-3">
+              {HERO_FEATURES.map((feature) => (
+                <li key={feature} className="flex items-start gap-2.5 text-sm text-white/90">
+                  <FiCheckCircle className="mt-0.5 flex-none text-[#e8935f]" size={16} />
+                  <span>{feature}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <p className="text-xs text-white/40">Xclusive Oman by Traveon — B2B &amp; MICE Booking Portal</p>
         </div>
+      </div>
 
-        <div className="rounded-lg border border-white/70 bg-white/95 p-6 shadow-xl shadow-black/10 sm:p-7">
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="mb-1.5 block text-[11px] font-semibold uppercase text-slate-500">Email</label>
-              <LoginTextInput
-                icon={FiMail}
-                type="email"
-                required
-                autoFocus
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@xclusiveoman.com"
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-[11px] font-semibold uppercase text-slate-500">Password</label>
-              <LoginPasswordInput
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-              />
-            </div>
+      {/* Form panel */}
+      <div className="relative flex flex-1 items-center justify-center overflow-y-auto bg-[#f6f7f9] px-4 py-10">
+        <div className="w-full max-w-[400px]">
+          {/* Compact header shown only when the visual panel above is
+              hidden (mobile/tablet) — desktop already carries the logo and
+              headline on the left. */}
+          <div className="mb-8 text-center lg:hidden">
+            <img src={logoSrc} alt="Xclusive Oman" className="mx-auto mb-4 h-14 w-auto object-contain" />
+            <p className="text-sm text-slate-500">{TAGLINE}</p>
+          </div>
 
-            <div className="flex items-center justify-between">
-              <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-600">
-                <span
-                  onClick={() => setRememberMe((v) => !v)}
-                  className={`flex h-4 w-4 flex-none items-center justify-center rounded border-[1.5px] ${
-                    rememberMe ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-300 bg-white'
-                  }`}
-                >
-                  {rememberMe ? '✓' : ''}
-                </span>
-                Remember me
-              </label>
-              <Link to={FORGOT_PASSWORD_HREF} className="text-xs font-semibold hover:underline" style={{ color: ACCENT }}>
-                Forgot password?
+          <div className="hidden lg:block lg:mb-8">
+            <h2 className="text-2xl font-bold text-slate-900">Welcome back</h2>
+            <p className="mt-1.5 text-sm text-slate-500">Sign in to continue to your dashboard.</p>
+          </div>
+
+          <div className="rounded-xl border border-white bg-white p-6 shadow-xl shadow-black/[0.06] sm:p-7">
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="mb-1.5 block text-[11px] font-semibold uppercase text-slate-500">Email</label>
+                <LoginTextInput
+                  icon={FiMail}
+                  type="email"
+                  required
+                  autoFocus
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="name@yourcompany.com"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-[11px] font-semibold uppercase text-slate-500">Password</label>
+                <LoginPasswordInput
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-600">
+                  <span
+                    onClick={() => setRememberMe((v) => !v)}
+                    className={`flex h-4 w-4 flex-none items-center justify-center rounded border-[1.5px] ${
+                      rememberMe ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-300 bg-white'
+                    }`}
+                  >
+                    {rememberMe ? '✓' : ''}
+                  </span>
+                  Remember me
+                </label>
+                <Link to={FORGOT_PASSWORD_HREF} className="text-xs font-semibold hover:underline" style={{ color: ACCENT }}>
+                  Forgot password?
+                </Link>
+              </div>
+
+              {error && (
+                <p className="rounded-md border border-[#f2bdc6] bg-[#fff7f8] px-3 py-2 text-xs text-[#a5162d]">{error}</p>
+              )}
+
+              <button
+                type="submit"
+                disabled={submitting}
+                className="w-full rounded-md py-3 text-center text-sm font-semibold text-white shadow-sm transition hover:brightness-110 disabled:opacity-60"
+                style={{ background: INK }}
+              >
+                {submitting ? 'Signing in…' : 'Sign In'}
+              </button>
+            </form>
+
+            <p className="mt-5 text-center text-sm text-slate-500">
+              Don't have an account?{' '}
+              <Link to={SIGN_UP_HREF} className="font-semibold hover:underline" style={{ color: ACCENT }}>
+                Sign up
               </Link>
-            </div>
+            </p>
+          </div>
 
-            {error && (
-              <p className="rounded-md border border-[#f2bdc6] bg-[#fff7f8] px-3 py-2 text-xs text-[#a5162d]">{error}</p>
-            )}
-
-            <button
-              type="submit"
-              disabled={submitting}
-              className="w-full rounded-md py-3 text-center text-sm font-semibold text-white shadow-sm transition disabled:opacity-60"
-              style={{ background: INK }}
-            >
-              {submitting ? 'Signing in…' : 'Sign In'}
-            </button>
-          </form>
-
-          <p className="mt-5 text-center text-sm text-slate-500">
-            Don't have an account?{' '}
-            <Link to={SIGN_UP_HREF} className="font-semibold hover:underline" style={{ color: ACCENT }}>
-              Sign up
-            </Link>
-          </p>
+          <div className="mt-5 text-center text-xs text-slate-500">{FOOTER_NOTE}</div>
         </div>
-
-        <div className="mt-5 text-center text-xs text-slate-500">{FOOTER_NOTE}</div>
       </div>
     </div>
   );
