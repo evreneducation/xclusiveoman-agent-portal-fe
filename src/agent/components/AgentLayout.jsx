@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api/client.js';
 import { getSocket } from '../lib/socket.js';
 import { NotificationBell } from '../../shared/components/NotificationBell.jsx';
+import ReviewPromptGate from './ReviewPromptGate.jsx';
 import { Button } from './ui.jsx';
 import {
   BookingsIcon,
@@ -238,6 +239,13 @@ export default function AgentLayout() {
           </motion.main>
         </AnimatePresence>
       </div>
+
+      {/* Agent Review & Rating Popup (Task 20 — Screen 32). Mounted once
+          here rather than per-page — AgentLayout only ever renders once the
+          agent is actually authenticated (it sits inside ProtectedRoute),
+          so this fires exactly "on next portal opening" per the doc's own
+          language, without a hardcoded frontend timeout. */}
+      <ReviewPromptGate />
     </div>
   );
 }
