@@ -232,7 +232,7 @@ export function LoginModal({
                   autoFocus
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="nEnter Your Email"
+                  placeholder="Enter Your Email"
                 />
               </div>
               <div>
