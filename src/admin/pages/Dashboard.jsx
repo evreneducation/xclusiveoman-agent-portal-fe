@@ -12,9 +12,19 @@ import { Button, Card } from '../components/ui.jsx';
 // behind them yet (see the Analytics/placeholder pages).
 function StatCard({ label, value, loading, hint, to }) {
   return (
-    <Card className="border-white">
+    <Card className="!border-t-4 !border-t-[#6366F1] border-white">
       <div className="text-[10px] font-semibold uppercase tracking-wide text-muted">{label}</div>
-      <div className="mt-2 text-3xl font-bold text-ink">{loading ? '—' : value}</div>
+      <div
+        style={{
+          backgroundImage: 'linear-gradient(90deg, #172554, #4F46E5)',
+          WebkitBackgroundClip: 'text',
+          backgroundClip: 'text',
+          color: 'transparent',
+        }}
+        className="mt-2 text-3xl font-bold"
+      >
+        {loading ? '—' : value}
+      </div>
       {!loading && hint && (
         <Link to={to} className="mt-2 inline-block text-xs font-semibold text-accent hover:underline">
           {hint}
@@ -40,7 +50,17 @@ export default function Dashboard() {
     <div className="mx-auto max-w-6xl p-6 lg:p-10">
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-bold text-ink">Dashboard</h2>
+          <h2
+            style={{
+              backgroundImage: 'linear-gradient(90deg, #172554, #4F46E5, #7C3AED)',
+              WebkitBackgroundClip: 'text',
+              backgroundClip: 'text',
+              color: 'transparent',
+            }}
+            className="text-3xl font-bold"
+          >
+            Dashboard
+          </h2>
           <p className="mt-1 text-sm text-muted">
             Welcome back, {user?.fullName} <span className="text-muted/70">— {user?.role?.replace(/_/g, ' ')}</span>
           </p>

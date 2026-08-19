@@ -199,14 +199,14 @@ export default function SupportTicketDetail() {
 
   if (loading && !data) {
     return (
-      <div className="min-h-screen bg-[#eef1f7] p-10">
+      <div className="min-h-screen bg-[#F4F7FF] p-10">
         <p className="text-sm text-muted">Loading…</p>
       </div>
     );
   }
   if (error && !data) {
     return (
-      <div className="min-h-screen bg-[#eef1f7] p-10">
+      <div className="min-h-screen bg-[#F4F7FF] p-10">
         <Link to="/admin/support" className="text-sm text-accent hover:underline">
           ← Back to Support &amp; Helpdesk
         </Link>
@@ -218,7 +218,7 @@ export default function SupportTicketDetail() {
   const { ticket, messages, activity } = data;
 
   return (
-    <div className="min-h-screen bg-[#eef1f7]">
+    <div className="min-h-screen bg-[#F4F7FF]">
       <div className="mx-auto max-w-5xl p-6 lg:p-10">
         <Link to="/admin/support" className="text-sm text-accent hover:underline">
           ← Back to Support &amp; Helpdesk

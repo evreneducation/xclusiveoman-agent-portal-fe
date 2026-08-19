@@ -63,13 +63,21 @@ const { api: loginApi } = createApiClient();
 
 const INK = '#16233f';
 const ACCENT = '#d1642f';
+// A second accent already present in this file (the hero panel's own
+// checkmark colour) — paired with ACCENT into a gold→coral gradient below
+// rather than introducing any brand-new hue. LoginModal is portal-agnostic
+// (see this file's own top comment), so it deliberately doesn't borrow
+// either portal's own navy/indigo or teal/gold palette — this is its own
+// third, "golden hour over Oman" identity built from colours the hero panel
+// already used.
+const ACCENT_WARM = '#e8935f';
 
 // Focus ring/border use the brand accent as a Tailwind arbitrary-value
 // color (`#d1642f` / `#d1642f26` — 15% alpha) rather than an inline-style
 // hack, so this stays plain, ordinary Tailwind like every other input in
 // the app, just without depending on either portal's own `--accent`/
 // `--agent-accent` custom token (which differ in value between the two).
-const INPUT_FOCUS_CLASSES = 'focus:border-[#d1642f] focus:outline-none focus:ring-2 focus:ring-[#d1642f26]';
+const INPUT_FOCUS_CLASSES = 'focus:border-[#d1642f] focus:outline-none focus:ring-2 focus:ring-[#d1642f33]';
 
 function LoginTextInput({ icon: Icon, className = '', ...props }) {
   return (
@@ -188,6 +196,10 @@ export function LoginModal({
           <img src={logoSrc} alt="Xclusive Oman" className="h-11 w-auto object-contain" />
 
           <div>
+            <div
+              style={{ background: `linear-gradient(90deg, ${ACCENT_WARM}, ${ACCENT})` }}
+              className="mb-4 h-1 w-14 rounded-full"
+            />
             <h1 className="max-w-md text-[2.15rem] font-bold leading-[1.15] text-white xl:text-4xl">{HERO_HEADLINE}</h1>
             <p className="mt-4 max-w-md text-sm leading-relaxed text-white/75">{HERO_SUBTEXT}</p>
 
@@ -206,7 +218,10 @@ export function LoginModal({
       </div>
 
       {/* Form panel */}
-      <div className="relative flex flex-1 items-center justify-center overflow-y-auto bg-[#f6f7f9] px-4 py-10">
+      <div
+        style={{ background: 'linear-gradient(135deg, #FFF8F3 0%, #FFF4EC 50%, #FFEEE5 100%)' }}
+        className="relative flex flex-1 items-center justify-center overflow-y-auto px-4 py-10"
+      >
         <div className="w-full max-w-[400px]">
           {/* Compact header shown only when the visual panel above is
               hidden (mobile/tablet) — desktop already carries the logo and
@@ -217,11 +232,25 @@ export function LoginModal({
           </div>
 
           <div className="hidden lg:block lg:mb-8">
-            <h2 className="text-2xl font-bold text-slate-900">Welcome back</h2>
+            <h2
+              style={{
+                backgroundImage: `linear-gradient(90deg, ${INK}, ${ACCENT}, ${ACCENT_WARM})`,
+                WebkitBackgroundClip: 'text',
+                backgroundClip: 'text',
+                color: 'transparent',
+              }}
+              className="text-2xl font-bold"
+            >
+              Welcome back
+            </h2>
             <p className="mt-1.5 text-sm text-slate-500">Sign in to continue to your dashboard.</p>
           </div>
 
-          <div className="rounded-xl border border-white bg-white p-6 shadow-xl shadow-black/[0.06] sm:p-7">
+          <div className="relative overflow-hidden rounded-xl border border-white bg-white p-6 shadow-xl shadow-[#d1642f]/[0.08] sm:p-7">
+            <div
+              style={{ background: `linear-gradient(90deg, ${ACCENT_WARM}, ${ACCENT})` }}
+              className="absolute inset-x-0 top-0 h-1"
+            />
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="mb-1.5 block text-[11px] font-semibold uppercase text-slate-500">Email</label>
@@ -249,8 +278,9 @@ export function LoginModal({
                 <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-600">
                   <span
                     onClick={() => setRememberMe((v) => !v)}
-                    className={`flex h-4 w-4 flex-none items-center justify-center rounded border-[1.5px] ${
-                      rememberMe ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-300 bg-white'
+                    style={rememberMe ? { background: `linear-gradient(135deg, ${ACCENT_WARM}, ${ACCENT})`, borderColor: ACCENT } : undefined}
+                    className={`flex h-4 w-4 flex-none items-center justify-center rounded border-[1.5px] text-white ${
+                      rememberMe ? '' : 'border-slate-300 bg-white'
                     }`}
                   >
                     {rememberMe ? '✓' : ''}
@@ -269,8 +299,8 @@ export function LoginModal({
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full rounded-md py-3 text-center text-sm font-semibold text-white shadow-sm transition hover:brightness-110 disabled:opacity-60"
-                style={{ background: INK }}
+                className="w-full rounded-md py-3 text-center text-sm font-semibold text-white shadow-lg shadow-[#d1642f]/25 transition hover:brightness-105 disabled:opacity-60"
+                style={{ background: `linear-gradient(135deg, ${ACCENT_WARM}, ${ACCENT})` }}
               >
                 {submitting ? 'Signing in…' : 'Sign In'}
               </button>

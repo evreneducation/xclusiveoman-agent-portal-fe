@@ -170,17 +170,18 @@ export default function AdminLayout() {
   }
 
   return (
-    <div className="flex min-h-screen bg-[#eef1f7]">
+    <div className="flex min-h-screen bg-[#F4F7FF]">
       <motion.aside
         initial={{ x: -28, opacity: 0, width: COLLAPSED_WIDTH }}
         animate={{ x: 0, opacity: 1, width: collapsed ? COLLAPSED_WIDTH : EXPANDED_WIDTH }}
         transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
         onMouseEnter={() => setCollapsed(false)}
         onMouseLeave={() => setCollapsed(true)}
-        className="sticky top-0 flex h-screen flex-none flex-col border-r border-line-light bg-white/95 backdrop-blur"
+        style={{ background: 'linear-gradient(180deg, #0F1B4D 0%, #172B68 55%, #24145F 100%)' }}
+        className="sticky top-0 flex h-screen flex-none flex-col border-r border-white/10"
       >
         <div
-          className={`flex items-center border-b border-line-light ${collapsed ? 'justify-center px-2 py-4' : 'justify-between px-6 py-6'}`}
+          className={`flex items-center border-b border-white/10 ${collapsed ? 'justify-center px-2 py-4' : 'justify-between px-6 py-6'}`}
         >
           <img
             src={collapsed ? '/logo_scroll_closed.png' : '/Xclusive_Oman_Logo_2.png'}
@@ -188,7 +189,7 @@ export default function AdminLayout() {
             className={`w-auto flex-none object-contain ${collapsed ? 'h-10' : 'h-12'}`}
           />
           {!collapsed && (
-            <span className="flex-none rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-semibold uppercase text-red-600">
+            <span className="flex-none rounded-full border border-transparent bg-gradient-to-r from-[#2563EB] to-[#7C3AED] px-2.5 py-1 text-xs font-semibold uppercase text-white shadow-sm shadow-black/20">
               Admin
             </span>
           )}
@@ -207,8 +208,8 @@ export default function AdminLayout() {
                     collapsed ? 'justify-center px-0' : 'px-3.5'
                   } ${
                     active
-                      ? 'border-accent bg-accent-soft/60 text-ink'
-                      : 'border-transparent text-muted hover:bg-panel hover:text-ink'
+                      ? 'border-transparent bg-gradient-to-r from-[#2563EB] to-[#7C3AED] text-white shadow-md shadow-black/20'
+                      : 'border-transparent text-white/75 hover:bg-white/10 hover:text-white'
                   }`}
                 >
                   <item.Icon className="flex-none" size={18} />
@@ -229,7 +230,9 @@ export default function AdminLayout() {
                   className={`flex w-full items-center gap-3 rounded-lg border-l-[3px] py-2.5 text-left text-sm font-semibold transition-colors ${
                     collapsed ? 'justify-center px-0' : 'px-3.5'
                   } ${
-                    hasActiveChild ? 'border-accent text-ink' : 'border-transparent text-muted hover:bg-panel hover:text-ink'
+                    hasActiveChild
+                      ? 'border-transparent bg-white/10 text-white'
+                      : 'border-transparent text-white/75 hover:bg-white/10 hover:text-white'
                   }`}
                 >
                   <item.Icon className="flex-none" size={18} />
@@ -252,7 +255,7 @@ export default function AdminLayout() {
                       transition={{ duration: 0.2, ease: 'easeOut' }}
                       className="overflow-hidden"
                     >
-                      <div className="ml-3 mt-1 space-y-0.5 border-l border-line-light pl-4">
+                      <div className="ml-3 mt-1 space-y-0.5 border-l border-white/10 pl-4">
                         {item.children.map((child) => {
                           const active = isActive(pathname, child.to);
                           return (
@@ -260,7 +263,9 @@ export default function AdminLayout() {
                               key={child.to}
                               to={child.to}
                               className={`flex items-center gap-2.5 rounded-md px-3 py-2 text-[13px] font-medium transition-colors ${
-                                active ? 'bg-ink text-white shadow-sm' : 'text-muted hover:bg-panel hover:text-ink'
+                                active
+                                  ? 'bg-gradient-to-r from-[#2563EB] to-[#7C3AED] text-white shadow-md shadow-black/20'
+                                  : 'text-white/70 hover:bg-white/10 hover:text-white'
                               }`}
                             >
                               <child.Icon className="flex-none" size={15} />
@@ -277,31 +282,31 @@ export default function AdminLayout() {
           })}
         </nav>
 
-        <div className={`space-y-3 border-t border-line-light py-5 ${collapsed ? 'px-2' : 'px-4'}`}>
+        <div className={`space-y-3 border-t border-white/10 py-5 ${collapsed ? 'px-2' : 'px-4'}`}>
           <div
-            className={`flex items-center gap-2.5 rounded-xl bg-panel py-2.5 text-xs ${
+            className={`flex items-center gap-2.5 rounded-xl bg-white/10 py-2.5 text-xs ${
               collapsed ? 'justify-center px-0' : 'px-3.5'
             }`}
           >
             <span
               className={`h-2.5 w-2.5 flex-none rounded-full ${
-                socketConnected ? 'bg-[#2f7d32] shadow-[0_0_0_4px_rgba(47,125,50,0.15)]' : 'bg-[#ccc]'
+                socketConnected ? 'bg-[#10B981] shadow-[0_0_0_4px_rgba(16,185,129,0.25)]' : 'bg-white/30'
               }`}
             />
             {!collapsed && (
-              <span className="text-muted">{socketConnected ? 'Live connection active' : 'Connecting…'}</span>
+              <span className="text-white/70">{socketConnected ? 'Live connection active' : 'Connecting…'}</span>
             )}
           </div>
           {!collapsed && (
             <div className="px-1 text-xs">
-              <div className="font-semibold text-ink">{user?.fullName}</div>
-              <div className="text-muted">{user?.role}</div>
+              <div className="font-semibold text-white">{user?.fullName}</div>
+              <div className="text-white/60">{user?.role}</div>
             </div>
           )}
           <Button
             onClick={logout}
             title={collapsed ? 'Log out' : undefined}
-            className={`w-full justify-center gap-2 ${collapsed ? 'px-0' : ''}`}
+            className={`w-full justify-center gap-2 border-white/15 bg-white/10 text-white hover:border-white/30 hover:bg-white/20 ${collapsed ? 'px-0' : ''}`}
           >
             <LuLogOut size={16} />
             {!collapsed && 'Log out'}
@@ -314,7 +319,10 @@ export default function AdminLayout() {
             pages with a printable document (e.g. the agent portal's Review &
             Submit) that ever get reused/rendered under this layout don't pick
             up chrome around the document; harmless here today either way. */}
-        <div className="sticky top-0 z-30 flex items-center justify-end border-b border-line-light bg-white/95 px-4 py-2.5 backdrop-blur print:hidden lg:px-8">
+        <div
+          style={{ background: 'linear-gradient(90deg, #EEF4FF, #F5EEFF, #FFF4EC)' }}
+          className="sticky top-0 z-30 flex items-center justify-end border-b border-[#E4E9FB] px-4 py-2.5 backdrop-blur print:hidden lg:px-8"
+        >
           <NotificationBell
             api={api}
             getSocket={getSocket}

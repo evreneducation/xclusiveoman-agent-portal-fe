@@ -109,7 +109,7 @@ export default function ReviewsManagement() {
   const totalPages = Math.max(1, Math.ceil((pagination.total || 0) / (pagination.pageSize || 20)));
 
   return (
-    <div className="min-h-screen bg-[#eef1f7]">
+    <div className="min-h-screen bg-[#F4F7FF]">
       <div className="mx-auto max-w-6xl p-6 lg:p-10">
         <div className="mb-5">
           <h2 className="mb-1 text-3xl font-bold">Reviews Management</h2>

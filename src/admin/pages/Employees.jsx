@@ -326,7 +326,7 @@ export default function Employees() {
   }
 
   return (
-    <div className="min-h-screen bg-[#eef1f7]">
+    <div className="min-h-screen bg-[#F4F7FF]">
       <div className="border-b border-line-light bg-white/90 px-6 pt-6 lg:px-10">
         <h2 className="text-2xl font-bold">Employees</h2>
         <p className="mt-1.5 text-sm text-muted">Manage internal staff — Relationship Managers and Sales Managers.</p>
@@ -336,7 +336,7 @@ export default function Employees() {
               key={t.key}
               onClick={() => setTab(t.key)}
               className={`rounded-t-lg border border-b-0 px-4 py-2.5 text-xs font-semibold ${
-                tab === t.key ? 'border-line-light bg-[#eef1f7] text-ink' : 'border-transparent text-muted hover:text-ink'
+                tab === t.key ? 'border-line-light bg-[#F4F7FF] text-ink' : 'border-transparent text-muted hover:text-ink'
               }`}
             >
               {t.label}

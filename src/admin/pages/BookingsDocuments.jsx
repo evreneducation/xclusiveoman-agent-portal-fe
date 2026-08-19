@@ -85,7 +85,7 @@ export default function BookingsDocuments() {
 
   if (view === 'wizard') {
     return (
-      <div className="min-h-screen bg-[#eef1f7]">
+      <div className="min-h-screen bg-[#F4F7FF]">
         <div className="mx-auto max-w-4xl p-6 lg:p-10">
           <ManualBookingWizard
             onClose={() => setView('list')}
@@ -100,7 +100,7 @@ export default function BookingsDocuments() {
   }
 
   return (
-    <div className="min-h-screen bg-[#eef1f7]">
+    <div className="min-h-screen bg-[#F4F7FF]">
       <div className="mx-auto max-w-6xl p-6 lg:p-10">
         <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
           <div>

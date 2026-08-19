@@ -765,7 +765,7 @@ export default function QuoteInboxDetail() {
   useEffect(load, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="min-h-screen bg-[#eef1f7]">
+    <div className="min-h-screen bg-[#F4F7FF]">
       <div className="mx-auto max-w-5xl space-y-4 p-6 lg:p-10">
         <button onClick={() => navigate('/admin/quote-inbox')} className="text-xs text-muted hover:text-ink">
           ← Back to Quote Inbox

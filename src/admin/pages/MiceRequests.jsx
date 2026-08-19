@@ -89,7 +89,7 @@ export default function MiceRequests() {
   }, [search, status, eventDate, page]);
 
   return (
-    <div className="min-h-screen bg-[#eef1f7]">
+    <div className="min-h-screen bg-[#F4F7FF]">
       <div className="mx-auto max-w-6xl p-6 lg:p-10">
         <h2 className="mb-1 text-3xl font-bold">MICE Requests</h2>
         <p className="mb-5 text-sm text-muted">

@@ -844,7 +844,7 @@ export default function MiceCatalog() {
   const [tab, setTab] = useState('hotels');
 
   return (
-    <div className="min-h-screen bg-[#eef1f7]">
+    <div className="min-h-screen bg-[#F4F7FF]">
       <div className="mx-auto max-w-6xl p-6 lg:p-10">
         <div className="mb-5 flex items-center gap-3">
           <h2 className="text-3xl font-bold">MICE Catalog Manager</h2>

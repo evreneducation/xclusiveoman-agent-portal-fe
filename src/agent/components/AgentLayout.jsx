@@ -75,7 +75,7 @@ function SidebarContent({ onNavigate, collapsed = false }) {
           className={`w-auto flex-none object-contain ${collapsed ? 'h-10' : 'h-12'}`}
         />
         {!collapsed && (
-          <span className="flex-none rounded-full border border-agent-accent/40 bg-agent-accent-soft px-2.5 py-1 text-xs font-semibold uppercase text-agent-accent-dark">
+          <span className="flex-none rounded-full border border-transparent bg-gradient-to-r from-[#E2A33B] to-[#F97316] px-2.5 py-1 text-xs font-semibold uppercase text-white shadow-sm shadow-black/20">
             Agent
           </span>
         )}
@@ -95,7 +95,7 @@ function SidebarContent({ onNavigate, collapsed = false }) {
               {active && (
                 <motion.div
                   layoutId="agent-active-nav-pill"
-                  className="absolute inset-0 rounded-xl bg-agent-accent shadow-md shadow-black/20"
+                  className="absolute inset-0 rounded-xl bg-gradient-to-r from-[#E2A33B] to-[#F97316] shadow-md shadow-black/20"
                   transition={{ type: 'spring', stiffness: 380, damping: 32 }}
                 />
               )}
@@ -164,7 +164,7 @@ export default function AgentLayout() {
         transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
         onMouseEnter={() => setCollapsed(false)}
         onMouseLeave={() => setCollapsed(true)}
-        className="sticky top-0 hidden h-screen flex-none flex-col bg-[linear-gradient(180deg,#0b4f4a_0%,#083a36_100%)] shadow-xl shadow-black/10 lg:flex"
+        className="sticky top-0 hidden h-screen flex-none flex-col bg-[linear-gradient(180deg,#083A36_0%,#0B4F4A_55%,#0D9488_100%)] shadow-xl shadow-black/10 lg:flex"
       >
         <SidebarContent collapsed={collapsed} />
       </motion.aside>
@@ -185,7 +185,7 @@ export default function AgentLayout() {
               animate={{ x: 0 }}
               exit={{ x: -288 }}
               transition={{ type: 'spring', stiffness: 320, damping: 34 }}
-              className="fixed inset-y-0 left-0 z-50 flex h-screen w-72 flex-none flex-col bg-[linear-gradient(180deg,#0b4f4a_0%,#083a36_100%)] shadow-2xl lg:hidden"
+              className="fixed inset-y-0 left-0 z-50 flex h-screen w-72 flex-none flex-col bg-[linear-gradient(180deg,#083A36_0%,#0B4F4A_55%,#0D9488_100%)] shadow-2xl lg:hidden"
             >
               <button
                 onClick={() => setMobileOpen(false)}
@@ -202,7 +202,10 @@ export default function AgentLayout() {
 
       <div className="min-w-0 flex-1">
         {/* Top bar — mobile menu toggle + current section label, sticky across pages */}
-        <div className="sticky top-0 z-30 flex items-center gap-3 border-b-2 border-agent-accent/30 bg-white/95 px-4 py-3 shadow-sm backdrop-blur lg:px-8">
+        <div
+          style={{ background: 'linear-gradient(90deg, #EAFBF6, #FFF8E7, #FFF0E5)' }}
+          className="sticky top-0 z-30 flex items-center gap-3 border-b-2 border-[#E2A33B]/30 px-4 py-3 shadow-sm backdrop-blur lg:px-8"
+        >
           <button
             onClick={() => setMobileOpen(true)}
             className="flex h-9 w-9 flex-none items-center justify-center rounded-lg bg-agent-panel text-agent-ink lg:hidden"

@@ -208,14 +208,14 @@ export default function BookingDetailAdmin() {
 
   if (loading && !data) {
     return (
-      <div className="min-h-screen bg-[#eef1f7] p-10">
+      <div className="min-h-screen bg-[#F4F7FF] p-10">
         <p className="text-sm text-muted">Loading…</p>
       </div>
     );
   }
   if (error && !data) {
     return (
-      <div className="min-h-screen bg-[#eef1f7] p-10">
+      <div className="min-h-screen bg-[#F4F7FF] p-10">
         <Link to="/admin/bookings-documents" className="text-sm text-accent hover:underline">
           ← Back to Bookings & Documents
         </Link>
@@ -229,7 +229,7 @@ export default function BookingDetailAdmin() {
   const hasAnyDocument = travelers.some((t) => t.passportScanUploaded || t.passportPhotoUploaded || t.visaCopyUploaded) || voucher.uploaded;
 
   return (
-    <div className="min-h-screen bg-[#eef1f7]">
+    <div className="min-h-screen bg-[#F4F7FF]">
       <div className="mx-auto max-w-6xl p-6 lg:p-10">
         <Link to="/admin/bookings-documents" className="text-sm text-accent hover:underline">
           ← Back to Bookings & Documents
