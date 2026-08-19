@@ -54,14 +54,10 @@ export function AuthProvider({ children }) {
     return api.post('/auth/register', payload, { skipAuth: true });
   }, []);
 
-  const forgotPassword = useCallback(async (email) => {
-    return api.post('/auth/forgot-password', { email }, { skipAuth: true });
-  }, []);
-
-  const resetPassword = useCallback(async ({ token, password }) => {
-    return api.post('/auth/reset-password', { token, password }, { skipAuth: true });
-  }, []);
-
+  // No forgotPassword/resetPassword — there's no password anywhere to
+  // forget or reset (email OTP, LoginModal.jsx, is the sole sign-in
+  // mechanism; the backend endpoints these used to call were removed
+  // alongside users.password_hash).
   const logout = useCallback(async () => {
     try {
       await api.post('/auth/logout');
@@ -76,8 +72,6 @@ export function AuthProvider({ children }) {
     isAuthenticated: status === 'authenticated',
     socketConnected,
     register,
-    forgotPassword,
-    resetPassword,
     logout,
   };
 

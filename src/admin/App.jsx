@@ -86,8 +86,8 @@ export default function App() {
               </Route>
             </Route>
           </Route>
-          <Route index element={<Navigate to="dashboard" replace />} />
-          <Route path="*" element={<Navigate to="dashboard" replace />} />
+          <Route index element={<Navigate to="/admin/dashboard" replace />} />
+          <Route path="*" element={<Navigate to="/admin/dashboard" replace />} />
         </Routes>
       </AuthProvider>
     </ToastProvider>

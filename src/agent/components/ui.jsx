@@ -2,9 +2,7 @@
 // shape of admin/components/ui.jsx but themed on the `agent-*` token set
 // (tailwind.config.js) so the two portals read as visually distinct apps
 // while sharing the same component surface/API.
-import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { FiEye, FiEyeOff } from 'react-icons/fi';
 
 // Colour system pass — 'accent' (the primary Save/Submit/Book Now action
 // across the whole agent portal) now uses a gold→coral "sunset" gradient
@@ -46,30 +44,8 @@ export function TextInput({ className = '', ...props }) {
   );
 }
 
-// Password field with a Show/Hide toggle — used by the Sign In / Register
-// pages (AuthShell-based). Kept here alongside TextInput rather than local
-// to one page since both auth forms need it.
-export function PasswordInput({ className = '', ...props }) {
-  const [visible, setVisible] = useState(false);
-  return (
-    <div className="relative">
-      <input
-        type={visible ? 'text' : 'password'}
-        className={`w-full rounded-md border border-agent-line-light bg-white px-3 py-2.5 pr-10 text-sm text-agent-ink shadow-sm placeholder:text-agent-muted focus:border-agent-accent focus:outline-none focus:ring-2 focus:ring-agent-accent/15 ${className}`}
-        {...props}
-      />
-      <button
-        type="button"
-        onClick={() => setVisible((v) => !v)}
-        tabIndex={-1}
-        aria-label={visible ? 'Hide password' : 'Show password'}
-        className="absolute right-3 top-1/2 -translate-y-1/2 text-agent-muted hover:text-agent-ink"
-      >
-        {visible ? <FiEyeOff size={16} /> : <FiEye size={16} />}
-      </button>
-    </div>
-  );
-}
+// No PasswordInput — nothing in this app ever collects a password anymore
+// (email OTP, LoginModal.jsx, is the sole sign-in mechanism).
 
 export function Textarea({ className = '', ...props }) {
   return (

@@ -1,11 +1,14 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
-import { Button, ErrorText, FieldLabel, PasswordInput, Select, Tag, TextInput } from '../components/ui.jsx';
+import { Button, ErrorText, FieldLabel, Select, Tag, TextInput } from '../components/ui.jsx';
 import AuthShell from '../components/AuthShell.jsx';
 
 const COUNTRIES = ['Oman', 'India', 'UAE', 'Saudi Arabia', 'Qatar', 'Kuwait', 'Bahrain', 'Other'];
 
+// No password field — nothing in this app ever collects one anymore. Once
+// approved, the new owner signs in the same way everyone else does: email
+// OTP (LoginModal.jsx), using this same email address.
 export default function Register() {
   const { register } = useAuth();
   const [form, setForm] = useState({
@@ -16,7 +19,6 @@ export default function Register() {
     ownerFullName: '',
     email: '',
     phone: '',
-    password: '',
   });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
@@ -115,17 +117,9 @@ export default function Register() {
             <div className="sm:col-span-2">
               <FieldLabel>Email*</FieldLabel>
               <TextInput type="email" required value={form.email} onChange={(e) => update('email', e.target.value)} placeholder="Enter your email" />
-            </div>
-
-            <div className="sm:col-span-2">
-              <FieldLabel>Password*</FieldLabel>
-              <PasswordInput
-                required
-                minLength={8}
-                value={form.password}
-                onChange={(e) => update('password', e.target.value)}
-                placeholder="At least 8 characters"
-              />
+              <p className="mt-1.5 text-xs text-agent-muted">
+                No password to set — once approved, you'll sign in with a code emailed to this address.
+              </p>
             </div>
           </div>
 

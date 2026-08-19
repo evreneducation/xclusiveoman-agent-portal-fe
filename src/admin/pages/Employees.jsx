@@ -36,10 +36,12 @@ const TABS = [
   { key: 'salesManager', label: EMPLOYEE_KINDS.salesManager.tabLabel },
 ];
 
+// No password field — nothing in this app ever collects one anymore. The
+// new employee signs in the same way everyone else does: email OTP, using
+// the work email entered here.
 function CreateEmployeeForm({ kind, onCreated, onCancel }) {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [phone, setPhone] = useState('');
   const [whatsappNumber, setWhatsappNumber] = useState('');
   const [error, setError] = useState('');
@@ -53,14 +55,12 @@ function CreateEmployeeForm({ kind, onCreated, onCancel }) {
       const { user } = await api.post(kind.endpoint, {
         fullName,
         email,
-        password,
         phone: phone || undefined,
         whatsappNumber: whatsappNumber || undefined,
       });
       onCreated(user);
       setFullName('');
       setEmail('');
-      setPassword('');
       setPhone('');
       setWhatsappNumber('');
     } catch (err) {
@@ -80,10 +80,6 @@ function CreateEmployeeForm({ kind, onCreated, onCancel }) {
         <div>
           <FieldLabel>Work email</FieldLabel>
           <TextInput type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
-        </div>
-        <div>
-          <FieldLabel>Temporary password</FieldLabel>
-          <TextInput type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
         </div>
         <div>
           <FieldLabel>Phone</FieldLabel>
