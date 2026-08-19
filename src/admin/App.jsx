@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { ToastProvider } from '../shared/components/ToastProvider.jsx';
 import { AuthProvider } from './context/AuthContext.jsx';
 import ProtectedRoute from './routes/ProtectedRoute.jsx';
+import SuperAdminRoute from './routes/SuperAdminRoute.jsx';
 import AdminLayout from './components/AdminLayout.jsx';
 import Login from './pages/Login.jsx';
 import Dashboard from './pages/Dashboard.jsx';
@@ -28,6 +29,8 @@ import OperationsDetail from './pages/OperationsDetail.jsx';
 import Analytics from './pages/Analytics.jsx';
 import Support from './pages/Support.jsx';
 import SupportTicketDetail from './pages/SupportTicketDetail.jsx';
+import ContentManagement from './pages/ContentManagement.jsx';
+import CmsPageEditor from './pages/CmsPageEditor.jsx';
 
 export default function App() {
   return (
@@ -66,6 +69,13 @@ export default function App() {
               <Route path="analytics" element={<Analytics />} />
               <Route path="support" element={<Support />} />
               <Route path="support/:ticketId" element={<SupportTicketDetail />} />
+              {/* Content & CMS Management (Task 21 — Item 34) — super_admin
+                  only; SuperAdminRoute redirects any other authenticated
+                  staff role to the dashboard before these ever render. */}
+              <Route element={<SuperAdminRoute />}>
+                <Route path="cms" element={<ContentManagement />} />
+                <Route path="cms/pages/:id" element={<CmsPageEditor />} />
+              </Route>
             </Route>
           </Route>
           <Route index element={<Navigate to="dashboard" replace />} />

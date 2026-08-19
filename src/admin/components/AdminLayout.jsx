@@ -15,6 +15,7 @@ import {
   LuLayoutGrid,
   LuLogOut,
   LuMegaphone,
+  LuNewspaper,
   LuPresentation,
   LuReceipt,
   LuTruck,
@@ -102,6 +103,12 @@ const NAV_ITEMS = [
   { key: 'marketing', to: '/admin/marketing', label: 'Marketing', Icon: LuMegaphone },
   { key: 'analytics', to: '/admin/analytics', label: 'Analytics', Icon: LuChartColumn },
   { key: 'support', to: '/admin/support', label: 'Support', Icon: LuHeadset },
+  // Content & CMS Management (Task 21 — Item 34) — super_admin only per this
+  // task's explicit access-control override; filtered out of NAV_ITEMS below
+  // for every other role. Hiding the nav item is a UX convenience only, not
+  // the real gate — SuperAdminRoute.jsx (frontend) and requireRole('super_admin')
+  // (backend, cms.routes.js) are what actually enforce it.
+  { key: 'cms', to: '/admin/cms', label: 'Content & CMS', Icon: LuNewspaper, superAdminOnly: true },
 ];
 
 const EXPANDED_WIDTH = 288; // w-72
@@ -116,12 +123,18 @@ function groupHasActiveChild(pathname, item) {
 }
 
 export default function AdminLayout() {
-  const { user, logout, socketConnected } = useAuth();
+  const { user, logout, socketConnected, isSuperAdmin } = useAuth();
   const { pathname } = useLocation();
   const navigate = useNavigate();
   // Starts collapsed (icon rail) — hovering over the sidebar expands it,
   // moving the mouse away collapses it back to give the page its width back.
   const [collapsed, setCollapsed] = useState(true);
+  // Content & CMS (Task 21 — Item 34) is the only superAdminOnly entry today
+  // — filtered here rather than in NAV_ITEMS itself so the module-level
+  // array stays a plain static list every other reader (openGroups init,
+  // the active-group effect) can keep using unfiltered; neither of those
+  // ever touches this flat, childless item anyway.
+  const visibleNavItems = NAV_ITEMS.filter((item) => !item.superAdminOnly || isSuperAdmin);
   const [openGroups, setOpenGroups] = useState(() =>
     NAV_ITEMS.filter((item) => item.children && groupHasActiveChild(pathname, item)).map((item) => item.key)
   );
@@ -175,7 +188,7 @@ export default function AdminLayout() {
         </div>
 
         <nav className="flex-1 space-y-1 overflow-y-auto overflow-x-hidden px-3 py-5">
-          {NAV_ITEMS.map((item) => {
+          {visibleNavItems.map((item) => {
             if (!item.children) {
               const active = isActive(pathname, item.to);
               return (
