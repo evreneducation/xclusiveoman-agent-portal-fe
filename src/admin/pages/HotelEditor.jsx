@@ -32,6 +32,8 @@ export default function HotelEditor() {
           description: hotel.description || '',
           pricePerNight: hotel.price_per_night ?? '',
           isMiceEnabled: !!hotel.is_mice_enabled,
+          miceBallroomCapacity: hotel.mice_ballroom_capacity ?? '',
+          miceBreakoutRooms: hotel.mice_breakout_rooms ?? '',
         });
         setImages(hotel.images || []);
       })
@@ -62,6 +64,12 @@ export default function HotelEditor() {
         description: form.description,
         pricePerNight: Number(form.pricePerNight),
         isMiceEnabled: !!form.isMiceEnabled,
+        // Only sent when set — mirrors MiceCatalog.jsx's MiceHotelForm, which
+        // creates these same fields on the same `hotels` row; previously this
+        // editor never loaded or saved them, so ballroom capacity / breakout
+        // rooms set at creation could never be changed afterwards.
+        miceBallroomCapacity: form.miceBallroomCapacity ? Number(form.miceBallroomCapacity) : undefined,
+        miceBreakoutRooms: form.miceBreakoutRooms ? Number(form.miceBreakoutRooms) : undefined,
         images,
       };
       if (isNew) {
@@ -145,6 +153,29 @@ export default function HotelEditor() {
                 <HotelImagesUpload hotelId={isNew ? null : id} images={images} onChange={setImages} />
                 <div className="sm:col-span-2">
                   <Checkbox checked={!!form.isMiceEnabled} onChange={(v) => update('isMiceEnabled', v)} label="MICE-enabled" />
+                </div>
+              </div>
+            </Card>
+
+            <Card label="MICE Information" className="border-white">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <FieldLabel>Ballroom capacity</FieldLabel>
+                  <TextInput
+                    type="number"
+                    min="0"
+                    value={form.miceBallroomCapacity ?? ''}
+                    onChange={(e) => update('miceBallroomCapacity', e.target.value)}
+                  />
+                </div>
+                <div>
+                  <FieldLabel>Breakout rooms</FieldLabel>
+                  <TextInput
+                    type="number"
+                    min="0"
+                    value={form.miceBreakoutRooms ?? ''}
+                    onChange={(e) => update('miceBreakoutRooms', e.target.value)}
+                  />
                 </div>
               </div>
             </Card>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { Badge, Button, Card, Checkbox, ErrorText, FieldLabel, Select, Table, TextInput } from '../components/ui.jsx';
 import { HotelImagesUpload } from '../components/HotelImagesUpload.jsx';
@@ -279,9 +280,14 @@ function MiceHotelsTab() {
               <td className="px-3 py-2">{item.mice_ballroom_capacity ?? '—'}</td>
               <td className="px-3 py-2">{item.mice_breakout_rooms ?? '—'}</td>
               <td className="px-3 py-2 text-right">
-                <button onClick={() => handleDelete(item.id)} className="text-[#a5162d] hover:underline">
-                  Delete
-                </button>
+                <div className="flex justify-end gap-3">
+                  <Link to={`/admin/catalog/hotels/${item.id}`} className="text-accent hover:underline">
+                    Edit
+                  </Link>
+                  <button onClick={() => handleDelete(item.id)} className="text-[#a5162d] hover:underline">
+                    Delete
+                  </button>
+                </div>
               </td>
             </tr>
           )}
@@ -432,9 +438,14 @@ function MiceToursTab() {
               <td className="px-3 py-2">{item.category || '—'}</td>
               <td className="px-3 py-2">{item.duration || '—'}</td>
               <td className="px-3 py-2 text-right">
-                <button onClick={() => handleDelete(item.id)} className="text-[#a5162d] hover:underline">
-                  Delete
-                </button>
+                <div className="flex justify-end gap-3">
+                  <Link to={`/admin/catalog/tours/${item.id}`} className="text-accent hover:underline">
+                    Edit
+                  </Link>
+                  <button onClick={() => handleDelete(item.id)} className="text-[#a5162d] hover:underline">
+                    Delete
+                  </button>
+                </div>
               </td>
             </tr>
           )}
@@ -582,9 +593,14 @@ function MiceActivitiesTab() {
               <td className="px-3 py-2">{item.duration || '—'}</td>
               <td className="px-3 py-2">{item.pricePerPax ?? item.price_per_pax ?? '—'}</td>
               <td className="px-3 py-2 text-right">
-                <button onClick={() => handleDelete(item.id)} className="text-[#a5162d] hover:underline">
-                  Delete
-                </button>
+                <div className="flex justify-end gap-3">
+                  <Link to={`/admin/catalog/activities/${item.id}`} className="text-accent hover:underline">
+                    Edit
+                  </Link>
+                  <button onClick={() => handleDelete(item.id)} className="text-[#a5162d] hover:underline">
+                    Delete
+                  </button>
+                </div>
               </td>
             </tr>
           )}
@@ -742,9 +758,14 @@ function MiceTransfersTab() {
               <td className="px-3 py-2">{item.city || '—'}</td>
               <td className="px-3 py-2">{item.price ?? '—'}</td>
               <td className="px-3 py-2 text-right">
-                <button onClick={() => handleDelete(item.id)} className="text-[#a5162d] hover:underline">
-                  Delete
-                </button>
+                <div className="flex justify-end gap-3">
+                  <Link to={`/admin/catalog/transfers/${item.id}`} className="text-accent hover:underline">
+                    Edit
+                  </Link>
+                  <button onClick={() => handleDelete(item.id)} className="text-[#a5162d] hover:underline">
+                    Delete
+                  </button>
+                </div>
               </td>
             </tr>
           )}
