@@ -324,7 +324,7 @@ export default function Employees() {
   return (
     <div className="min-h-screen bg-[#F4F7FF]">
       <div className="border-b border-line-light bg-white/90 px-6 pt-6 lg:px-10">
-        <h2 className="text-2xl font-bold">Employees</h2>
+        <h2 className="text-2xl font-bold">Employees & Roles</h2>
         <p className="mt-1.5 text-sm text-muted">Manage internal staff — Relationship Managers and Sales Managers.</p>
         <div className="mt-5 flex flex-wrap gap-2">
           {TABS.map((t) => (

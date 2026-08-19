@@ -51,34 +51,40 @@ function resolveNotificationPath(referenceType) {
   return REFERENCE_ROUTES[referenceType]?.() || null;
 }
 
-// Grouped, task-oriented sidebar — 9 top-level entries. Items that used to
-// be separate top-level links (Agent Approvals, Relationship Managers,
-// Sales Managers, Product Catalog, MICE Catalog, NEFT Verification,
-// Transaction Ledger) now live as sub-items under a parent group; none of
-// those routes or their page components changed. Icons are react-icons
-// (Lucide set) rather than hand-rolled SVGs.
+// Grouped, task-oriented sidebar. Order and wording follow the master
+// wireframe (Xclusive-Oman-Wireframes.html / Xclusive-Oman-Master-
+// Documentation.pdf §7)'s admin screen sequence: Access & Team (09-11) ->
+// Content Catalog (12-13, 35) -> Quotes & Pricing (14-16) -> Marketing
+// Center (17) -> Sales, Revenue & Profit (18) -> FD Operations Tracker (19)
+// -> Client Documents & Visa Processing (23) -> Merchandising & Finance
+// (29-31) -> Support & Helpdesk (28) -> Reviews Management (33) -> Content &
+// CMS Management (34). Labels drop the redundant "Admin —" prefix the doc
+// uses only to disambiguate admin vs. agent screens in one shared document.
+// Dashboard has no wireframe screen (it's a real-app addition as the
+// post-login landing page) so it stays first regardless. Icons are
+// react-icons (Lucide set) rather than hand-rolled SVGs.
 //
 // Relationship Managers and Sales Managers used to be two separate sub-items
-// (each its own page) — now one "Employees" entry, whose page has a tab per
-// staff type (Employees.jsx).
+// (each its own page) — now one "Employees & Roles" entry, whose page has a
+// tab per staff type (Employees.jsx).
 const NAV_ITEMS = [
   { key: 'dashboard', to: '/admin/dashboard', label: 'Dashboard', Icon: LuLayoutDashboard },
   {
     key: 'agencies-team',
-    label: 'Agencies & Team',
+    label: 'Access & Team',
     Icon: LuBuilding2,
     children: [
       { to: '/admin/approvals', label: 'Agent Approvals', Icon: LuUserCheck },
-      { to: '/admin/employees', label: 'Employees', Icon: LuContact },
+      { to: '/admin/employees', label: 'Employees & Roles', Icon: LuContact },
     ],
   },
   {
     key: 'catalog',
-    label: 'Catalog',
+    label: 'Content Catalog',
     Icon: LuLayoutGrid,
     children: [
       { to: '/admin/catalog', label: 'Product Catalog', Icon: LuLayoutGrid },
-      { to: '/admin/mice-catalog', label: 'MICE Catalog', Icon: LuPresentation },
+      { to: '/admin/mice-catalog', label: 'MICE Catalog Manager', Icon: LuPresentation },
     ],
   },
   {
@@ -86,36 +92,41 @@ const NAV_ITEMS = [
     label: 'Quotes & Pricing',
     Icon: LuInbox,
     children: [
-      { to: '/admin/quote-inbox', label: 'Custom FIT Quotes', Icon: LuInbox },
+      { to: '/admin/quote-inbox', label: 'Quote Inbox', Icon: LuInbox },
       { to: '/admin/mice-requests', label: 'MICE Requests', Icon: LuPresentation },
     ],
   },
-  { key: 'bookings-documents', to: '/admin/bookings-documents', label: 'Bookings & Documents', Icon: LuClipboardCheck },
-  { key: 'operations', to: '/admin/operations', label: 'FD Operations', Icon: LuTruck },
+  { key: 'marketing', to: '/admin/marketing', label: 'Marketing Center', Icon: LuMegaphone },
+  { key: 'analytics', to: '/admin/analytics', label: 'Sales, Revenue & Profit', Icon: LuChartColumn },
+  { key: 'operations', to: '/admin/operations', label: 'FD Operations Tracker', Icon: LuTruck },
+  {
+    key: 'bookings-documents',
+    to: '/admin/bookings-documents',
+    label: 'Client Documents & Visa Processing',
+    Icon: LuClipboardCheck,
+  },
   {
     key: 'finance',
-    label: 'Finance',
+    label: 'Merchandising & Finance',
     Icon: LuWallet,
     children: [
-      { to: '/admin/neft-verification', label: 'NEFT Verification', Icon: LuLandmark },
       { to: '/admin/transactions', label: 'Transaction Ledger', Icon: LuReceipt },
+      { to: '/admin/neft-verification', label: 'NEFT Verification', Icon: LuLandmark },
     ],
   },
-  { key: 'marketing', to: '/admin/marketing', label: 'Marketing', Icon: LuMegaphone },
-  { key: 'analytics', to: '/admin/analytics', label: 'Analytics', Icon: LuChartColumn },
-  { key: 'support', to: '/admin/support', label: 'Support', Icon: LuHeadset },
+  { key: 'support', to: '/admin/support', label: 'Support & Helpdesk', Icon: LuHeadset },
   // Admin Reviews Management (Task 21 — Item 33) — ops_admin/super_admin
   // gated on the backend only; not filtered out of NAV_ITEMS for other
   // roles, matching the existing convention for other ops_admin+-only pages
   // (FD Operations, Bookings & Documents above) rather than CMS's own
   // explicit super_admin-only override just below.
-  { key: 'reviews', to: '/admin/reviews', label: 'Reviews', Icon: LuStar },
+  { key: 'reviews', to: '/admin/reviews', label: 'Reviews Management', Icon: LuStar },
   // Content & CMS Management (Task 21 — Item 34) — super_admin only per this
   // task's explicit access-control override; filtered out of NAV_ITEMS below
   // for every other role. Hiding the nav item is a UX convenience only, not
   // the real gate — SuperAdminRoute.jsx (frontend) and requireRole('super_admin')
   // (backend, cms.routes.js) are what actually enforce it.
-  { key: 'cms', to: '/admin/cms', label: 'Content & CMS', Icon: LuNewspaper, superAdminOnly: true },
+  { key: 'cms', to: '/admin/cms', label: 'Content & CMS Management', Icon: LuNewspaper, superAdminOnly: true },
 ];
 
 const EXPANDED_WIDTH = 288; // w-72

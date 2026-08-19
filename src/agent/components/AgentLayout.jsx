@@ -22,18 +22,26 @@ import {
   SupportIcon,
 } from './icons.jsx';
 
-// Task 1 sidebar spec, in the requested order.
+// Order and wording follow the master wireframe (Xclusive-Oman-Wireframes.html
+// / Xclusive-Oman-Master-Documentation.pdf §7): Agent Dashboard (02) -> FGD
+// Listing/Detail (03-04) -> Custom FIT Package Builder Wizard (05) -> Priced
+// Quote — Agent View (06) -> MICE Content Hub / Curation Screen (07-08) ->
+// Agent — Notification Center (20) -> Payment & Transaction History (26) ->
+// Agent — Contact & Support (27). Labels drop the redundant "Agent —" prefix
+// the doc uses only to disambiguate admin vs. agent screens in one shared
+// document. My Bookings / My MICE Requests / Profile have no dedicated
+// wireframe screen — kept in their existing, logically-adjacent slots.
 const NAV_ITEMS = [
   { to: '/agent/dashboard', label: 'Dashboard', Icon: DashboardIcon },
   { to: '/agent/departures', label: 'Fixed Group Departures', Icon: DeparturesIcon },
   { to: '/agent/package-builder', label: 'Custom FIT Package Builder', Icon: BuilderIcon },
   { to: '/agent/fit-requests', label: 'My FIT Requests / Quotes', Icon: QuotesIcon },
-  { to: '/agent/mice-builder', label: 'MICE Curation', Icon: BuilderIcon },
+  { to: '/agent/mice-builder', label: 'MICE Engine', Icon: BuilderIcon },
   { to: '/agent/mice-requests', label: 'My MICE Requests', Icon: QuotesIcon },
   { to: '/agent/bookings', label: 'My Bookings', Icon: BookingsIcon },
-  { to: '/agent/transactions', label: 'Payment & Transactions', Icon: PaymentsIcon },
-  { to: '/agent/notifications', label: 'Notifications', Icon: NotificationsIcon },
-  { to: '/agent/support', label: 'Support', Icon: SupportIcon },
+  { to: '/agent/transactions', label: 'Payment & Transaction History', Icon: PaymentsIcon },
+  { to: '/agent/notifications', label: 'Notification Center', Icon: NotificationsIcon },
+  { to: '/agent/support', label: 'Contact & Support', Icon: SupportIcon },
   { to: '/agent/profile', label: 'Profile', Icon: ProfileIcon },
 ];
 
