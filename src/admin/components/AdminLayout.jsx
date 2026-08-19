@@ -16,6 +16,7 @@ import {
   LuLogOut,
   LuMegaphone,
   LuNewspaper,
+  LuStar,
   LuPresentation,
   LuReceipt,
   LuTruck,
@@ -103,6 +104,12 @@ const NAV_ITEMS = [
   { key: 'marketing', to: '/admin/marketing', label: 'Marketing', Icon: LuMegaphone },
   { key: 'analytics', to: '/admin/analytics', label: 'Analytics', Icon: LuChartColumn },
   { key: 'support', to: '/admin/support', label: 'Support', Icon: LuHeadset },
+  // Admin Reviews Management (Task 21 — Item 33) — ops_admin/super_admin
+  // gated on the backend only; not filtered out of NAV_ITEMS for other
+  // roles, matching the existing convention for other ops_admin+-only pages
+  // (FD Operations, Bookings & Documents above) rather than CMS's own
+  // explicit super_admin-only override just below.
+  { key: 'reviews', to: '/admin/reviews', label: 'Reviews', Icon: LuStar },
   // Content & CMS Management (Task 21 — Item 34) — super_admin only per this
   // task's explicit access-control override; filtered out of NAV_ITEMS below
   // for every other role. Hiding the nav item is a UX convenience only, not

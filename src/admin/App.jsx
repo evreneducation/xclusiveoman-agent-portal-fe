@@ -31,6 +31,7 @@ import Support from './pages/Support.jsx';
 import SupportTicketDetail from './pages/SupportTicketDetail.jsx';
 import ContentManagement from './pages/ContentManagement.jsx';
 import CmsPageEditor from './pages/CmsPageEditor.jsx';
+import ReviewsManagement from './pages/ReviewsManagement.jsx';
 
 export default function App() {
   return (
@@ -69,6 +70,13 @@ export default function App() {
               <Route path="analytics" element={<Analytics />} />
               <Route path="support" element={<Support />} />
               <Route path="support/:ticketId" element={<SupportTicketDetail />} />
+              {/* Admin Reviews Management (Task 21 — Item 33) — ops_admin/
+                  super_admin gated on the backend (reviewsAdmin.routes.js);
+                  no extra frontend route guard here, same as FD Operations
+                  and Bookings & Documents (also ops_admin+-only on the
+                  backend) — the backend 403 is the real enforcement, this
+                  page's own error state handles an unauthorized fetch. */}
+              <Route path="reviews" element={<ReviewsManagement />} />
               {/* Content & CMS Management (Task 21 — Item 34) — super_admin
                   only; SuperAdminRoute redirects any other authenticated
                   staff role to the dashboard before these ever render. */}
