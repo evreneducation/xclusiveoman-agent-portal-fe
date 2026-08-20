@@ -63,9 +63,9 @@ const PROVIDER_LABELS = {
 // the former means no integration/credential surface exists at all for that
 // provider (Mailchimp, Zoho Campaigns, WhatsApp Business API — confirmed by
 // backend inspection), never shown as something an admin could "Configure"
-// here; the latter (built_in only, when SMTP env vars are unset) is a real,
+// here; the latter (built_in only, when Brevo env vars are unset) is a real,
 // fixable gap. 'connected' is only ever returned once the backend has
-// actually verified the provider (a live SMTP round-trip for built_in) —
+// actually verified the provider (a live Brevo API auth check for built_in) —
 // never merely because credentials exist.
 const PROVIDER_STATUS_META = {
   connected: { label: 'Connected', tone: 'green' },
