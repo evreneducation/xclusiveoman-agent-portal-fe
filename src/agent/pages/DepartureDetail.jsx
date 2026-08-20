@@ -266,7 +266,24 @@ export default function DepartureDetail() {
   const [departureDateId, setDepartureDateId] = useState('');
   const [pax, setPax] = useState(2);
   const [selectedAddonIds, setSelectedAddonIds] = useState([]);
-  const [travelerNames, setTravelerNames] = useState(['', '']);
+  // Documented FD flow (Departure Details -> Traveler Details -> Confirm
+  // Booking -> Payment): 'select' is this page's existing departure/pax/
+  // add-ons form; 'travelers' is the new intermediate step below. Book Now
+  // no longer books immediately — it only advances here, and the booking is
+  // created (handleConfirmBooking) at the 'travelers' step instead.
+  const [bookingStep, setBookingStep] = useState('select');
+  // name/passportNo/roomShareGroup — the exact traveler shape the backend
+  // already accepts (validation/schemas.js's bookingTravelerSchema, shared
+  // with Admin Manual Booking) and the same three fields that flow's own
+  // "Traveler details" step collects (wireframe Screen 22: Name / Passport
+  // No. / Room share). `dob` is also in that schema but no UI anywhere in
+  // this app has ever collected it (PackageBuilder's own TravelersEditor
+  // doesn't either) — left alone here, not newly invented.
+  const [travelers, setTravelers] = useState([
+    { name: '', passportNo: '', roomShareGroup: '' },
+    { name: '', passportNo: '', roomShareGroup: '' },
+  ]);
+  const [travelerError, setTravelerError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [bookingResult, setBookingResult] = useState(null);
   const [bookingError, setBookingError] = useState('');
@@ -282,9 +299,9 @@ export default function DepartureDetail() {
   }, [id]);
 
   useEffect(() => {
-    setTravelerNames((names) => {
-      const next = names.slice(0, pax);
-      while (next.length < pax) next.push('');
+    setTravelers((list) => {
+      const next = list.slice(0, pax);
+      while (next.length < pax) next.push({ name: '', passportNo: '', roomShareGroup: '' });
       return next;
     });
   }, [pax]);
@@ -304,7 +321,36 @@ export default function DepartureDetail() {
     setSelectedAddonIds((ids) => (ids.includes(addonId) ? ids.filter((i) => i !== addonId) : [...ids, addonId]));
   }
 
-  async function handleBookInstantly() {
+  // Step 1 (Departure Details) -> Step 2 (Traveler Details). Departure
+  // date/pax/add-ons stay exactly as selected — same component, same state,
+  // nothing gets reset by switching steps.
+  function handleBookNowClick() {
+    if (!departureDateId) return;
+    setTravelerError('');
+    setBookingStep('travelers');
+  }
+
+  function handleBackToDetails() {
+    setTravelerError('');
+    setBookingStep('select');
+  }
+
+  function updateTraveler(idx, field, value) {
+    setTravelers((list) => list.map((t, i) => (i === idx ? { ...t, [field]: value } : t)));
+  }
+
+  // Step 2 (Traveler Details) -> booking creation — unchanged API/payload
+  // shape (POST /departures/:id/bookings), just now sending every traveler
+  // field the schema already accepts instead of name alone, and only once
+  // every traveler actually has a name (bookingTravelerSchema requires it
+  // server-side too; this just fails fast with a clear message instead of a
+  // generic 400).
+  async function handleConfirmBooking() {
+    if (travelers.some((t) => !t.name.trim())) {
+      setTravelerError('Enter a name for every traveler.');
+      return;
+    }
+    setTravelerError('');
     setBookingError('');
     setSubmitting(true);
     try {
@@ -312,7 +358,11 @@ export default function DepartureDetail() {
         departureDateId,
         pax,
         addonIds: selectedAddonIds,
-        travelers: travelerNames.filter(Boolean).map((name) => ({ name })),
+        travelers: travelers.map((t) => ({
+          name: t.name.trim(),
+          passportNo: t.passportNo.trim() || undefined,
+          roomShareGroup: t.roomShareGroup.trim() || undefined,
+        })),
       });
       setBookingResult(booking);
     } catch (err) {
@@ -490,7 +540,78 @@ export default function DepartureDetail() {
                   </Button>
                 )}
               </div>
+            ) : bookingStep === 'travelers' ? (
+              // Step 2 — Traveler Details (documented flow: Departure
+              // Details -> Traveler Details -> Confirm Booking -> Payment).
+              // Departure date/pax/add-ons above are untouched — this is the
+              // same component/state, just a different render branch.
+              <>
+                <div className="mb-4 flex items-center justify-between border-b border-agent-line-light pb-4">
+                  <div>
+                    <div className="text-[10px] font-semibold uppercase tracking-wide text-agent-muted">Traveler details</div>
+                    <div className="text-base font-bold text-agent-ink">
+                      {pax} {pax === 1 ? 'traveler' : 'travelers'}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleBackToDetails}
+                    className="text-xs font-semibold text-agent-accent-dark hover:underline"
+                  >
+                    ← Back
+                  </button>
+                </div>
+
+                <div className="mb-3 space-y-3">
+                  {travelers.map((t, idx) => (
+                    <div key={idx} className="rounded-xl border border-agent-line-light p-3">
+                      <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-agent-muted">
+                        Traveler {idx + 1}
+                      </div>
+                      <div className="space-y-1.5">
+                        <TextInput
+                          placeholder="Full name"
+                          value={t.name}
+                          onChange={(e) => updateTraveler(idx, 'name', e.target.value)}
+                        />
+                        <TextInput
+                          placeholder="Passport No. (optional)"
+                          value={t.passportNo}
+                          onChange={(e) => updateTraveler(idx, 'passportNo', e.target.value)}
+                        />
+                        <TextInput
+                          placeholder="Room share (optional)"
+                          value={t.roomShareGroup}
+                          onChange={(e) => updateTraveler(idx, 'roomShareGroup', e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="my-3 space-y-1.5 rounded-xl bg-agent-panel px-3.5 py-3 text-sm">
+                  <div className="flex justify-between font-bold text-agent-ink">
+                    <span>Total</span>
+                    <span>{formatCurrency(total)}</span>
+                  </div>
+                </div>
+
+                <ErrorText>{travelerError || bookingError}</ErrorText>
+
+                <Button
+                  variant="accent"
+                  className="mb-2 w-full py-3 text-sm"
+                  disabled={submitting}
+                  onClick={handleConfirmBooking}
+                >
+                  {submitting ? 'Booking…' : 'Confirm Booking'}
+                </Button>
+              </>
             ) : (
+              // Step 1 — Departure Details' own booking panel (departure
+              // date, pax, add-ons already selected above in the left
+              // column). Book Now no longer books directly — it only
+              // advances to the Traveler Details step above.
               <>
                 <div className="mb-4 flex items-end justify-between border-b border-agent-line-light pb-4">
                   <div>
@@ -530,16 +651,6 @@ export default function DepartureDetail() {
                     onChange={(e) => setPax(Math.max(1, Number(e.target.value) || 1))}
                   />
                 </div>
-                <div className="mb-3 space-y-1">
-                  {travelerNames.map((name, idx) => (
-                    <TextInput
-                      key={idx}
-                      placeholder={`Traveler ${idx + 1} full name`}
-                      value={name}
-                      onChange={(e) => setTravelerNames((names) => names.map((n, i) => (i === idx ? e.target.value : n)))}
-                    />
-                  ))}
-                </div>
 
                 <div className="my-3 space-y-1.5 rounded-xl bg-agent-panel px-3.5 py-3 text-sm">
                   <div className="flex justify-between">
@@ -563,10 +674,10 @@ export default function DepartureDetail() {
                 <Button
                   variant="accent"
                   className="mb-2 w-full py-3 text-sm"
-                  disabled={submitting || !departureDateId}
-                  onClick={handleBookInstantly}
+                  disabled={!departureDateId}
+                  onClick={handleBookNowClick}
                 >
-                  {submitting ? 'Booking…' : 'Book Now'}
+                  Book Now
                 </Button>
                 <Button className="mb-3 w-full" onClick={handleEnquireNow}>
                   💬 Enquire Now
