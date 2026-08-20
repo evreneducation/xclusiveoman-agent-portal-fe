@@ -187,17 +187,14 @@ function PricingForm({ form, update, computedRatePerPax }) {
   );
 }
 
-function MerchandisingForm({ form, update, addonsEnabled, onToggleAddons }) {
+// Task 5 — the "Add-ons" enable-toggle that used to live here is gone: the
+// Add-ons & Inclusions section (AddonsManager) now always renders once a
+// package exists, since it's opt-in per item by checkbox anyway.
+function MerchandisingForm({ form, update }) {
   return (
     <Card label="Merchandising & discovery attributes" className="border-white">
       <Checkbox checked={!!form.isFeatured} onChange={(v) => update('isFeatured', v)} label="Mark as Featured / Highly Recommended" />
       <Checkbox checked={!!form.isBestseller} onChange={(v) => update('isBestseller', v)} label="Mark as Bestseller" />
-      <Checkbox
-        checked={addonsEnabled}
-        onChange={onToggleAddons}
-        label="Add-ons"
-        hint="Attach priced add-on activities/tours to this package"
-      />
     </Card>
   );
 }
@@ -833,213 +830,149 @@ function ItineraryManager({ fdPackageId, itinerary, duration, onChange, onComput
   );
 }
 
-function AddonsManager({ fdPackageId, addons, onChange }) {
-  const [activities, setActivities] = useState([]);
-  const [tours, setTours] = useState([]);
-  const [selection, setSelection] = useState('');
-  const [location, setLocation] = useState('');
-  const [price, setPrice] = useState('');
+// Task 5 — one catalog-item checkbox per row, straight from the Product
+// Catalog; checking it creates a real fd_addons row (price read
+// automatically off the item, never typed by hand), unchecking removes it.
+// Reused for Activities/Tours/Transfers below (AddonsManager) — only the
+// catalog list, id field, and display price field differ per type.
+const ADDON_ID_FIELD = { activity: 'activityId', tour: 'tourId', transfer: 'transferId' };
+const ADDON_PRICE_FIELD = { activity: 'price_per_pax', tour: 'price', transfer: 'price' };
 
-  useEffect(() => {
-    api.get('/activities').then((d) => setActivities(d.activities));
-    api.get('/tours').then((d) => setTours(d.tours));
-  }, []);
-
-  async function add() {
-    if (!selection || !location || !price) return;
-    const [kind, id] = selection.split(':');
-    const payload =
-      kind === 'activity'
-        ? { activityId: id, location, pricePerPax: Number(price) }
-        : { tourId: id, location, pricePerPax: Number(price) };
-    const { addon } = await api.post(`/admin/fd-packages/${fdPackageId}/addons`, payload);
-    const name = (kind === 'activity' ? activities : tours).find((x) => x.id === id)?.name;
-    onChange([...addons, { ...addon, name }]);
-    setSelection('');
-    setLocation('');
-    setPrice('');
-  }
-
-  async function remove(id) {
-    await api.del(`/admin/fd-packages/${fdPackageId}/addons/${id}`);
-    onChange(addons.filter((a) => a.id !== id));
-  }
-
-  return (
-    <Card label="Add-on activities & tours" className="border-white">
-      <p className="mb-3 text-xs text-muted">
-        The same activity/tour can be added more than once with a different departure location and price —
-        e.g. a tour priced differently ex-Muscat vs ex-Salalah.
-      </p>
-      <Table
-        columns={['Name', 'Location', 'Price / pax', '']}
-        rows={addons}
-        renderRow={(a) => (
-          <tr key={a.id} className="border-b border-line-light last:border-0">
-            <td className="px-3 py-2">{a.name}</td>
-            <td className="px-3 py-2">{a.location || '—'}</td>
-            <td className="px-3 py-2">₹{a.pricePerPax}</td>
-            <td className="px-3 py-2 text-right">
-              <button onClick={() => remove(a.id)} className="text-[#a5162d] hover:underline">
-                Remove
-              </button>
-            </td>
-          </tr>
-        )}
-      />
-      <div className="mt-3 flex flex-wrap items-end gap-2">
-        <div>
-          <FieldLabel>Activity / tour</FieldLabel>
-          <Select value={selection} onChange={(e) => setSelection(e.target.value)}>
-            <option value="">Select…</option>
-            {activities.map((a) => (
-              <option key={a.id} value={`activity:${a.id}`}>
-                {a.name}
-              </option>
-            ))}
-            {tours.map((t) => (
-              <option key={t.id} value={`tour:${t.id}`}>
-                {t.name}
-              </option>
-            ))}
-          </Select>
-        </div>
-        <div>
-          <FieldLabel>Departure location</FieldLabel>
-          <TextInput placeholder="e.g. Muscat" value={location} onChange={(e) => setLocation(e.target.value)} />
-        </div>
-        <div>
-          <FieldLabel>Price per pax</FieldLabel>
-          <TextInput type="number" value={price} onChange={(e) => setPrice(e.target.value)} />
-        </div>
-        <Button onClick={add}>+ Add add-on</Button>
-      </div>
-    </Card>
-  );
-}
-
-// One meal type's fields (Lunch or Dinner) — just a headcount and a day
-// count; there's no picking a specific catalog entry, `meal` is resolved
-// automatically by MealsManager (the one meals-catalog row of that
-// meal_type). Reusable since Lunch and Dinner are otherwise identical. Shows
-// the live cost (price_per_day × people × days — mirrors computeMealsCost on
-// the backend; the catalog only captures a "price for 1 day" now, treated as
-// the per-person-per-day rate). `enabled` is separate local UI state in the
-// parent so checking the box doesn't depend on a price already existing, and
-// Checkbox itself renders no children — the detail fields are a sibling,
-// shown only while enabled.
-function MealSection({ label, meal, enabled, onToggle, people, days, onFieldChange }) {
-  const cost = meal && people && days ? Number(meal.price_per_day) * Number(people) * Number(days) : 0;
-
+function AddonCheckboxGroup({ type, label, catalog, addons, onToggle }) {
+  const idField = ADDON_ID_FIELD[type];
+  const priceField = ADDON_PRICE_FIELD[type];
   return (
     <div>
-      <Checkbox checked={enabled} onChange={onToggle} label={label} />
-      {enabled &&
-        (meal ? (
-          <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div>
-              <FieldLabel>Number of people</FieldLabel>
-              <TextInput type="number" value={people ?? ''} onChange={(e) => onFieldChange({ people: e.target.value, days })} />
-            </div>
-            <div>
-              <FieldLabel>Number of {label.toLowerCase()} days</FieldLabel>
-              <TextInput type="number" value={days ?? ''} onChange={(e) => onFieldChange({ people, days: e.target.value })} />
-            </div>
-            <p className="sm:col-span-2 text-[11px] text-muted">
-              {formatCurrency(meal.price_per_day)}/person/day · {label} cost: {formatCurrency(cost)}
-            </p>
-          </div>
-        ) : (
-          <p className="mt-2 text-[11px] text-muted">No {label.toLowerCase()} price configured in the catalog yet.</p>
-        ))}
+      <FieldLabel>{label}</FieldLabel>
+      {catalog.length === 0 ? (
+        <p className="text-[11px] text-muted">No {label.toLowerCase()} in the catalog yet.</p>
+      ) : (
+        <div className="max-h-44 space-y-0.5 overflow-y-auto rounded-md border border-line-light p-2">
+          {catalog.map((item) => {
+            const existing = addons.find((a) => a[idField] === item.id);
+            return (
+              <Checkbox
+                key={item.id}
+                checked={!!existing}
+                onChange={() => onToggle(type, item, existing)}
+                label={item.name}
+                hint={item[priceField] != null ? `${formatCurrency(item[priceField])} / pax` : undefined}
+              />
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
 
-// Optional lunch/dinner add-ons — either, both, or neither. Just a headcount
-// and a day count per type; the price comes straight from that meal_type's
-// catalog entry (see meals tab), not a picker. The combined cost feeds live
-// into the auto-computed Net rate (see PricingForm) the same way the
-// itinerary does, via onComputedRateChange; nothing here is persisted
-// separately, it's just more fields on `form` saved with Save as Draft/Publish.
-function MealsManager({ form, update, onComputedRateChange }) {
+// Task 4/5 — replaces both the old AddonsManager (freeform name+price
+// entry) and the separate Meals card that used to sit below this section:
+// Activities/Tours/Transfers are now real fd_addons rows picked by
+// checkbox, priced straight from the catalog; Visa and Meals (Lunch/Dinner)
+// are simple "included or not" checkboxes on the package itself
+// (form.visaEnabled / lunchMealId / dinnerMealId) — no manual price entry
+// and, for meals, no headcount/day-count either, since a real pax is only
+// known once an agent actually books (agent/pages/DepartureDetail.jsx's
+// Traveler Details step). Meals/Visa cost is computed here purely for the
+// live Net rate preview (mirrors the backend's own resolveRatePerPax /
+// computeFdMealsPerPax, utils/meals.js — kept in sync by hand since this is
+// a client-side preview, not the source of truth); the real charge is
+// resolved server-side at booking time either way.
+function AddonsManager({ fdPackageId, addons, onChange, form, update, duration, onComputedRateChange }) {
+  const [activities, setActivities] = useState([]);
+  const [tours, setTours] = useState([]);
+  const [transfers, setTransfers] = useState([]);
   const [meals, setMeals] = useState([]);
+  const [visa, setVisa] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [lunchEnabled, setLunchEnabled] = useState(false);
-  const [dinnerEnabled, setDinnerEnabled] = useState(false);
 
   useEffect(() => {
-    api.get('/meals').then((d) => setMeals(d.meals || [])).finally(() => setLoading(false));
+    Promise.all([api.get('/activities'), api.get('/tours'), api.get('/transfers'), api.get('/meals'), api.get('/visas')])
+      .then(([a, t, tr, m, v]) => {
+        setActivities(a.activities || []);
+        setTours(t.tours || []);
+        setTransfers(tr.transfers || []);
+        setMeals(m.meals || []);
+        setVisa((v.visas || [])[0] || null);
+      })
+      .finally(() => setLoading(false));
   }, []);
 
-  // Sync the toggles once this package's data has actually loaded (form.id
-  // shows up) — not on every keystroke elsewhere in the form, and not before
-  // there's anything to sync from.
-  useEffect(() => {
-    if (form.id == null) return;
-    setLunchEnabled(form.lunchMealId != null);
-    setDinnerEnabled(form.dinnerMealId != null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.id]);
-
-  // "The" lunch/dinner entry — one catalog row is expected per meal_type
-  // (see the meals tab), so there's nothing for the admin to choose between.
-  const lunchMeal = meals.find((m) => m.meal_type === 'lunch');
-  const dinnerMeal = meals.find((m) => m.meal_type === 'dinner');
-
-  function mealCost(meal, people, days) {
-    return meal && people && days ? Number(meal.price_per_day) * Number(people) * Number(days) : 0;
-  }
-  const mealsTotal = mealCost(lunchMeal, form.lunchPeople, form.lunchDays) + mealCost(dinnerMeal, form.dinnerPeople, form.dinnerDays);
-
-  useEffect(() => {
-    if (loading) return;
-    onComputedRateChange?.(mealsTotal);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mealsTotal, loading]);
-
-  function toggleMeal(prefix, setEnabled, meal, checked) {
-    setEnabled(checked);
-    if (checked) {
-      update(`${prefix}MealId`, meal?.id ?? null);
+  async function toggleAddon(type, item, existing) {
+    if (existing) {
+      await api.del(`/admin/fd-packages/${fdPackageId}/addons/${existing.id}`);
+      onChange(addons.filter((a) => a.id !== existing.id));
     } else {
-      update(`${prefix}MealId`, null);
-      update(`${prefix}People`, null);
-      update(`${prefix}Days`, null);
+      const { addon } = await api.post(`/admin/fd-packages/${fdPackageId}/addons`, { [ADDON_ID_FIELD[type]]: item.id });
+      onChange([...addons, addon]);
     }
   }
 
-  function fieldChange(prefix, { people, days }) {
-    update(`${prefix}People`, people === '' ? null : Number(people));
-    update(`${prefix}Days`, days === '' ? null : Number(days));
+  // "The" lunch/dinner/visa entry — one catalog row is expected per
+  // meal_type (and Visa has only ever the one row), so there's nothing else
+  // for the admin to choose between — see MealsManager's old identical
+  // comment, this replaces it.
+  const lunchMeal = meals.find((m) => m.meal_type === 'lunch');
+  const dinnerMeal = meals.find((m) => m.meal_type === 'dinner');
+  const dayCount = parseDurationDays(duration);
+
+  function mealPerPax(meal, mealId) {
+    return meal && mealId && dayCount ? Number(meal.price_per_day || 0) * dayCount : 0;
   }
+  const mealsAndVisaPerPax =
+    mealPerPax(lunchMeal, form.lunchMealId) +
+    mealPerPax(dinnerMeal, form.dinnerMealId) +
+    (form.visaEnabled ? Number(visa?.price_per_person || 0) : 0);
+
+  useEffect(() => {
+    if (loading) return;
+    onComputedRateChange?.(mealsAndVisaPerPax);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mealsAndVisaPerPax, loading]);
 
   return (
-    <Card label="Meals" className="border-white">
+    <Card label="Add-ons & Inclusions" className="border-white">
       {loading ? (
-        <p className="text-sm text-muted">Loading meal options…</p>
+        <p className="text-sm text-muted">Loading catalog…</p>
       ) : (
-        <div className="space-y-3">
-          <MealSection
-            label="Lunch"
-            meal={lunchMeal}
-            enabled={lunchEnabled}
-            onToggle={(checked) => toggleMeal('lunch', setLunchEnabled, lunchMeal, checked)}
-            people={form.lunchPeople}
-            days={form.lunchDays}
-            onFieldChange={(next) => fieldChange('lunch', next)}
-          />
-          <MealSection
-            label="Dinner"
-            meal={dinnerMeal}
-            enabled={dinnerEnabled}
-            onToggle={(checked) => toggleMeal('dinner', setDinnerEnabled, dinnerMeal, checked)}
-            people={form.dinnerPeople}
-            days={form.dinnerDays}
-            onFieldChange={(next) => fieldChange('dinner', next)}
-          />
-          {(lunchEnabled || dinnerEnabled) && (
-            <p className="text-sm font-semibold text-ink">Meals total: {formatCurrency(mealsTotal)}</p>
+        <div className="space-y-4">
+          <AddonCheckboxGroup type="activity" label="Activities" catalog={activities} addons={addons} onToggle={toggleAddon} />
+          <AddonCheckboxGroup type="tour" label="Tours" catalog={tours} addons={addons} onToggle={toggleAddon} />
+          <AddonCheckboxGroup type="transfer" label="Transfers" catalog={transfers} addons={addons} onToggle={toggleAddon} />
+
+          <div>
+            <FieldLabel>Visa</FieldLabel>
+            <Checkbox
+              checked={!!form.visaEnabled}
+              onChange={(v) => update('visaEnabled', v)}
+              label="Visa assistance included"
+              hint={visa?.price_per_person != null ? `${formatCurrency(visa.price_per_person)} / pax` : 'No visa price configured in the catalog yet'}
+            />
+          </div>
+
+          <div>
+            <FieldLabel>Meals</FieldLabel>
+            <div className="space-y-1.5">
+              <Checkbox
+                checked={form.lunchMealId != null}
+                onChange={(v) => update('lunchMealId', v ? (lunchMeal?.id ?? null) : null)}
+                label="Lunch included"
+                hint={lunchMeal?.price_per_day != null ? `${formatCurrency(lunchMeal.price_per_day)} / pax / day` : 'No lunch price configured yet'}
+              />
+              <Checkbox
+                checked={form.dinnerMealId != null}
+                onChange={(v) => update('dinnerMealId', v ? (dinnerMeal?.id ?? null) : null)}
+                label="Dinner included"
+                hint={dinnerMeal?.price_per_day != null ? `${formatCurrency(dinnerMeal.price_per_day)} / pax / day` : 'No dinner price configured yet'}
+              />
+            </div>
+          </div>
+
+          {mealsAndVisaPerPax > 0 && (
+            <p className="text-xs text-muted">
+              Meals + visa add {formatCurrency(mealsAndVisaPerPax)}/pax to the Net rate below.
+            </p>
           )}
         </div>
       )}
@@ -1096,15 +1029,14 @@ export default function FdPackageEditor() {
   const [dates, setDates] = useState([]);
   const [itinerary, setItinerary] = useState([]);
   const [addons, setAddons] = useState([]);
-  const [addonsEnabled, setAddonsEnabled] = useState(false);
   const [submitting, setSubmitting] = useState('');
   // Live "auto" net rate — the itinerary total (ItineraryManager) plus any
-  // selected meals (MealsManager), each reported independently as they're
-  // edited so neither has to wait on the other or on a save round trip.
-  // Both start at null ("still calculating") rather than 0, so the Net rate
-  // field shows "—" instead of flashing ₹0 before either has finished its
-  // first pass. Kept separate from `form` so this never gets sent back to
-  // the server as if it were the override.
+  // included meals/visa (AddonsManager), each reported independently as
+  // they're edited so neither has to wait on the other or on a save round
+  // trip. Both start at null ("still calculating") rather than 0, so the
+  // Net rate field shows "—" instead of flashing ₹0 before either has
+  // finished its first pass. Kept separate from `form` so this never gets
+  // sent back to the server as if it were the override.
   const [itineraryRatePerPax, setItineraryRatePerPax] = useState(null);
   const [mealsRatePerPax, setMealsRatePerPax] = useState(null);
   const computedRatePerPax =
@@ -1140,7 +1072,6 @@ export default function FdPackageEditor() {
       setDates(fdPackage.departureDates || []);
       setItinerary(fdPackage.itinerary || []);
       setAddons(fdPackage.addons || []);
-      setAddonsEnabled((fdPackage.addons || []).length > 0);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, isNew]);
@@ -1181,14 +1112,14 @@ export default function FdPackageEditor() {
   // completely empty, keep it filled in from what's actually in the
   // package — a hotel on any day adds "Accommodation", a tour adds "Tour as
   // per itinerary", a transfer adds "Travel as per itinerary", an activity
-  // adds "Activity as per itinerary", a selected lunch/dinner add-on adds
-  // "Meals" (no Visa here — that's a Custom FIT-only add-on the agent
-  // toggles in PackageBuilder.jsx, FD Packages have no agent-facing request
-  // step). Re-evaluated whenever the itinerary/meals change (unlike the
-  // Quote Inbox's one-shot seed on mount) since this editor builds up the
-  // itinerary progressively in the same session rather than loading it
-  // fully formed already — stops the moment Inclusions has any point of its
-  // own, admin-added or previously seeded.
+  // adds "Activity as per itinerary", an included lunch/dinner adds
+  // "Meals", and (Task 5) a checked Visa adds "Visa assistance" — FD
+  // packages get their own visa_enabled flag now, same idea as Custom FIT's
+  // agent-facing one. Re-evaluated whenever the itinerary/meals/visa change
+  // (unlike the Quote Inbox's one-shot seed on mount) since this editor
+  // builds up the itinerary progressively in the same session rather than
+  // loading it fully formed already — stops the moment Inclusions has any
+  // point of its own, admin-added or previously seeded.
   useEffect(() => {
     if (linesFromText(form.inclusions).length > 0) return;
     const seeded = [];
@@ -1197,9 +1128,10 @@ export default function FdPackageEditor() {
     if (itineraryHasItemType(itinerary, 'transfer')) seeded.push('Travel as per itinerary');
     if (itineraryHasItemType(itinerary, 'activity')) seeded.push('Activity as per itinerary');
     if (form.lunchMealId || form.dinnerMealId) seeded.push('Meals');
+    if (form.visaEnabled) seeded.push('Visa assistance');
     if (seeded.length > 0) update('inclusions', textFromLines(seeded));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [itinerary, form.lunchMealId, form.dinnerMealId, form.inclusions]);
+  }, [itinerary, form.lunchMealId, form.dinnerMealId, form.visaEnabled, form.inclusions]);
 
   // Blind pricing aside, the itinerary is the one thing PRD explicitly
   // requires before a package goes live (FGD-2 / ADM-6 catalog screens both
@@ -1277,18 +1209,27 @@ export default function FdPackageEditor() {
             />
             {/* Moved below the day-by-day itinerary builder (Task 3) — was
                 previously right after Basics. */}
-            <MerchandisingForm form={form} update={update} addonsEnabled={addonsEnabled} onToggleAddons={setAddonsEnabled} />
-            {addonsEnabled && <AddonsManager fdPackageId={packageId} addons={addons} onChange={setAddons} />}
+            <MerchandisingForm form={form} update={update} />
+            {/* Task 4/5 — replaces both the old (gated-behind-a-toggle)
+                AddonsManager and the separate Meals card that used to sit
+                below this section; now always renders, each item opt-in by
+                its own checkbox. */}
+            <AddonsManager
+              fdPackageId={packageId}
+              addons={addons}
+              onChange={setAddons}
+              form={form}
+              update={update}
+              duration={form.duration}
+              onComputedRateChange={setMealsRatePerPax}
+            />
           </>
         )}
         {!packageId && <p className="text-xs text-muted">Setting up…</p>}
 
-        {/* Just above Pricing — its live cost feeds into the same computed
-            Net rate, alongside the itinerary total above. */}
-        <MealsManager form={form} update={update} onComputedRateChange={setMealsRatePerPax} />
-
-        {/* Summarizes what's already been built above (itinerary + meals) —
-            same reason it's pre-seeded from those, see the effect above. */}
+        {/* Summarizes what's already been built above (itinerary + add-ons/
+            inclusions) — same reason it's pre-seeded from those, see the
+            effect above. */}
         <InclusionsExclusionsForm form={form} update={update} />
 
         {/* Rendered last — the net rate is computed from the itinerary and
