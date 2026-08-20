@@ -28,29 +28,22 @@ function todayDateString() {
 // FIT-1: Trip Details is just destination/dates/pax — hotel/tours/transfers/
 // extras selection now happens inside Itinerary (FIT-5), city by city, day by
 // day, instead of upfront here.
-const STEPS = [
-  { n: 1, label: 'Trip Details' },
-  { n: 2, label: 'Itinerary' },
-  { n: 3, label: 'Review & Submit' },
-];
-
-function StepIndicator({ step }) {
+//
+// The builder used to gate these three behind a tab-style step indicator
+// (only one section mounted at a time, Back/Next to move between them). It's
+// now a single scrolling page with all three sections stacked and numbered —
+// SectionHeading below is what replaces the old StepIndicator tabs; `n` here
+// is just the heading's own number, unrelated to any navigation state.
+function SectionHeading({ n, title, subtitle }) {
   return (
-    <div className="mb-5 flex flex-wrap gap-1.5">
-      {STEPS.map((s) => (
-        <span
-          key={s.n}
-          className={`rounded-full border px-3 py-1.5 font-mono text-[10px] font-semibold ${
-            s.n === step
-              ? 'border-agent-accent bg-agent-accent text-white'
-              : s.n < step
-                ? 'border-agent-ink bg-agent-ink text-white'
-                : 'border-agent-line-light bg-white text-[#666]'
-          }`}
-        >
-          {s.n} {s.label}
-        </span>
-      ))}
+    <div className="mb-3 mt-9 flex items-start gap-3 first:mt-0">
+      <span className="mt-0.5 flex h-8 w-8 flex-none items-center justify-center rounded-full bg-agent-accent text-sm font-bold text-white shadow-sm">
+        {n}
+      </span>
+      <div>
+        <h3 className="text-lg font-bold text-agent-ink">{title}</h3>
+        {subtitle && <p className="text-xs text-agent-muted">{subtitle}</p>}
+      </div>
     </div>
   );
 }
@@ -1023,7 +1016,6 @@ export default function PackageBuilder() {
   const navigate = useNavigate();
   const { id: draftIdParam } = useParams();
 
-  const [step, setStep] = useState(1);
   const [form, setForm] = useState({ destination: '', dateFrom: '', dateTo: '', paxAdults: 2, paxChildren: 0 });
 
   const [hotels, setHotels] = useState([]);
@@ -1332,26 +1324,18 @@ export default function PackageBuilder() {
     }
   }
 
-  function goNext() {
-    const validationError = validateStep(step, { form, cityDays, itineraryItems, travelers, dayCount });
-    if (validationError) {
-      setError(validationError);
-      return;
-    }
-    setError('');
-    setStep((s) => Math.min(STEPS.length, s + 1));
-  }
-
-  function goBack() {
-    setError('');
-    setStep((s) => Math.max(1, s - 1));
-  }
-
+  // Everything renders on one page now (no more Back/Next step-gating), so
+  // Submit is the only place left to enforce the same three rule-sets the
+  // old wizard used to check one at a time on each "Next" click — run them
+  // in the same 1 -> 2 -> 3 order so the first error an agent sees is always
+  // the one closest to the top of the page.
   async function handleSubmit() {
-    const validationError = validateStep(3, { form, cityDays, itineraryItems, travelers });
-    if (validationError) {
-      setError(validationError);
-      return;
+    for (const s of [1, 2, 3]) {
+      const validationError = validateStep(s, { form, cityDays, itineraryItems, travelers, dayCount });
+      if (validationError) {
+        setError(validationError);
+        return;
+      }
     }
     setError('');
     setSubmitting(true);
@@ -1452,12 +1436,19 @@ export default function PackageBuilder() {
         <p className="text-sm text-agent-muted">Loading…</p>
       ) : (
         <>
+          {/* Single scrolling page — all three sections stacked and numbered,
+              instead of the old Back/Next wizard that mounted one at a time.
+              Trip Details and Itinerary are print:hidden (same as they were
+              implicitly, by not being mounted, whenever step 3 used to print)
+              — only the Review & Submit section's ItineraryDocument is meant
+              to appear in the PDF/print output. */}
           <div className="print:hidden">
-            <StepIndicator step={step} />
+            <SectionHeading n={1} title="Trip Details" subtitle="Destination, travel dates, and pax." />
+            <TripFieldsCard form={form} update={update} />
           </div>
 
-          {step === 1 && <TripFieldsCard form={form} update={update} />}
-          {step === 2 && (
+          <div className="print:hidden">
+            <SectionHeading n={2} title="Itinerary" subtitle="Cities, days, and what's booked on each day." />
             <ItineraryStep
               dayCount={dayCount}
               cityOptions={cityOptions}
@@ -1482,45 +1473,36 @@ export default function PackageBuilder() {
               setHotelForDayNumber={setHotelForDayNumber}
               setHotelOccupancyForDayNumber={setHotelOccupancyForDayNumber}
             />
-          )}
-          {step === 3 && (
-            <ReviewStep
-              form={form}
-              dayCount={dayCount}
-              hotels={hotelsForDocument}
-              days={fullItineraryDays}
-              selectedCounts={selectedCounts}
-              travelers={travelers}
-              updateTraveler={updateTraveler}
-              downloadingPdf={downloadingPdf}
-              onDownloadPdf={handleDownloadPdf}
-            />
-          )}
+          </div>
+
+          <div className="print:hidden">
+            <SectionHeading n={3} title="Review & Submit" subtitle="Check the itinerary and traveller details, then submit." />
+          </div>
+          <ReviewStep
+            form={form}
+            dayCount={dayCount}
+            hotels={hotelsForDocument}
+            days={fullItineraryDays}
+            selectedCounts={selectedCounts}
+            travelers={travelers}
+            updateTraveler={updateTraveler}
+            downloadingPdf={downloadingPdf}
+            onDownloadPdf={handleDownloadPdf}
+          />
 
           <div className="print:hidden">
             <ErrorText>{error}</ErrorText>
 
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
-              <Button onClick={goBack} disabled={step === 1}>
-                Back
+            <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+              {draftSavedAt && (
+                <span className="text-[11px] text-agent-muted">Draft saved {draftSavedAt.toLocaleTimeString()}</span>
+              )}
+              <Button disabled={savingDraft} onClick={saveDraft}>
+                {savingDraft ? 'Saving…' : 'Save Draft'}
               </Button>
-              <div className="flex flex-wrap items-center gap-2">
-                {draftSavedAt && (
-                  <span className="text-[11px] text-agent-muted">Draft saved {draftSavedAt.toLocaleTimeString()}</span>
-                )}
-                <Button disabled={savingDraft} onClick={saveDraft}>
-                  {savingDraft ? 'Saving…' : 'Save Draft'}
-                </Button>
-                {step < STEPS.length ? (
-                  <Button variant="accent" onClick={goNext}>
-                    Next
-                  </Button>
-                ) : (
-                  <Button variant="accent" onClick={handleSubmit} disabled={submitting}>
-                    {submitting ? 'Submitting…' : 'Submit Request'}
-                  </Button>
-                )}
-              </div>
+              <Button variant="accent" onClick={handleSubmit} disabled={submitting}>
+                {submitting ? 'Submitting…' : 'Submit Request'}
+              </Button>
             </div>
           </div>
         </>

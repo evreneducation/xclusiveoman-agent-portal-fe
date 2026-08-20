@@ -1,10 +1,11 @@
 import { motion } from 'framer-motion';
 
-// Split-screen auth shell (Sign In / Register / Forgot / Reset Password) —
-// a brand visual panel on the left, the page's own form content on the
-// right. Deliberately minimal: each page owns its logo/heading/copy and its
-// own inner max-width (a short form like Login and a long one like Register
-// both read naturally) rather than AuthShell dictating one fixed size.
+// Split-screen auth shell — a brand visual panel on the left, the page's own
+// form content on the right. Only Register.jsx uses this now (Sign In goes
+// through the shared LoginModal.jsx instead; there's no Forgot/Reset
+// Password page anymore — no password anywhere to forget or reset).
+// Deliberately minimal: the page owns its own logo/heading/copy/max-width
+// rather than AuthShell dictating one fixed size.
 export default function AuthShell({ children }) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#f3f1ec] px-4 py-8">
