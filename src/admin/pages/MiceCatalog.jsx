@@ -136,7 +136,15 @@ function MiceHotelForm({ onCreated }) {
         email: form.email,
         category: Number(form.category),
         description: form.description,
-        pricePerNight: Number(form.pricePerNight),
+        // Occupancy-tiered pricing (0061_hotel_occupancy_pricing.sql) —
+        // this form's own "Price (per night)" field/label are unchanged
+        // (MICE hotels don't need the single/double/triple treatment,
+        // HotelEditor.jsx's form gets that instead); submitted as
+        // doublePrice, the tier the old flat pricePerNight most directly
+        // corresponds to, so the server can still derive price_per_night
+        // for this hotel automatically (see catalog.routes.js's
+        // deriveHotelPricePerNight).
+        doublePrice: Number(form.pricePerNight),
         images,
         miceBallroomCapacity: form.miceBallroomCapacity ? Number(form.miceBallroomCapacity) : undefined,
         miceBreakoutRooms: form.miceBreakoutRooms ? Number(form.miceBreakoutRooms) : undefined,

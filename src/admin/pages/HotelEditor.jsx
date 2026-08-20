@@ -5,6 +5,15 @@ import { Button, Card, Checkbox, ErrorText, FieldLabel, Select, TextInput } from
 import { HotelImagesUpload } from '../components/HotelImagesUpload.jsx';
 import { STAR_OPTIONS, validateHotelForm } from '../lib/hotelForm.js';
 
+// Occupancy-tiered pricing (0061_hotel_occupancy_pricing.sql) — admin checks
+// which of these a hotel offers and prices each independently, replacing
+// the old single flat "Price per night" field.
+const OCCUPANCY_PRICE_FIELDS = [
+  { key: 'singlePrice', label: 'Single occupancy' },
+  { key: 'doublePrice', label: 'Double occupancy' },
+  { key: 'triplePrice', label: 'Triple occupancy' },
+];
+
 export default function HotelEditor() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -30,7 +39,11 @@ export default function HotelEditor() {
           email: hotel.email || '',
           category: hotel.category || '',
           description: hotel.description || '',
-          pricePerNight: hotel.price_per_night ?? '',
+          // null (not '') for an unset tier — distinguishes "not offered"
+          // (checkbox unchecked) from "offered, price not typed yet" ('').
+          singlePrice: hotel.single_price ?? null,
+          doublePrice: hotel.double_price ?? null,
+          triplePrice: hotel.triple_price ?? null,
           isMiceEnabled: !!hotel.is_mice_enabled,
           miceBallroomCapacity: hotel.mice_ballroom_capacity ?? '',
           miceBreakoutRooms: hotel.mice_breakout_rooms ?? '',
@@ -62,7 +75,13 @@ export default function HotelEditor() {
         email: form.email,
         category: Number(form.category),
         description: form.description,
-        pricePerNight: Number(form.pricePerNight),
+        // Occupancy-tiered pricing (0061_hotel_occupancy_pricing.sql) —
+        // only the occupancy types the admin actually checked are sent;
+        // an unchecked type's price input is cleared to '' by the checkbox
+        // toggle below, so this naturally omits it rather than sending 0.
+        singlePrice: form.singlePrice ? Number(form.singlePrice) : undefined,
+        doublePrice: form.doublePrice ? Number(form.doublePrice) : undefined,
+        triplePrice: form.triplePrice ? Number(form.triplePrice) : undefined,
         isMiceEnabled: !!form.isMiceEnabled,
         // Only sent when set — mirrors MiceCatalog.jsx's MiceHotelForm, which
         // creates these same fields on the same `hotels` row; previously this
@@ -135,17 +154,6 @@ export default function HotelEditor() {
                     onChange={(e) => update('email', e.target.value)}
                   />
                 </div>
-                <div>
-                  <FieldLabel>Price (INR per night) *</FieldLabel>
-                  <TextInput
-                    type="number"
-                    min="0.01"
-                    step="0.01"
-                    required
-                    value={form.pricePerNight ?? ''}
-                    onChange={(e) => update('pricePerNight', e.target.value)}
-                  />
-                </div>
                 <div className="sm:col-span-2">
                   <FieldLabel>Description *</FieldLabel>
                   <TextInput required value={form.description || ''} onChange={(e) => update('description', e.target.value)} />
@@ -154,6 +162,40 @@ export default function HotelEditor() {
                 <div className="sm:col-span-2">
                   <Checkbox checked={!!form.isMiceEnabled} onChange={(v) => update('isMiceEnabled', v)} label="MICE-enabled" />
                 </div>
+              </div>
+            </Card>
+
+            <Card label="Occupancy pricing" className="border-white">
+              <p className="mb-3 text-xs text-muted">
+                Check which room occupancy types this hotel offers, and price each one — a rate for 1 night at that
+                occupancy. At least one is required.
+              </p>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                {OCCUPANCY_PRICE_FIELDS.map(({ key, label }) => {
+                  // Unchecked = null/undefined ("not offered"); checked = ''
+                  // or a real value ("offered", price typed or not yet).
+                  const checked = form[key] != null;
+                  return (
+                    <div key={key} className="rounded-md border border-line-light p-3">
+                      <Checkbox
+                        checked={checked}
+                        onChange={(v) => update(key, v ? '' : null)}
+                        label={label}
+                      />
+                      {checked && (
+                        <TextInput
+                          className="mt-2"
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          placeholder="Price per night"
+                          value={form[key] ?? ''}
+                          onChange={(e) => update(key, e.target.value)}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </Card>
 

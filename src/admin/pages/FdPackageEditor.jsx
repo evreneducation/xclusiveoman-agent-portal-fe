@@ -324,35 +324,36 @@ function removeItineraryItemByKey(items, key) {
   return [...others, ...remainingInDay];
 }
 
-// A fresh hotel placement with no occupancy set yet defaults to 2 adults (1
-// room) — matches roomsForAdults' own "unset = 1 room" fallback used for
-// pricing, just made explicit here so the Adults field never opens blank.
-const DEFAULT_HOTEL_ADULTS = 2;
-
 // Hotel is single-select per day — choosing a new hotel for a day replaces
-// whatever hotel was already there instead of stacking up multiple. Carries
-// over the previous hotel's occupancy (if any) rather than resetting it, so
-// swapping hotels on a day doesn't silently drop an adults count the admin
-// already set.
+// whatever hotel was already there instead of stacking up multiple. No
+// occupancy/headcount is captured here anymore (0061_hotel_occupancy_pricing.sql,
+// Task 6) — real pax is only known once an agent actually books
+// (agent/pages/DepartureDetail.jsx's Traveler Details step), so admin just
+// picks the hotel and its per-pax rate is resolved automatically below.
 function setHotelForDay(items, dayNumber, hotelId) {
-  const existingHotel = items.find((it) => it.dayNumber === dayNumber && it.type === 'hotel');
   const withoutOldHotel = items.filter((it) => !(it.dayNumber === dayNumber && it.type === 'hotel'));
-  const withNewHotel = addItineraryItem(withoutOldHotel, { type: 'hotel', id: hotelId, dayNumber });
-  const lastIdx = withNewHotel.length - 1;
-  withNewHotel[lastIdx] = { ...withNewHotel[lastIdx], adults: existingHotel?.adults ?? DEFAULT_HOTEL_ADULTS };
-  return withNewHotel;
+  return addItineraryItem(withoutOldHotel, { type: 'hotel', id: hotelId, dayNumber });
 }
 
-function updateHotelAdults(items, dayNumber, adults) {
-  return items.map((it) => (it.dayNumber === dayNumber && it.type === 'hotel' ? { ...it, adults } : it));
-}
+// Mirrors the backend's resolveHotelPerPaxRate (fdPackages.model.js): a
+// hotel's per-pax nightly rate is its double-occupancy room price ÷ 2 (the
+// "2 adults share a room" baseline this app already assumed everywhere
+// before occupancy pricing existed), falling back to single (÷1) then
+// triple (÷3) if the hotel doesn't offer double. Returns null (not 0) when
+// none of the three are priced, so callers can tell "free" apart from "not
+// priced yet".
+const HOTEL_OCCUPANCY_PRIORITY = [
+  { field: 'double_price', capacity: 2 },
+  { field: 'single_price', capacity: 1 },
+  { field: 'triple_price', capacity: 3 },
+];
 
-// Mirrors the backend's roomsForAdults (fdPackages.model.js): a room holds
-// up to 2 adults at the hotel's single price_per_night rate; 3+ adults just
-// means more rooms, not a higher rate per room. Unset defaults to 1 room.
-function roomsForAdults(adults) {
-  const n = Number(adults) || 0;
-  return n > 0 ? Math.ceil(n / 2) : 1;
+function resolveHotelPerPaxRate(hotel) {
+  if (!hotel) return null;
+  for (const { field, capacity } of HOTEL_OCCUPANCY_PRIORITY) {
+    if (hotel[field] != null) return Number(hotel[field]) / capacity;
+  }
+  return null;
 }
 
 // Mirrors the backend's computeNetRatePerPax (fdPackages.model.js) so the
@@ -362,17 +363,19 @@ function roomsForAdults(adults) {
 // fetches; catalog rows come straight off the DB (snake_case), same as the
 // backend reads them.
 const ITINERARY_CATALOG_KEY = { hotel: 'hotels', tour: 'tours', transfer: 'transfers', activity: 'activities' };
-const ITINERARY_PRICE_FIELD = { hotel: 'price_per_night', tour: 'price', transfer: 'price', activity: 'price_per_pax' };
+const ITINERARY_PRICE_FIELD = { tour: 'price', transfer: 'price', activity: 'price_per_pax' };
 
 function computeItineraryNetRate(items, catalogs) {
   return items.reduce((total, it) => {
     const list = catalogs[ITINERARY_CATALOG_KEY[it.type]] || [];
-    const field = ITINERARY_PRICE_FIELD[it.type];
     const ref = list.find((c) => c.id === it.id);
     if (!ref) return total;
-    const price = Number(ref[field]) || 0;
-    const multiplier = it.type === 'hotel' ? roomsForAdults(it.adults) : 1;
-    return total + price * multiplier;
+    if (it.type === 'hotel') {
+      const perPax = resolveHotelPerPaxRate(ref);
+      return perPax != null ? total + perPax : total;
+    }
+    const field = ITINERARY_PRICE_FIELD[it.type];
+    return total + (Number(ref[field]) || 0);
   }, 0);
 }
 
@@ -430,17 +433,16 @@ function PlacedItemChip({ item, meta, onNoteChange, onRemove }) {
 
 // A day's hotel section — single-select, gated behind a star-category pick
 // first. Choosing a hotel replaces whatever was already selected for this
-// day. Occupancy (adults sharing the room) lives here too, right under the
-// selected hotel — price_per_night is a single-room rate (up to 2 adults),
-// so the line total shown is price_per_night × rooms, not the flat nightly
-// rate, once occupancy pushes it past 1 room (see roomsForAdults).
-function DayHotelSection({ hotels, currentHotelId, currentAdults, onSelect, onAdultsChange }) {
+// day. No occupancy/headcount input anymore (Task 6) — admin just picks the
+// hotel; its per-pax rate is resolved from whichever occupancy price it has
+// (resolveHotelPerPaxRate, double -> single -> triple priority), since real
+// pax is only known once an agent books.
+function DayHotelSection({ hotels, currentHotelId, onSelect }) {
   const [open, setOpen] = useState(false);
   const [starCategory, setStarCategory] = useState('');
   const filtered = starCategory ? hotels.filter((h) => h.category === starCategory) : hotels;
   const currentHotel = hotels.find((h) => h.id === currentHotelId) || null;
-  const rooms = roomsForAdults(currentAdults);
-  const hotelTotal = currentHotel?.price_per_night != null ? Number(currentHotel.price_per_night) * rooms : null;
+  const perPaxRate = resolveHotelPerPaxRate(currentHotel);
 
   return (
     <div>
@@ -456,24 +458,11 @@ function DayHotelSection({ hotels, currentHotelId, currentAdults, onSelect, onAd
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {hotelTotal != null && <span className="font-semibold text-ink">{formatCurrency(hotelTotal)}</span>}
+              {perPaxRate != null && <span className="font-semibold text-ink">{formatCurrency(perPaxRate)}/pax/night</span>}
               <button type="button" onClick={() => onSelect('')} title="Remove" className="flex-none text-muted hover:text-[#a5162d]">
                 🗑
               </button>
             </div>
-          </div>
-          <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-line-light pt-2">
-            <span className="text-[11px] font-semibold uppercase text-muted">Adults</span>
-            <TextInput
-              type="number"
-              min="1"
-              className="w-20 px-2 py-1.5 text-xs"
-              value={currentAdults ?? ''}
-              onChange={(e) => onAdultsChange(e.target.value === '' ? null : Number(e.target.value))}
-            />
-            <span className="text-[11px] text-muted">
-              {rooms} room{rooms === 1 ? '' : 's'} at {formatCurrency(currentHotel.price_per_night)}/room/night
-            </span>
           </div>
         </div>
       ) : (
@@ -506,7 +495,9 @@ function DayHotelSection({ hotels, currentHotelId, currentAdults, onSelect, onAd
                     <div className="mt-1.5 font-semibold text-ink">{h.name}</div>
                     <div className="flex items-center justify-between">
                       <HotelStars category={h.category} />
-                      {h.price_per_night != null && <span className="font-semibold text-ink">{formatCurrency(h.price_per_night)}/night</span>}
+                      {resolveHotelPerPaxRate(h) != null && (
+                        <span className="font-semibold text-ink">{formatCurrency(resolveHotelPerPaxRate(h))}/pax/night</span>
+                      )}
                     </div>
                     <Button
                       variant={selected ? 'accent' : 'default'}
@@ -531,17 +522,17 @@ function DayHotelSection({ hotels, currentHotelId, currentAdults, onSelect, onAd
 
 // Tours and Transfers are marked required (mirrors the agent Custom FIT
 // Builder's per-day requirement) — findItineraryPublishError below blocks
-// publishing until every day has at least one of each. Extras stay optional.
-// `required` only decorates the field label — kept separate from `label`
-// itself so the lowercased "No {label} in the catalog yet." empty-state
-// message below doesn't pick up a stray asterisk.
+// publishing until every day has at least one of each. Activities stay
+// optional. `required` only decorates the field label — kept separate from
+// `label` itself so the lowercased "No {label} in the catalog yet."
+// empty-state message below doesn't pick up a stray asterisk.
 const DAY_SECTION_META = {
   tour: { label: 'Tours', addLabel: '+ Add tour', required: true },
   transfer: { label: 'Transfers', addLabel: '+ Add transfer', required: true },
-  activity: { label: 'Extras', addLabel: '+ Add extra' },
+  activity: { label: 'Activities', addLabel: '+ Add activity' },
 };
 
-// A day's tours/transfers/extras section — multi-add. Reusable across all
+// A day's tours/transfers/activities section — multi-add. Reusable across all
 // three types since they share the same "toggle catalog card in/out of this
 // day" shape.
 function DayCatalogSection({ type, catalog, placedItems, onAdd, onRemove, onNoteChange }) {
@@ -619,7 +610,7 @@ function DayCatalogSection({ type, catalog, placedItems, onAdd, onRemove, onNote
 // each section here adds directly from the catalog instead of dragging from
 // a pre-selected pool — an FD package has no separate "agent selection" step
 // the way a Custom FIT quote does.
-function DayPlanCard({ dayNumber, items, catalogs, notes, onNotesChange, addItem, removeItem, updateNote, setHotel, setHotelAdults, isLast }) {
+function DayPlanCard({ dayNumber, items, catalogs, notes, onNotesChange, addItem, removeItem, updateNote, setHotel, isLast }) {
   const hotelItem = items.find((it) => it.type === 'hotel') || null;
   const tourItems = items.filter((it) => it.type === 'tour');
   const transferItems = items.filter((it) => it.type === 'transfer');
@@ -636,9 +627,7 @@ function DayPlanCard({ dayNumber, items, catalogs, notes, onNotesChange, addItem
         <DayHotelSection
           hotels={catalogs.hotels}
           currentHotelId={hotelItem?.id || ''}
-          currentAdults={hotelItem?.adults}
           onSelect={(hotelId) => setHotel(dayNumber, hotelId)}
-          onAdultsChange={(adults) => setHotelAdults(dayNumber, adults)}
         />
         <DayCatalogSection
           type="tour"
@@ -759,10 +748,6 @@ function ItineraryManager({ fdPackageId, itinerary, duration, onChange, onComput
     );
   }
 
-  function setHotelAdultsForDayNumber(dayNumber, adults) {
-    setItineraryItems((items) => updateHotelAdults(items, dayNumber, adults));
-  }
-
   async function save() {
     setSaving(true);
     try {
@@ -801,7 +786,6 @@ function ItineraryManager({ fdPackageId, itinerary, duration, onChange, onComput
               removeItem={removeItemFromDay}
               updateNote={updateItemNoteByKey}
               setHotel={setHotelForDayNumber}
-              setHotelAdults={setHotelAdultsForDayNumber}
               isLast={dayNumber === dayCount}
             />
           ))}
@@ -1212,7 +1196,6 @@ export default function FdPackageEditor() {
         <h2 className="text-3xl font-bold">{isNew ? 'Add FD Package' : `Edit — ${form.title || ''}`}</h2>
 
         <BasicsForm form={form} update={update} packageId={packageId} />
-        <MerchandisingForm form={form} update={update} addonsEnabled={addonsEnabled} onToggleAddons={setAddonsEnabled} />
 
         {packageId && (
           <>
@@ -1224,6 +1207,9 @@ export default function FdPackageEditor() {
               onChange={setItinerary}
               onComputedRateChange={setItineraryRatePerPax}
             />
+            {/* Moved below the day-by-day itinerary builder (Task 3) — was
+                previously right after Basics. */}
+            <MerchandisingForm form={form} update={update} addonsEnabled={addonsEnabled} onToggleAddons={setAddonsEnabled} />
             {addonsEnabled && <AddonsManager fdPackageId={packageId} addons={addons} onChange={setAddons} />}
           </>
         )}
