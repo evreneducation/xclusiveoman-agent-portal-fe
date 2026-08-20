@@ -171,6 +171,12 @@ export function LoginModal({
   const [email, setEmail] = useState('');
   const [otp, setOtp] = useState('');
   const [error, setError] = useState('');
+  // The backend's own request-otp success message (e.g. "A sign-in code has
+  // been sent to you@example.com.") — shown verbatim rather than a
+  // hardcoded client-side string, since request-otp now distinguishes
+  // registered/active from not-registered/inactive (see auth.controller.js)
+  // and this is that same response surfaced to the user.
+  const [infoMessage, setInfoMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [resending, setResending] = useState(false);
   const [otpExpiresAt, setOtpExpiresAt] = useState(null);
@@ -188,14 +194,16 @@ export function LoginModal({
   }, [step, otpExpiresAt]);
 
   async function requestOtp() {
-    await loginApi.post('/auth/request-otp', { email }, { skipAuth: true });
+    const { message } = await loginApi.post('/auth/request-otp', { email }, { skipAuth: true });
     setOtp('');
+    setInfoMessage(message || '');
     setOtpExpiresAt(Date.now() + OTP_VALID_SECONDS * 1000);
   }
 
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
+    setInfoMessage('');
     setSubmitting(true);
     try {
       if (step === 'email') {
@@ -217,6 +225,11 @@ export function LoginModal({
         return;
       }
     } catch (err) {
+      // The backend's own message — request-otp now distinguishes
+      // not-registered/inactive/sent (auth.controller.js#requestLoginOtp),
+      // verify-otp its own invalid/expired/too-many-attempts cases; either
+      // way this is that exact response surfaced verbatim, not a generic
+      // client-side string.
       setError(err.message || 'Something went wrong');
     } finally {
       setSubmitting(false);
@@ -225,6 +238,7 @@ export function LoginModal({
 
   async function handleResend() {
     setError('');
+    setInfoMessage('');
     setResending(true);
     try {
       await requestOtp();
@@ -239,6 +253,7 @@ export function LoginModal({
     setStep('email');
     setOtp('');
     setError('');
+    setInfoMessage('');
     setOtpExpiresAt(null);
   }
 
@@ -371,7 +386,9 @@ export function LoginModal({
                       {resending ? 'Sending…' : 'Resend code'}
                     </button>
                   </div>
-                  <p className="mt-2 text-xs text-slate-500">Sent to {email}. It expires 5 minutes after each send.</p>
+                  <p className="mt-2 text-xs text-slate-500">
+                    {infoMessage || `Sent to ${email}.`} It expires 5 minutes after each send.
+                  </p>
                 </div>
               )}
 
