@@ -132,6 +132,18 @@ function isStaffUser(user) {
   return !user.agencyId;
 }
 
+// Lead Managers (sales_manager) and Relationship Managers
+// (relationship_manager) are staff too (agencyId null) but sign in at their
+// own /team route, never the full Admin Console — same role list
+// team/context/AuthContext.jsx#TEAM_ROLES checks server-side of this
+// decision. Checked before the generic isStaffUser() branch below, so a
+// team account is never misrouted to /admin.
+const TEAM_ROLES = ['sales_manager', 'relationship_manager'];
+
+function isTeamUser(user) {
+  return TEAM_ROLES.includes(user.role);
+}
+
 // The one, universal copy — not per-portal props, so no caller can
 // accidentally reintroduce a difference between where this is mounted.
 const TAGLINE = 'Your trade gateway to exclusive Oman experiences';
@@ -155,10 +167,11 @@ const HERO_FEATURES = [
 ];
 
 /**
- * Props — deliberately just the two post-login destinations, nothing
- * visual: adminDestination / agentDestination, where each role lands after
- * a successful login (each call site supplies its own; this component
- * makes the role *decision*, never owns the destination paths themselves).
+ * Props — deliberately just the three post-login destinations, nothing
+ * visual: adminDestination / agentDestination / teamDestination, where each
+ * role lands after a successful login (each call site supplies its own;
+ * this component makes the role *decision*, never owns the destination
+ * paths themselves).
  * logoSrc defaults to the one shared brand asset every entry point already
  * references directly (public/Xclusive_Oman_Logo_2.png).
  */
@@ -166,6 +179,7 @@ export function LoginModal({
   logoSrc = '/Xclusive_Oman_Logo_2.png',
   adminDestination = '/admin/dashboard',
   agentDestination = '/agent/dashboard',
+  teamDestination = '/team/dashboard',
 }) {
   const [step, setStep] = useState('email'); // 'email' | 'otp'
   const [email, setEmail] = useState('');
@@ -218,7 +232,7 @@ export function LoginModal({
         setStep('otp');
       } else {
         const { user } = await loginApi.post('/auth/verify-otp', { email, otp }, { skipAuth: true });
-        const destination = isStaffUser(user) ? adminDestination : agentDestination;
+        const destination = isTeamUser(user) ? teamDestination : isStaffUser(user) ? adminDestination : agentDestination;
         // Hard navigation — see this file's own top comment for why a plain
         // React Router navigate() isn't safe here.
         window.location.replace(destination);

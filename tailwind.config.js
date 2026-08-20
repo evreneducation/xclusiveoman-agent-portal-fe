@@ -43,6 +43,24 @@ export default {
         'agent-accent-dark': '#C98A24',
         'agent-accent-soft': '#FAF0DA',
         'agent-muted': '#5F7D79',
+
+        // Team Portal (/team) — Lead Managers (sales_manager) and
+        // Relationship Managers (relationship_manager) sign in here, never
+        // into the full Admin Console or Agent Portal. A third, deliberately
+        // distinct identity from both above — slate charcoal + a rose/crimson
+        // accent ("executive slate & rose"), so someone glancing at either
+        // sidebar can never mistake this for Admin's navy/indigo/purple or
+        // Agent's teal/gold. Used only by src/team/**.
+        'team-ink': '#1E2532',
+        'team-ink-dark': '#12161F',
+        'team-line': '#A8AEBB',
+        'team-line-light': '#E4E7EC',
+        'team-panel': '#F7F5F6',
+        'team-bg': '#FBFAFA',
+        'team-accent': '#BE123C',
+        'team-accent-dark': '#881337',
+        'team-accent-soft': '#FCE4E9',
+        'team-muted': '#6B7280',
       },
       fontFamily: {
         sans: ['Helvetica', 'Arial', 'sans-serif'],

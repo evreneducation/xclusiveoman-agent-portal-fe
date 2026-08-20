@@ -1,7 +1,29 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../api/client.js';
-import { Badge, Button, Card, ErrorText, FieldLabel, TextInput } from '../components/ui.jsx';
+import { Badge, Button, Card, Checkbox, ErrorText, FieldLabel, TextInput } from '../components/ui.jsx';
+
+// Access Features — the checkboxes that decide both what an LM/RM's /team
+// sidebar shows (team/components/TeamLayout.jsx) and, for real, which
+// admin.* API routes they can call (backend middleware/auth.js#requireFeature).
+// Keys/labels/defaults mirror the backend's own config/accessFeatures.js by
+// hand (no shared package between the two repos) — keep the two in sync if
+// either ever changes.
+const RM_FEATURES = [
+  { key: 'approvedAgents', label: 'Approved Agents' },
+  { key: 'quotesPricing', label: 'Quotes & Pricing' },
+  { key: 'supportTickets', label: 'Support Tickets' },
+  { key: 'bookingsDocs', label: 'Bookings & Docs' },
+];
+const RM_DEFAULT_PERMISSIONS = { approvedAgents: true, quotesPricing: false, supportTickets: false, bookingsDocs: false };
+
+const LM_FEATURES = [
+  { key: 'catalog', label: 'Catalog' },
+  { key: 'quotesPricing', label: 'Quotes & Pricing' },
+  { key: 'bookingsDocs', label: 'Bookings & Docs' },
+  { key: 'fdOperations', label: 'FD Operation' },
+];
+const LM_DEFAULT_PERMISSIONS = { catalog: true, quotesPricing: true, bookingsDocs: false, fdOperations: false };
 
 // Relationship Managers and Sales Managers used to be two separate pages
 // (RelationshipManagers.jsx / SalesManagers.jsx) with near-identical
@@ -19,6 +41,8 @@ const EMPLOYEE_KINDS = {
     endpoint: '/admin/relationship-managers',
     listResponseKey: 'relationshipManagers',
     showAssignedAgencies: true,
+    features: RM_FEATURES,
+    defaultPermissions: RM_DEFAULT_PERMISSIONS,
   },
   salesManager: {
     tabLabel: 'Lead Managers',
@@ -28,8 +52,30 @@ const EMPLOYEE_KINDS = {
     endpoint: '/admin/sales-managers',
     listResponseKey: 'salesManagers',
     showAssignedAgencies: false,
+    features: LM_FEATURES,
+    defaultPermissions: LM_DEFAULT_PERMISSIONS,
   },
 };
+
+// Shared by the create form and the manage panel — a titled block of
+// Access Feature checkboxes for whichever `kind` is active.
+function AccessFeaturesFields({ kind, permissions, onChange }) {
+  return (
+    <div>
+      <FieldLabel>Access Features</FieldLabel>
+      <div className="rounded-md border border-line-light bg-panel px-3 py-2">
+        {kind.features.map(({ key, label }) => (
+          <Checkbox
+            key={key}
+            checked={!!permissions[key]}
+            onChange={(checked) => onChange({ ...permissions, [key]: checked })}
+            label={label}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
 
 const TABS = [
   { key: 'rm', label: EMPLOYEE_KINDS.rm.tabLabel },
@@ -44,6 +90,7 @@ function CreateEmployeeForm({ kind, onCreated, onCancel }) {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [whatsappNumber, setWhatsappNumber] = useState('');
+  const [permissions, setPermissions] = useState(kind.defaultPermissions);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -57,12 +104,14 @@ function CreateEmployeeForm({ kind, onCreated, onCancel }) {
         email,
         phone: phone || undefined,
         whatsappNumber: whatsappNumber || undefined,
+        permissions,
       });
       onCreated(user);
       setFullName('');
       setEmail('');
       setPhone('');
       setWhatsappNumber('');
+      setPermissions(kind.defaultPermissions);
     } catch (err) {
       setError(err.message || `Unable to create ${kind.singular.toLowerCase()}`);
     } finally {
@@ -89,6 +138,7 @@ function CreateEmployeeForm({ kind, onCreated, onCancel }) {
           <FieldLabel>WhatsApp number</FieldLabel>
           <TextInput placeholder="+968…" value={whatsappNumber} onChange={(e) => setWhatsappNumber(e.target.value)} />
         </div>
+        <AccessFeaturesFields kind={kind} permissions={permissions} onChange={setPermissions} />
         <div>
           <ErrorText>{error}</ErrorText>
           <div className="mt-2 flex gap-2">
@@ -109,6 +159,7 @@ function ManageEmployeePanel({ kind, employee, onUpdated }) {
   const [fullName, setFullName] = useState(employee.fullName);
   const [phone, setPhone] = useState(employee.phone || '');
   const [whatsappNumber, setWhatsappNumber] = useState(employee.whatsappNumber || '');
+  const [permissions, setPermissions] = useState({ ...kind.defaultPermissions, ...employee.permissions });
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState('');
 
@@ -116,6 +167,7 @@ function ManageEmployeePanel({ kind, employee, onUpdated }) {
     setFullName(employee.fullName);
     setPhone(employee.phone || '');
     setWhatsappNumber(employee.whatsappNumber || '');
+    setPermissions({ ...kind.defaultPermissions, ...employee.permissions });
     setError('');
   }, [employee.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -170,6 +222,21 @@ function ManageEmployeePanel({ kind, employee, onUpdated }) {
             )}
           </div>
         </div>
+      </Card>
+
+      <Card label="Access Features" className="border-white">
+        <p className="mb-3 text-xs text-muted">
+          Decides what shows in this {kind.singular.toLowerCase()}'s /team sidebar.
+        </p>
+        <AccessFeaturesFields kind={kind} permissions={permissions} onChange={setPermissions} />
+        <Button
+          variant="accent"
+          className="mt-3"
+          disabled={!!submitting}
+          onClick={() => save({ permissions }, 'permissions')}
+        >
+          {submitting === 'permissions' ? 'Saving…' : 'Save Access Features'}
+        </Button>
       </Card>
 
       {kind.showAssignedAgencies && (
