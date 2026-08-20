@@ -412,7 +412,7 @@ export default function OperationsDetail() {
 
   if (loading && !data) {
     return (
-      <div className="min-h-screen bg-[#eef1f7] p-10">
+      <div className="min-h-screen bg-[#F4F7FF] p-10">
         <p className="text-sm text-muted">Loading…</p>
       </div>
     );
@@ -420,7 +420,7 @@ export default function OperationsDetail() {
 
   if (error && !data) {
     return (
-      <div className="min-h-screen bg-[#eef1f7] p-10">
+      <div className="min-h-screen bg-[#F4F7FF] p-10">
         <Link to="/admin/operations" className="text-sm text-accent hover:underline">
           ← Back to FD Operations Tracker
         </Link>
@@ -432,7 +432,7 @@ export default function OperationsDetail() {
   const { departure, manifest, supplierLogs, driverDispatches, tourUpdates, activity } = data;
 
   return (
-    <div className="min-h-screen bg-[#eef1f7]">
+    <div className="min-h-screen bg-[#F4F7FF]">
       <div className="mx-auto max-w-6xl p-6 lg:p-10">
         <Link to="/admin/operations" className="text-sm text-accent hover:underline">
           ← Back to FD Operations Tracker

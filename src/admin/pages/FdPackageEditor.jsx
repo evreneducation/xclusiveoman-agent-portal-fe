@@ -77,6 +77,13 @@ function CarouselImagesUpload({ packageId, images, onChange }) {
   );
 }
 
+// Task 2 (spacing) — short text fields (Title/Duration/Suitable age/Theme/
+// Short description) are grouped into their own compact grid first, and the
+// two image dropzones (naturally tall) are grouped into a second grid below
+// them — previously Theme sat next to Hero Image in the same grid row,
+// which forced Theme's cell to stretch to the dropzone's full height and
+// left a big empty gap under the theme tags. No field was removed, only
+// reordered/regrouped.
 function BasicsForm({ form, update, packageId }) {
   return (
     <Card label="Basics" className="border-white">
@@ -96,6 +103,10 @@ function BasicsForm({ form, update, packageId }) {
           />
         </div>
         <div>
+          <FieldLabel>Suitable age (min)</FieldLabel>
+          <TextInput type="number" value={form.suitableAgeMin || ''} onChange={(e) => update('suitableAgeMin', Number(e.target.value))} />
+        </div>
+        <div>
           <FieldLabel>Theme</FieldLabel>
           <div className="flex flex-wrap gap-1.5">
             {FD_THEMES.map((t) => (
@@ -105,6 +116,12 @@ function BasicsForm({ form, update, packageId }) {
             ))}
           </div>
         </div>
+        <div className="sm:col-span-2">
+          <FieldLabel>Short description</FieldLabel>
+          <TextInput value={form.shortDescription || ''} onChange={(e) => update('shortDescription', e.target.value)} />
+        </div>
+      </div>
+      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <HeroImageUpload packageId={packageId} value={form.heroImageUrl} onUploaded={(url) => update('heroImageUrl', url)} />
         {/* images (carousel) now lives in `form` like every other field —
             previously it had its own parallel `images` state that never
@@ -112,14 +129,6 @@ function BasicsForm({ form, update, packageId }) {
             a stale `form.images` in the PATCH body and silently overwrote
             the images the upload endpoint had already saved to the DB. */}
         <CarouselImagesUpload packageId={packageId} images={form.images || []} onChange={(imgs) => update('images', imgs)} />
-        <div className="sm:col-span-2">
-          <FieldLabel>Short description</FieldLabel>
-          <TextInput value={form.shortDescription || ''} onChange={(e) => update('shortDescription', e.target.value)} />
-        </div>
-        <div>
-          <FieldLabel>Suitable age (min)</FieldLabel>
-          <TextInput type="number" value={form.suitableAgeMin || ''} onChange={(e) => update('suitableAgeMin', Number(e.target.value))} />
-        </div>
       </div>
     </Card>
   );
@@ -324,35 +333,36 @@ function removeItineraryItemByKey(items, key) {
   return [...others, ...remainingInDay];
 }
 
-// A fresh hotel placement with no occupancy set yet defaults to 2 adults (1
-// room) — matches roomsForAdults' own "unset = 1 room" fallback used for
-// pricing, just made explicit here so the Adults field never opens blank.
-const DEFAULT_HOTEL_ADULTS = 2;
-
 // Hotel is single-select per day — choosing a new hotel for a day replaces
-// whatever hotel was already there instead of stacking up multiple. Carries
-// over the previous hotel's occupancy (if any) rather than resetting it, so
-// swapping hotels on a day doesn't silently drop an adults count the admin
-// already set.
+// whatever hotel was already there instead of stacking up multiple. No
+// occupancy/headcount is captured here anymore (0061_hotel_occupancy_pricing.sql,
+// Task 6) — real pax is only known once an agent actually books
+// (agent/pages/DepartureDetail.jsx's Traveler Details step), so admin just
+// picks the hotel and its per-pax rate is resolved automatically below.
 function setHotelForDay(items, dayNumber, hotelId) {
-  const existingHotel = items.find((it) => it.dayNumber === dayNumber && it.type === 'hotel');
   const withoutOldHotel = items.filter((it) => !(it.dayNumber === dayNumber && it.type === 'hotel'));
-  const withNewHotel = addItineraryItem(withoutOldHotel, { type: 'hotel', id: hotelId, dayNumber });
-  const lastIdx = withNewHotel.length - 1;
-  withNewHotel[lastIdx] = { ...withNewHotel[lastIdx], adults: existingHotel?.adults ?? DEFAULT_HOTEL_ADULTS };
-  return withNewHotel;
+  return addItineraryItem(withoutOldHotel, { type: 'hotel', id: hotelId, dayNumber });
 }
 
-function updateHotelAdults(items, dayNumber, adults) {
-  return items.map((it) => (it.dayNumber === dayNumber && it.type === 'hotel' ? { ...it, adults } : it));
-}
+// Mirrors the backend's resolveHotelPerPaxRate (fdPackages.model.js): a
+// hotel's per-pax nightly rate is its double-occupancy room price ÷ 2 (the
+// "2 adults share a room" baseline this app already assumed everywhere
+// before occupancy pricing existed), falling back to single (÷1) then
+// triple (÷3) if the hotel doesn't offer double. Returns null (not 0) when
+// none of the three are priced, so callers can tell "free" apart from "not
+// priced yet".
+const HOTEL_OCCUPANCY_PRIORITY = [
+  { field: 'double_price', capacity: 2 },
+  { field: 'single_price', capacity: 1 },
+  { field: 'triple_price', capacity: 3 },
+];
 
-// Mirrors the backend's roomsForAdults (fdPackages.model.js): a room holds
-// up to 2 adults at the hotel's single price_per_night rate; 3+ adults just
-// means more rooms, not a higher rate per room. Unset defaults to 1 room.
-function roomsForAdults(adults) {
-  const n = Number(adults) || 0;
-  return n > 0 ? Math.ceil(n / 2) : 1;
+function resolveHotelPerPaxRate(hotel) {
+  if (!hotel) return null;
+  for (const { field, capacity } of HOTEL_OCCUPANCY_PRIORITY) {
+    if (hotel[field] != null) return Number(hotel[field]) / capacity;
+  }
+  return null;
 }
 
 // Mirrors the backend's computeNetRatePerPax (fdPackages.model.js) so the
@@ -362,17 +372,19 @@ function roomsForAdults(adults) {
 // fetches; catalog rows come straight off the DB (snake_case), same as the
 // backend reads them.
 const ITINERARY_CATALOG_KEY = { hotel: 'hotels', tour: 'tours', transfer: 'transfers', activity: 'activities' };
-const ITINERARY_PRICE_FIELD = { hotel: 'price_per_night', tour: 'price', transfer: 'price', activity: 'price_per_pax' };
+const ITINERARY_PRICE_FIELD = { tour: 'price', transfer: 'price', activity: 'price_per_pax' };
 
 function computeItineraryNetRate(items, catalogs) {
   return items.reduce((total, it) => {
     const list = catalogs[ITINERARY_CATALOG_KEY[it.type]] || [];
-    const field = ITINERARY_PRICE_FIELD[it.type];
     const ref = list.find((c) => c.id === it.id);
     if (!ref) return total;
-    const price = Number(ref[field]) || 0;
-    const multiplier = it.type === 'hotel' ? roomsForAdults(it.adults) : 1;
-    return total + price * multiplier;
+    if (it.type === 'hotel') {
+      const perPax = resolveHotelPerPaxRate(ref);
+      return perPax != null ? total + perPax : total;
+    }
+    const field = ITINERARY_PRICE_FIELD[it.type];
+    return total + (Number(ref[field]) || 0);
   }, 0);
 }
 
@@ -430,17 +442,16 @@ function PlacedItemChip({ item, meta, onNoteChange, onRemove }) {
 
 // A day's hotel section — single-select, gated behind a star-category pick
 // first. Choosing a hotel replaces whatever was already selected for this
-// day. Occupancy (adults sharing the room) lives here too, right under the
-// selected hotel — price_per_night is a single-room rate (up to 2 adults),
-// so the line total shown is price_per_night × rooms, not the flat nightly
-// rate, once occupancy pushes it past 1 room (see roomsForAdults).
-function DayHotelSection({ hotels, currentHotelId, currentAdults, onSelect, onAdultsChange }) {
+// day. No occupancy/headcount input anymore (Task 6) — admin just picks the
+// hotel; its per-pax rate is resolved from whichever occupancy price it has
+// (resolveHotelPerPaxRate, double -> single -> triple priority), since real
+// pax is only known once an agent books.
+function DayHotelSection({ hotels, currentHotelId, onSelect }) {
   const [open, setOpen] = useState(false);
   const [starCategory, setStarCategory] = useState('');
   const filtered = starCategory ? hotels.filter((h) => h.category === starCategory) : hotels;
   const currentHotel = hotels.find((h) => h.id === currentHotelId) || null;
-  const rooms = roomsForAdults(currentAdults);
-  const hotelTotal = currentHotel?.price_per_night != null ? Number(currentHotel.price_per_night) * rooms : null;
+  const perPaxRate = resolveHotelPerPaxRate(currentHotel);
 
   return (
     <div>
@@ -456,24 +467,11 @@ function DayHotelSection({ hotels, currentHotelId, currentAdults, onSelect, onAd
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {hotelTotal != null && <span className="font-semibold text-ink">{formatCurrency(hotelTotal)}</span>}
+              {perPaxRate != null && <span className="font-semibold text-ink">{formatCurrency(perPaxRate)}/pax/night</span>}
               <button type="button" onClick={() => onSelect('')} title="Remove" className="flex-none text-muted hover:text-[#a5162d]">
                 🗑
               </button>
             </div>
-          </div>
-          <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-line-light pt-2">
-            <span className="text-[11px] font-semibold uppercase text-muted">Adults</span>
-            <TextInput
-              type="number"
-              min="1"
-              className="w-20 px-2 py-1.5 text-xs"
-              value={currentAdults ?? ''}
-              onChange={(e) => onAdultsChange(e.target.value === '' ? null : Number(e.target.value))}
-            />
-            <span className="text-[11px] text-muted">
-              {rooms} room{rooms === 1 ? '' : 's'} at {formatCurrency(currentHotel.price_per_night)}/room/night
-            </span>
           </div>
         </div>
       ) : (
@@ -506,7 +504,9 @@ function DayHotelSection({ hotels, currentHotelId, currentAdults, onSelect, onAd
                     <div className="mt-1.5 font-semibold text-ink">{h.name}</div>
                     <div className="flex items-center justify-between">
                       <HotelStars category={h.category} />
-                      {h.price_per_night != null && <span className="font-semibold text-ink">{formatCurrency(h.price_per_night)}/night</span>}
+                      {resolveHotelPerPaxRate(h) != null && (
+                        <span className="font-semibold text-ink">{formatCurrency(resolveHotelPerPaxRate(h))}/pax/night</span>
+                      )}
                     </div>
                     <Button
                       variant={selected ? 'accent' : 'default'}
@@ -531,17 +531,17 @@ function DayHotelSection({ hotels, currentHotelId, currentAdults, onSelect, onAd
 
 // Tours and Transfers are marked required (mirrors the agent Custom FIT
 // Builder's per-day requirement) — findItineraryPublishError below blocks
-// publishing until every day has at least one of each. Extras stay optional.
-// `required` only decorates the field label — kept separate from `label`
-// itself so the lowercased "No {label} in the catalog yet." empty-state
-// message below doesn't pick up a stray asterisk.
+// publishing until every day has at least one of each. Activities stay
+// optional. `required` only decorates the field label — kept separate from
+// `label` itself so the lowercased "No {label} in the catalog yet."
+// empty-state message below doesn't pick up a stray asterisk.
 const DAY_SECTION_META = {
   tour: { label: 'Tours', addLabel: '+ Add tour', required: true },
   transfer: { label: 'Transfers', addLabel: '+ Add transfer', required: true },
-  activity: { label: 'Extras', addLabel: '+ Add extra' },
+  activity: { label: 'Activities', addLabel: '+ Add activity' },
 };
 
-// A day's tours/transfers/extras section — multi-add. Reusable across all
+// A day's tours/transfers/activities section — multi-add. Reusable across all
 // three types since they share the same "toggle catalog card in/out of this
 // day" shape.
 function DayCatalogSection({ type, catalog, placedItems, onAdd, onRemove, onNoteChange }) {
@@ -614,60 +614,61 @@ function DayCatalogSection({ type, catalog, placedItems, onAdd, onRemove, onNote
   );
 }
 
-// One numbered timeline node — the same layout as QuoteInboxDetail.jsx's
-// ItineraryDayCard (circle badge + connecting line + "Day N" heading), except
-// each section here adds directly from the catalog instead of dragging from
-// a pre-selected pool — an FD package has no separate "agent selection" step
-// the way a Custom FIT quote does.
-function DayPlanCard({ dayNumber, items, catalogs, notes, onNotesChange, addItem, removeItem, updateNote, setHotel, setHotelAdults, isLast }) {
+// A single day's content — each section adds directly from the catalog
+// instead of dragging from a pre-selected pool, since an FD package has no
+// separate "agent selection" step the way a Custom FIT quote does. Task 6 —
+// previously all days rendered stacked in one numbered-node timeline; now
+// ItineraryManager below shows one day at a time behind a tab bar, so this
+// no longer carries its own circle-badge/connector chrome — the tab itself
+// is what identifies which day this is.
+function DayPlanCard({ dayNumber, items, catalogs, notes, onNotesChange, addItem, removeItem, updateNote, setHotel }) {
   const hotelItem = items.find((it) => it.type === 'hotel') || null;
   const tourItems = items.filter((it) => it.type === 'tour');
   const transferItems = items.filter((it) => it.type === 'transfer');
   const activityItems = items.filter((it) => it.type === 'activity');
 
   return (
-    <div className="relative flex gap-4 pb-6 last:pb-0">
-      {!isLast && <span className="absolute left-[15px] top-8 h-[calc(100%-1.25rem)] w-px bg-line-light" />}
-      <span className="relative z-10 flex h-8 w-8 flex-none items-center justify-center rounded-full bg-ink text-xs font-bold text-white shadow-sm">
-        {dayNumber}
-      </span>
-      <div className="flex-1 space-y-3 pt-0.5">
-        <div className="text-xs font-bold uppercase tracking-wide text-accent">Day {dayNumber}</div>
-        <DayHotelSection
-          hotels={catalogs.hotels}
-          currentHotelId={hotelItem?.id || ''}
-          currentAdults={hotelItem?.adults}
-          onSelect={(hotelId) => setHotel(dayNumber, hotelId)}
-          onAdultsChange={(adults) => setHotelAdults(dayNumber, adults)}
-        />
-        <DayCatalogSection
-          type="tour"
-          catalog={catalogs.tours}
-          placedItems={tourItems}
-          onAdd={(id) => addItem('tour', id)}
-          onRemove={removeItem}
-          onNoteChange={updateNote}
-        />
-        <DayCatalogSection
-          type="transfer"
-          catalog={catalogs.transfers}
-          placedItems={transferItems}
-          onAdd={(id) => addItem('transfer', id)}
-          onRemove={removeItem}
-          onNoteChange={updateNote}
-        />
-        <DayCatalogSection
-          type="activity"
-          catalog={catalogs.activities}
-          placedItems={activityItems}
-          onAdd={(id) => addItem('activity', id)}
-          onRemove={removeItem}
-          onNoteChange={updateNote}
-        />
-        <TextInput placeholder="Notes for this day (optional)…" value={notes} onChange={(e) => onNotesChange(e.target.value)} />
-      </div>
+    <div className="space-y-3">
+      <DayHotelSection
+        hotels={catalogs.hotels}
+        currentHotelId={hotelItem?.id || ''}
+        onSelect={(hotelId) => setHotel(dayNumber, hotelId)}
+      />
+      <DayCatalogSection
+        type="tour"
+        catalog={catalogs.tours}
+        placedItems={tourItems}
+        onAdd={(id) => addItem('tour', id)}
+        onRemove={removeItem}
+        onNoteChange={updateNote}
+      />
+      <DayCatalogSection
+        type="transfer"
+        catalog={catalogs.transfers}
+        placedItems={transferItems}
+        onAdd={(id) => addItem('transfer', id)}
+        onRemove={removeItem}
+        onNoteChange={updateNote}
+      />
+      <DayCatalogSection
+        type="activity"
+        catalog={catalogs.activities}
+        placedItems={activityItems}
+        onAdd={(id) => addItem('activity', id)}
+        onRemove={removeItem}
+        onNoteChange={updateNote}
+      />
+      <TextInput placeholder="Notes for this day (optional)…" value={notes} onChange={(e) => onNotesChange(e.target.value)} />
     </div>
   );
+}
+
+// A day is "complete" once it has both a tour and a transfer — the same two
+// requirements findItineraryPublishError enforces before publishing — used
+// here purely to decorate each tab with a ✓ so admin can see progress across
+// days without having to click through all of them.
+function isDayComplete(items) {
+  return items.some((it) => it.type === 'tour') && items.some((it) => it.type === 'transfer');
 }
 
 function ItineraryManager({ fdPackageId, itinerary, duration, onChange, onComputedRateChange }) {
@@ -685,6 +686,15 @@ function ItineraryManager({ fdPackageId, itinerary, duration, onChange, onComput
   // Tracks the day count content was last checked against, so shrinking
   // Duration only prompts once per change rather than on every render.
   const lastSyncedDays = useRef(dayCount);
+
+  // Task 6 — tabs to switch between days instead of one long stacked list.
+  // Clamped down whenever Duration shrinks past the currently active tab
+  // (e.g. was on Day 8, Duration drops to 5 days) so the tab bar never sits
+  // on a day that no longer exists.
+  const [activeDay, setActiveDay] = useState(1);
+  useEffect(() => {
+    if (dayCount > 0 && activeDay > dayCount) setActiveDay(dayCount);
+  }, [dayCount, activeDay]);
 
   useEffect(() => {
     Promise.all([api.get('/hotels'), api.get('/tours'), api.get('/transfers'), api.get('/activities')])
@@ -759,10 +769,6 @@ function ItineraryManager({ fdPackageId, itinerary, duration, onChange, onComput
     );
   }
 
-  function setHotelAdultsForDayNumber(dayNumber, adults) {
-    setItineraryItems((items) => updateHotelAdults(items, dayNumber, adults));
-  }
-
   async function save() {
     setSaving(true);
     try {
@@ -778,7 +784,7 @@ function ItineraryManager({ fdPackageId, itinerary, duration, onChange, onComput
     <Card label="Day-by-day itinerary builder" className="border-white">
       <p className="mb-3 text-[10px] text-muted">
         {dayCount
-          ? `${dayCount} day${dayCount === 1 ? '' : 's'}, generated from Duration above. Each day picks its own hotel plus tours/transfers/extras straight from the catalog.`
+          ? `${dayCount} day${dayCount === 1 ? '' : 's'}, generated from Duration above. Each day picks its own hotel plus tours/transfers/activities straight from the catalog.`
           : 'Set a Duration above (e.g. "7N/8D") to generate day sections.'}
       </p>
       {dayCount === 0 ? (
@@ -789,22 +795,33 @@ function ItineraryManager({ fdPackageId, itinerary, duration, onChange, onComput
         <p className="text-sm text-muted">Loading catalog…</p>
       ) : (
         <div>
-          {Array.from({ length: dayCount }, (_, i) => i + 1).map((dayNumber) => (
-            <DayPlanCard
-              key={dayNumber}
-              dayNumber={dayNumber}
-              items={itemsForDay(itineraryItems, dayNumber)}
-              catalogs={{ hotels, tours, transfers, activities }}
-              notes={dayNotes[dayNumber] || ''}
-              onNotesChange={(value) => setDayNotes((n) => ({ ...n, [dayNumber]: value }))}
-              addItem={(type, id) => addItemToDay(dayNumber, type, id)}
-              removeItem={removeItemFromDay}
-              updateNote={updateItemNoteByKey}
-              setHotel={setHotelForDayNumber}
-              setHotelAdults={setHotelAdultsForDayNumber}
-              isLast={dayNumber === dayCount}
-            />
-          ))}
+          {/* Task 6 — tabs, one per day, instead of a long stacked list. ✓
+              marks a day that already has both a tour and a transfer (what
+              publishing actually requires — see isDayComplete). */}
+          <div className="mb-3 flex flex-wrap gap-1.5 border-b border-line-light pb-2">
+            {Array.from({ length: dayCount }, (_, i) => i + 1).map((dayNumber) => {
+              const complete = isDayComplete(itemsForDay(itineraryItems, dayNumber));
+              return (
+                <button key={dayNumber} type="button" onClick={() => setActiveDay(dayNumber)}>
+                  <Tag active={activeDay === dayNumber}>
+                    Day {dayNumber}
+                    {complete ? ' ✓' : ''}
+                  </Tag>
+                </button>
+              );
+            })}
+          </div>
+          <DayPlanCard
+            dayNumber={activeDay}
+            items={itemsForDay(itineraryItems, activeDay)}
+            catalogs={{ hotels, tours, transfers, activities }}
+            notes={dayNotes[activeDay] || ''}
+            onNotesChange={(value) => setDayNotes((n) => ({ ...n, [activeDay]: value }))}
+            addItem={(type, id) => addItemToDay(activeDay, type, id)}
+            removeItem={removeItemFromDay}
+            updateNote={updateItemNoteByKey}
+            setHotel={setHotelForDayNumber}
+          />
         </div>
       )}
       <div className="mt-3 flex gap-2">
@@ -1093,6 +1110,14 @@ export default function FdPackageEditor() {
   const computedRatePerPax =
     itineraryRatePerPax == null || mealsRatePerPax == null ? null : itineraryRatePerPax + mealsRatePerPax;
 
+  // Task 2 — auto-save to draft. `hasUserEditedRef` is set only by update()
+  // below (a real, user-driven field change) — never by the initial load's
+  // own setForm(toFormState(...)), so opening an existing package doesn't
+  // immediately re-PATCH back the exact data it just loaded.
+  const hasUserEditedRef = useRef(false);
+  const autosaveTimerRef = useRef(null);
+  const [autosaving, setAutosaving] = useState(false);
+
   useEffect(() => {
     if (isNew) {
       // Create the draft immediately on open rather than waiting for an
@@ -1121,8 +1146,35 @@ export default function FdPackageEditor() {
   }, [id, isNew]);
 
   function update(key, value) {
+    hasUserEditedRef.current = true;
     setForm((f) => ({ ...f, [key]: value }));
   }
+
+  // Debounced ~1s after the admin stops changing anything on `form`
+  // (Basics/Merchandising/Pricing/Inclusions, all wired through update()
+  // above) — reuses the same PATCH endpoint "Save as Draft" used to call
+  // directly, just fired automatically instead of on a button click. Never
+  // touches `status` itself (unlike handleSave('draft')/('published') below)
+  // so autosaving a field on an already-published package can't silently
+  // knock it back to draft.
+  useEffect(() => {
+    if (!packageId || !hasUserEditedRef.current) return undefined;
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    autosaveTimerRef.current = setTimeout(async () => {
+      setAutosaving(true);
+      try {
+        await api.patch(`/admin/fd-packages/${packageId}`, form);
+      } catch (err) {
+        toast.error(describeApiError(err));
+      } finally {
+        setAutosaving(false);
+      }
+    }, 1000);
+    return () => {
+      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form, packageId]);
 
   // Inclusions default-seed — same idea as the Custom FIT Quote Inbox
   // (QuoteInboxDetail.jsx's CostingAndPublishing): while Inclusions is
@@ -1176,17 +1228,17 @@ export default function FdPackageEditor() {
     return null;
   }
 
-  async function handleSave(status) {
-    if (status === 'published') {
-      const itineraryError = findItineraryPublishError();
-      if (itineraryError) {
-        toast.error(itineraryError);
-        return;
-      }
+  // Task 2 — "Save as Draft" is gone (autosave above covers it); this is now
+  // just the one remaining explicit action, publishing.
+  async function handlePublish() {
+    const itineraryError = findItineraryPublishError();
+    if (itineraryError) {
+      toast.error(itineraryError);
+      return;
     }
-    setSubmitting(status);
+    setSubmitting('published');
     try {
-      const payload = { ...form, status };
+      const payload = { ...form, status: 'published' };
       if (!packageId) {
         const { fdPackage } = await api.post('/admin/fd-packages', payload);
         setPackageId(fdPackage.id);
@@ -1195,7 +1247,7 @@ export default function FdPackageEditor() {
         const { fdPackage } = await api.patch(`/admin/fd-packages/${packageId}`, payload);
         setForm(toFormState(fdPackage));
       }
-      toast.success(status === 'published' ? 'FD package published' : 'Draft saved');
+      toast.success('FD package published');
     } catch (err) {
       toast.error(describeApiError(err));
     } finally {
@@ -1204,7 +1256,7 @@ export default function FdPackageEditor() {
   }
 
   return (
-    <div className="min-h-screen bg-[#eef1f7]">
+    <div className="min-h-screen bg-[#F4F7FF]">
       <div className="mx-auto max-w-4xl space-y-4 p-6 lg:p-10">
         <button onClick={() => navigate('/admin/catalog')} className="text-xs text-muted hover:text-ink">
           ← Back to catalog
@@ -1212,7 +1264,6 @@ export default function FdPackageEditor() {
         <h2 className="text-3xl font-bold">{isNew ? 'Add FD Package' : `Edit — ${form.title || ''}`}</h2>
 
         <BasicsForm form={form} update={update} packageId={packageId} />
-        <MerchandisingForm form={form} update={update} addonsEnabled={addonsEnabled} onToggleAddons={setAddonsEnabled} />
 
         {packageId && (
           <>
@@ -1224,6 +1275,9 @@ export default function FdPackageEditor() {
               onChange={setItinerary}
               onComputedRateChange={setItineraryRatePerPax}
             />
+            {/* Moved below the day-by-day itinerary builder (Task 3) — was
+                previously right after Basics. */}
+            <MerchandisingForm form={form} update={update} addonsEnabled={addonsEnabled} onToggleAddons={setAddonsEnabled} />
             {addonsEnabled && <AddonsManager fdPackageId={packageId} addons={addons} onChange={setAddons} />}
           </>
         )}
@@ -1242,11 +1296,11 @@ export default function FdPackageEditor() {
             else is set. */}
         <PricingForm form={form} update={update} computedRatePerPax={computedRatePerPax} />
 
-        <div className="flex justify-end gap-2">
-          <Button disabled={!!submitting} onClick={() => handleSave('draft')}>
-            {submitting === 'draft' ? 'Saving…' : 'Save as Draft'}
-          </Button>
-          <Button variant="accent" disabled={!!submitting} onClick={() => handleSave('published')}>
+        <div className="flex items-center justify-end gap-2">
+          {/* Task 2 — replaces "Save as Draft": every field above autosaves
+              a moment after you stop typing, nothing to click. */}
+          <span className="text-[11px] text-muted">{autosaving ? 'Saving…' : 'All changes saved'}</span>
+          <Button variant="accent" disabled={!!submitting} onClick={handlePublish}>
             {submitting === 'published' ? 'Publishing…' : 'Publish Package'}
           </Button>
         </div>

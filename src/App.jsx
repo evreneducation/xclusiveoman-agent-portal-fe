@@ -1,7 +1,9 @@
 import { Route, Routes } from 'react-router-dom';
 import AgentApp from './agent/App.jsx';
 import AdminApp from './admin/App.jsx';
+import TeamApp from './team/App.jsx';
 import { LoginModal } from './shared/components/LoginModal.jsx';
+import CmsPage from './pages/CmsPage.jsx';
 
 // No more "choose Agent Portal or Admin Console" picker (shared/pages/
 // Landing.jsx, removed — this was its only caller) — the shared LoginModal
@@ -15,6 +17,12 @@ export default function App() {
     <Routes>
       <Route path="/agent/*" element={<AgentApp />} />
       <Route path="/admin/*" element={<AdminApp />} />
+      {/* Team Portal — Lead Managers (sales_manager) and Relationship
+          Managers (relationship_manager) sign in here, never at /admin. */}
+      <Route path="/team/*" element={<TeamApp />} />
+      {/* Public CMS Page Viewer (Task 21 — Item 34 continuation) — no auth,
+          not under /admin or /agent. See src/pages/CmsPage.jsx. */}
+      <Route path="/cms/:slug" element={<CmsPage />} />
       <Route path="/" element={<LoginModal />} />
       <Route path="*" element={<LoginModal />} />
     </Routes>

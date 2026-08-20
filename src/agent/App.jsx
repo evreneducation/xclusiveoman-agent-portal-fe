@@ -4,8 +4,6 @@ import ProtectedRoute from './routes/ProtectedRoute.jsx';
 import AgentLayout from './components/AgentLayout.jsx';
 import Login from './pages/Login.jsx';
 import Register from './pages/Register.jsx';
-import ForgotPassword from './pages/ForgotPassword.jsx';
-import ResetPassword from './pages/ResetPassword.jsx';
 import ItineraryPrint from './pages/ItineraryPrint.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import Departures from './pages/Departures.jsx';
@@ -30,8 +28,8 @@ export default function App() {
       <Routes>
         <Route path="login" element={<Login />} />
         <Route path="register" element={<Register />} />
-        <Route path="forgot-password" element={<ForgotPassword />} />
-        <Route path="reset-password" element={<ResetPassword />} />
+        {/* No forgot/reset-password routes — there's no password anywhere
+            to forget or reset (email OTP is the sole sign-in mechanism). */}
         {/* Not wrapped in ProtectedRoute/AgentLayout — this is the target the
             backend's Puppeteer PDF service navigates to (see
             itineraryPdf.service.js). Authenticates itself via the short-lived
@@ -60,8 +58,8 @@ export default function App() {
             <Route path="profile" element={<Profile />} />
           </Route>
         </Route>
-        <Route index element={<Navigate to="dashboard" replace />} />
-        <Route path="*" element={<Navigate to="dashboard" replace />} />
+        <Route index element={<Navigate to="/agent/dashboard" replace />} />
+        <Route path="*" element={<Navigate to="/agent/dashboard" replace />} />
       </Routes>
     </AuthProvider>
   );

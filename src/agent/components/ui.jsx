@@ -2,18 +2,23 @@
 // shape of admin/components/ui.jsx but themed on the `agent-*` token set
 // (tailwind.config.js) so the two portals read as visually distinct apps
 // while sharing the same component surface/API.
-import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { FiEye, FiEyeOff } from 'react-icons/fi';
 
+// Colour system pass — 'accent' (the primary Save/Submit/Book Now action
+// across the whole agent portal) now uses a gold→coral "sunset" gradient
+// rather than a flat gold fill, mirroring the same "gradient primary
+// action" treatment the Admin Console got, but in the agent portal's own
+// distinct ocean/sunset palette (tailwind.config.js's agent-* tokens)
+// rather than admin's blue/indigo.
 export function Button({ variant = 'default', className = '', ...props }) {
   const base =
     'inline-flex items-center justify-center rounded-md border px-4 py-2 text-xs font-semibold shadow-sm transition duration-150 focus:outline-none focus:ring-2 focus:ring-agent-accent/25 disabled:cursor-not-allowed disabled:opacity-50';
   const variants = {
-    default: 'border-agent-line-light bg-white text-agent-ink hover:border-agent-ink hover:bg-agent-panel',
-    solid: 'border-agent-ink bg-agent-ink text-white hover:bg-agent-ink-dark',
-    accent: 'border-agent-accent bg-agent-accent text-white hover:bg-agent-accent-dark',
-    danger: 'border-[#d9a0aa] bg-[#fff7f8] text-[#a5162d] hover:border-[#a5162d] hover:bg-[#fdecef]',
+    default: 'border-agent-line-light bg-white text-agent-ink hover:border-agent-accent hover:bg-agent-panel',
+    solid: 'border-transparent bg-agent-ink-dark text-white shadow-md shadow-black/10 hover:bg-agent-ink',
+    accent:
+      'border-transparent bg-gradient-to-r from-[#E2A33B] to-[#F97316] text-white shadow-md shadow-[#E2A33B]/25 hover:border-transparent hover:opacity-90',
+    danger: 'border-[#FECACA] bg-[#FEF2F2] text-[#B91C1C] hover:border-[#EF4444] hover:bg-[#FEE2E2]',
   };
   return (
     <motion.button
@@ -39,30 +44,8 @@ export function TextInput({ className = '', ...props }) {
   );
 }
 
-// Password field with a Show/Hide toggle — used by the Sign In / Register
-// pages (AuthShell-based). Kept here alongside TextInput rather than local
-// to one page since both auth forms need it.
-export function PasswordInput({ className = '', ...props }) {
-  const [visible, setVisible] = useState(false);
-  return (
-    <div className="relative">
-      <input
-        type={visible ? 'text' : 'password'}
-        className={`w-full rounded-md border border-agent-line-light bg-white px-3 py-2.5 pr-10 text-sm text-agent-ink shadow-sm placeholder:text-agent-muted focus:border-agent-accent focus:outline-none focus:ring-2 focus:ring-agent-accent/15 ${className}`}
-        {...props}
-      />
-      <button
-        type="button"
-        onClick={() => setVisible((v) => !v)}
-        tabIndex={-1}
-        aria-label={visible ? 'Hide password' : 'Show password'}
-        className="absolute right-3 top-1/2 -translate-y-1/2 text-agent-muted hover:text-agent-ink"
-      >
-        {visible ? <FiEyeOff size={16} /> : <FiEye size={16} />}
-      </button>
-    </div>
-  );
-}
+// No PasswordInput — nothing in this app ever collects a password anymore
+// (email OTP, LoginModal.jsx, is the sole sign-in mechanism).
 
 export function Textarea({ className = '', ...props }) {
   return (
@@ -90,9 +73,9 @@ export function Card({ label, className = '', children }) {
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, ease: 'easeOut' }}
-      className={`relative rounded-lg border border-agent-line-light bg-white/95 p-4 shadow-sm ${className}`}
+      className={`relative rounded-lg border border-agent-line-light bg-white/95 p-4 shadow-[0_4px_16px_rgba(11,79,74,0.06)] ${className}`}
     >
-      {label && <div className="mb-3 text-[10px] font-semibold uppercase text-agent-muted">{label}</div>}
+      {label && <div className="mb-3 text-[10px] font-semibold uppercase text-agent-accent-dark">{label}</div>}
       {children}
     </motion.div>
   );
@@ -115,10 +98,10 @@ export function Tag({ active, className = '', children, ...props }) {
 
 export function Badge({ tone = 'grey', className = '', children }) {
   const tones = {
-    green: 'bg-[#e9f7ef] text-[#227647] border-[#b9e2c9]',
+    green: 'bg-[#ECFDF5] text-[#047857] border-[#A7F3D0]',
     amber: 'bg-agent-accent-soft text-agent-accent-dark border-agent-accent/40',
     grey: 'bg-agent-panel text-agent-muted border-agent-line-light',
-    red: 'bg-[#fdecef] text-[#a5162d] border-[#f2bdc6]',
+    red: 'bg-[#FEF2F2] text-[#B91C1C] border-[#FECACA]',
     teal: 'bg-agent-panel text-agent-ink border-agent-line',
   };
   return (
@@ -164,12 +147,12 @@ export function Checkbox({ checked, onChange, label, hint }) {
 
 export function Table({ columns, rows, renderRow }) {
   return (
-    <div className="overflow-x-auto rounded-lg border border-agent-line-light">
+    <div className="overflow-x-auto rounded-lg border border-agent-line-light shadow-[0_4px_16px_rgba(11,79,74,0.06)]">
       <table className="w-full text-left text-xs">
         <thead>
           <tr className="bg-agent-panel">
             {columns.map((c) => (
-              <th key={c} className="border-b border-agent-line-light px-3 py-2 font-semibold uppercase text-agent-muted">
+              <th key={c} className="border-b border-agent-line-light px-3 py-2 font-semibold uppercase text-agent-accent-dark">
                 {c}
               </th>
             ))}

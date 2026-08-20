@@ -138,22 +138,32 @@ function roomsForOccupancy(totalAdults, occupancy) {
   return n > 0 ? Math.ceil(n / capacity) : 1;
 }
 
-// Hotels are occupancy-aware and priced per itinerary-day placement (a hotel
-// used on 3 days counts 3 times), unlike tours/transfers/extras below which
-// still sum once per selected item — mirrors the backend's
-// computeHotelCostAuto (packageRequestsAdmin.controller.js) so the two never
-// drift. Uses each item's already-server-computed `rooms` (composeItinerary
-// resolved it against packageRequest.paxAdults) rather than re-deriving it,
-// since this reads the last-saved itinerary, not any in-progress edit in
-// ItineraryEditor below (a separate component with its own local state).
+// Occupancy-tiered pricing (0061_hotel_occupancy_pricing.sql) — a hotel's
+// cost for a given placement now depends on which occupancy tier was chosen
+// (item.occupancy), not one flat pricePerNight regardless of tier. Hotels
+// are still priced per itinerary-day placement (a hotel used on 3 days
+// counts 3 times), unlike tours/transfers/extras below which still sum once
+// per selected item — mirrors the backend's computeHotelCostAuto
+// (packageRequestsAdmin.controller.js) so the two never drift. Uses each
+// item's already-server-computed `rooms` (composeItinerary resolved it
+// against packageRequest.paxAdults) rather than re-deriving it, since this
+// reads the last-saved itinerary, not any in-progress edit in
+// ItineraryEditor below (a separate component with its own local state). A
+// hotel that doesn't offer the chosen tier contributes nothing for that
+// placement, same as the backend — never silently priced off a different tier.
+const OCCUPANCY_PRICE_FIELD = { single: 'singlePrice', double: 'doublePrice', triple: 'triplePrice' };
+
 function computeHotelAuto(itinerary, hotels) {
   let total = 0;
   for (const day of itinerary || []) {
     for (const item of day.items || []) {
       if (item.type !== 'hotel') continue;
       const hotel = (hotels || []).find((h) => h.id === item.id);
-      if (!hotel || hotel.pricePerNight == null) continue;
-      total += Number(hotel.pricePerNight) * (item.rooms || 1);
+      if (!hotel) continue;
+      const field = OCCUPANCY_PRICE_FIELD[item.occupancy] || OCCUPANCY_PRICE_FIELD.double;
+      const tierPrice = hotel[field];
+      if (tierPrice == null) continue;
+      total += Number(tierPrice) * (item.rooms || 1);
     }
   }
   return total;
@@ -448,6 +458,20 @@ const OCCUPANCY_OPTIONS = [
   { value: 'triple', label: 'Triple' },
 ];
 
+// Occupancy-tiered pricing (0061_hotel_occupancy_pricing.sql) — the picker
+// only ever shows the tiers the selected hotel actually has priced
+// (singlePrice/doublePrice/triplePrice), so admin can't pick a tier that
+// silently prices at ₹0 (computeHotelAuto above already treats a missing
+// tier as "no contribution"; this stops that mismatch from ever being
+// picked in the first place). Falls back to showing every option
+// (unfiltered) when `hotel` isn't loaded yet, rather than briefly rendering
+// an empty dropdown.
+function occupancyOptionsFor(hotel) {
+  if (!hotel) return OCCUPANCY_OPTIONS;
+  const available = OCCUPANCY_OPTIONS.filter((o) => hotel[OCCUPANCY_PRICE_FIELD[o.value]] != null);
+  return available.length > 0 ? available : OCCUPANCY_OPTIONS;
+}
+
 // A single draggable placed/unplaced item — mirrors the agent builder's
 // ItineraryItemChip (agent/pages/PackageBuilder.jsx), themed for the admin
 // console. Dropping directly on a chip inserts before it, which is what lets
@@ -495,7 +519,7 @@ function ItineraryItemChip({ item, meta, isDragging, onDragStart, onDragEnd, onD
             value={item.occupancy || 'double'}
             onChange={(e) => onOccupancyChange(e.target.value)}
           >
-            {OCCUPANCY_OPTIONS.map((o) => (
+            {occupancyOptionsFor(meta).map((o) => (
               <option key={o.value} value={o.value}>
                 {o.label}
               </option>
@@ -765,7 +789,7 @@ export default function QuoteInboxDetail() {
   useEffect(load, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="min-h-screen bg-[#eef1f7]">
+    <div className="min-h-screen bg-[#F4F7FF]">
       <div className="mx-auto max-w-5xl space-y-4 p-6 lg:p-10">
         <button onClick={() => navigate('/admin/quote-inbox')} className="text-xs text-muted hover:text-ink">
           ← Back to Quote Inbox
