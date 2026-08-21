@@ -1089,22 +1089,33 @@ function AddonMultiSelectCard({ type, themeKey, icon: Icon, title, subtitle, ite
   }
 
   return (
-    // Full-width row (was a narrow grid card) — stacking Activities/Tours/
-    // Transfers/Onward/Return each across the whole width, one under the
-    // other, gives each enough room for its label + selector + total to sit
-    // on one line instead of the cramped multi-column grid this replaced.
-    <div ref={boxRef} className={`relative flex flex-col gap-3 rounded-xl border bg-white p-4 sm:flex-row sm:items-center ${theme.border}`}>
-      <div className="flex flex-none items-start gap-3 sm:w-64">
-        <div className={`flex h-9 w-9 flex-none items-center justify-center rounded-lg ${theme.iconBg}`}>
-          <Icon size={16} className={theme.iconText} />
+    // A vertical card (icon+title+subtitle on top, selector below, total at
+    // the bottom) rather than a horizontal row — this is what lets these
+    // sit side by side in a grid at any column width without a fixed-width
+    // label/total block fighting for space the way a row layout would
+    // (Tailwind's sm:/lg: breakpoints key off the *viewport*, not this grid
+    // cell's actual rendered width, so a row layout that looked fine
+    // full-width breaks the moment the same component sits in a narrower
+    // grid column at the very same viewport size).
+    <div ref={boxRef} className={`relative flex flex-col gap-3 rounded-xl border bg-white p-4 ${theme.border}`}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-2.5">
+          <div className={`flex h-9 w-9 flex-none items-center justify-center rounded-lg ${theme.iconBg}`}>
+            <Icon size={16} className={theme.iconText} />
+          </div>
+          <div>
+            <div className="text-sm font-bold text-ink">{title}</div>
+            <p className="mt-0.5 text-[11px] text-muted">{subtitle}</p>
+          </div>
         </div>
-        <div>
-          <div className="text-sm font-bold text-ink">{title}</div>
-          <p className="mt-0.5 text-[11px] text-muted">{subtitle}</p>
-        </div>
+        {selected.length > 0 && (
+          <span className={`flex-none rounded-full px-2 py-0.5 text-[10px] font-semibold ${theme.badge}`}>
+            {selected.length} selected
+          </span>
+        )}
       </div>
 
-      <div className="relative flex-1">
+      <div className="relative">
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
@@ -1166,18 +1177,11 @@ function AddonMultiSelectCard({ type, themeKey, icon: Icon, title, subtitle, ite
         )}
       </div>
 
-      <div className="flex flex-none items-center justify-between gap-3 sm:w-36 sm:flex-col sm:items-end sm:justify-center sm:gap-1 sm:border-l sm:border-line-light sm:pl-4">
-        {selected.length > 0 && (
-          <span className={`flex-none rounded-full px-2 py-0.5 text-[10px] font-semibold ${theme.badge}`}>
-            {selected.length} selected
-          </span>
-        )}
-        <div className="text-right">
-          <p className="text-[10px] text-muted">
-            Total for {selected.length} {selected.length === 1 ? itemNounPlural.singular : itemNounPlural.plural}
-          </p>
-          <span className={`text-sm font-bold ${theme.total}`}>{selected.length > 0 ? formatCurrency(totalPrice) : '—'}</span>
-        </div>
+      <div className="flex items-center justify-between border-t border-dashed border-line-light pt-2.5">
+        <span className="text-[11px] text-muted">
+          Total for {selected.length} {selected.length === 1 ? itemNounPlural.singular : itemNounPlural.plural}
+        </span>
+        <span className={`text-sm font-bold ${theme.total}`}>{selected.length > 0 ? formatCurrency(totalPrice) : '—'}</span>
       </div>
     </div>
   );
@@ -1360,12 +1364,11 @@ function AddonsManager({ fdPackageId, addons, onChange, form, update, duration, 
             <p className="text-sm text-muted">Loading catalog…</p>
           ) : (
             <div className="space-y-4">
-              {/* Stacked, one full-width row per category (was a 5-column
-                  grid that left almost no room per card) — each
-                  AddonMultiSelectCard is itself a horizontal row now
-                  (label | selector | total), so this just lines those rows
-                  up top to bottom. */}
-              <div className="space-y-3">
+              {/* Side by side, 2 per row — each AddonMultiSelectCard is a
+                  vertical card (icon/title on top, selector, total at the
+                  bottom), which is what lets it sit in a grid column
+                  cleanly at any width, unlike a horizontal row layout. */}
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <AddonMultiSelectCard
                   type="activity"
                   themeKey="activity"
