@@ -16,8 +16,48 @@ function isTeamUser(user) {
   return TEAM_ROLES.includes(user.role);
 }
 
+// Caches the last-known /auth/me response (permissions included) in
+// sessionStorage — survives an in-SPA route change or a tab reopen within
+// the same browser session, but never outlives it (sessionStorage, not
+// localStorage) and is explicitly wiped on logout (clearSession below), so
+// it can never leak into a next, different login on the same machine. This
+// is a convenience layer only, never the source of truth: hasFeature always
+// reads live `user` state, and every write here is paired with the real
+// /auth/me response that produced it, never invented client-side.
+const USER_CACHE_KEY = 'team.auth.user';
+
+function readCachedUser() {
+  try {
+    const raw = sessionStorage.getItem(USER_CACHE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedUser(user) {
+  try {
+    sessionStorage.setItem(USER_CACHE_KEY, JSON.stringify(user));
+  } catch {
+    // Private-browsing/storage-full — the cache is a convenience only, so a
+    // failed write here just means the next mount re-fetches from the API
+    // instead of hydrating instantly, never a functional break.
+  }
+}
+
+function clearCachedUser() {
+  try {
+    sessionStorage.removeItem(USER_CACHE_KEY);
+  } catch {
+    // Nothing to clean up if storage was never writable to begin with.
+  }
+}
+
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
+  // Hydrated from the cache immediately (so the sidebar doesn't flash empty
+  // while the real /auth/me call below is in flight) — always overwritten by
+  // that real call moments later, never trusted on its own past that point.
+  const [user, setUser] = useState(readCachedUser);
   const [status, setStatus] = useState('loading'); // loading | authenticated | anonymous
   const [socketConnected, setSocketConnected] = useState(false);
   const socketRef = useRef(null);
@@ -37,7 +77,27 @@ export function AuthProvider({ children }) {
     setStatus('anonymous');
     disconnectSocket();
     setSocketConnected(false);
+    clearCachedUser();
   }, []);
+
+  // The one real fetch — GET /auth/me, re-verified server-side (requireAuth
+  // re-fetches the user's row fresh from the DB on every request, never
+  // trusting stale JWT claims) so this always reflects whatever an admin
+  // most recently checked/unchecked on this account's Access Features. Both
+  // the initial mount effect below and any later manual/opportunistic
+  // refresh (the window-focus effect further down) funnel through this one
+  // function, so "how permissions get (re)loaded" only has one implementation.
+  const fetchUser = useCallback(async () => {
+    const { user: me } = await api.get('/auth/me');
+    if (!isTeamUser(me)) {
+      await api.post('/auth/logout').catch(() => {});
+      clearSession();
+      return null;
+    }
+    setUser(me);
+    writeCachedUser(me);
+    return me;
+  }, [clearSession]);
 
   useEffect(() => {
     setUnauthorizedHandler(clearSession);
@@ -48,23 +108,40 @@ export function AuthProvider({ children }) {
       const refreshed = await tryRefresh();
       if (!refreshed) {
         setStatus('anonymous');
+        clearCachedUser();
         return;
       }
       try {
-        const { user: me } = await api.get('/auth/me');
-        if (!isTeamUser(me)) {
-          await api.post('/auth/logout').catch(() => {});
-          clearSession();
-          return;
-        }
-        setUser(me);
+        const me = await fetchUser();
+        if (!me) return; // fetchUser already logged out a non-team account
         setStatus('authenticated');
         wireSocket(getAccessToken());
       } catch {
         clearSession();
       }
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clearSession, wireSocket]);
+
+  // Re-syncs permissions when this tab regains focus (an admin flipping an
+  // Access Feature checkbox while this LM/RM already has the portal open in
+  // another tab is exactly the case a one-time-on-mount fetch alone can't
+  // catch — see requireFeature's own 403 on the backend, which always
+  // re-checks fresh regardless of what this tab's cached `user` still
+  // thinks). Only fires once actually authenticated — a background tab
+  // still on the login screen has nothing to refresh yet.
+  useEffect(() => {
+    if (status !== 'authenticated') return undefined;
+    function onFocus() {
+      fetchUser().catch(() => {});
+    }
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onFocus);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onFocus);
+    };
+  }, [status, fetchUser]);
 
   const logout = useCallback(async () => {
     try {
@@ -90,6 +167,11 @@ export function AuthProvider({ children }) {
     hasFeature,
     socketConnected,
     logout,
+    // Manual escape hatch alongside the automatic window-focus refresh above
+    // — e.g. a "Refresh access" action (TeamLayout.jsx) for "an admin just
+    // told me they updated it, but I haven't switched tabs to trigger the
+    // focus listener yet".
+    refreshUser: fetchUser,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

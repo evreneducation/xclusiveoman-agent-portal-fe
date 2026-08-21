@@ -13,6 +13,7 @@ const TABS = [
   { key: 'transfers', label: 'Transfers' },
   { key: 'meals', label: 'Meals' },
   { key: 'visa', label: 'Visa' },
+  { key: 'flights', label: 'Flights' },
   { key: 'inclusionsExclusions', label: 'Inclusions & Exclusions' },
 ];
 
@@ -735,6 +736,189 @@ function VisaTab() {
   );
 }
 
+// Product Catalog "Flights" tab — unlike Meals/Visa above (one row edited in
+// place), any number of flights can be added; Onward/Return is a sub-tab
+// exactly like Meals' Lunch/Dinner, but selects which of two lists to show
+// and which `isFlightOnward` a new entry is saved with, rather than which
+// one row to edit. Backed by a plain growable table (0063_flights_catalog.sql),
+// same "add form + list with delete" shape as NameOnlyCatalogList, just with
+// more than one field to fill in per entry.
+const FLIGHT_DIRECTIONS = [
+  { key: 'onward', label: 'Onward', isFlightOnward: true },
+  { key: 'return', label: 'Return', isFlightOnward: false },
+];
+
+const EMPTY_FLIGHT_FORM = { name: '', source: '', destination: '', departureDate: '', price: '' };
+
+// Today, as a "YYYY-MM-DD" string in the browser's local timezone — matches
+// what <input type="date"> reads/writes, so it can be used directly as a
+// `min` bound and in string comparisons without any Date-object timezone
+// pitfalls. Same helper/convention as PackageBuilder.jsx's and
+// MiceBuilder.jsx's todayDateString — that's the "shared calendar" rule this
+// mirrors: a departure date can't be picked (via `min`) or submitted (the
+// check in handleSubmit below) before today.
+function todayDateString() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// Re-mounted (key={direction} in FlightsTab below) on every sub-tab switch,
+// so a half-typed Onward flight never ends up submitted as a Return one (or
+// vice versa) just because the admin switched tabs mid-entry.
+function FlightForm({ isFlightOnward, directionLabel, onAdded }) {
+  const [form, setForm] = useState(EMPTY_FLIGHT_FORM);
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  function update(key, value) {
+    setForm((f) => ({ ...f, [key]: value }));
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError('');
+    if (!form.name.trim() || !form.source.trim() || !form.destination.trim() || !form.departureDate) {
+      setError('Please fill in all fields.');
+      return;
+    }
+    if (form.departureDate < todayDateString()) {
+      setError('Departure date cannot be in the past.');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      // Optional, same as Tours/Transfers' own price fields — omitted
+      // entirely (rather than sent as an empty string) when left blank, so
+      // it can still be added and priced in later.
+      const payload = { ...form, isFlightOnward };
+      if (form.price !== '') {
+        payload.price = Number(form.price);
+      } else {
+        delete payload.price;
+      }
+      const { flight } = await api.post('/admin/flights', payload);
+      onAdded(flight);
+      setForm(EMPTY_FLIGHT_FORM);
+    } catch (err) {
+      setError(err.message || 'Unable to add flight');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Card label={`Add ${directionLabel.toLowerCase()} flight`} className="mb-4 border-white">
+      <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-3 sm:grid-cols-5">
+        <div>
+          <FieldLabel>Flight name</FieldLabel>
+          <TextInput value={form.name} onChange={(e) => update('name', e.target.value)} />
+        </div>
+        <div>
+          <FieldLabel>Source</FieldLabel>
+          <TextInput value={form.source} onChange={(e) => update('source', e.target.value)} />
+        </div>
+        <div>
+          <FieldLabel>Destination</FieldLabel>
+          <TextInput value={form.destination} onChange={(e) => update('destination', e.target.value)} />
+        </div>
+        <div>
+          <FieldLabel>Departure date</FieldLabel>
+          <TextInput
+            type="date"
+            min={todayDateString()}
+            value={form.departureDate}
+            onChange={(e) => update('departureDate', e.target.value)}
+          />
+        </div>
+        <div>
+          <FieldLabel>Price (₹)</FieldLabel>
+          <TextInput type="number" min="0" value={form.price} onChange={(e) => update('price', e.target.value)} />
+        </div>
+        <div className="flex items-center gap-3 sm:col-span-5">
+          <Button variant="accent" type="submit" disabled={submitting}>
+            {submitting ? 'Adding…' : `+ Add ${directionLabel.toLowerCase()} flight`}
+          </Button>
+        </div>
+        <div className="sm:col-span-5">
+          <ErrorText>{error}</ErrorText>
+        </div>
+      </form>
+    </Card>
+  );
+}
+
+function FlightsTab() {
+  const [direction, setDirection] = useState('onward');
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const active = FLIGHT_DIRECTIONS.find((d) => d.key === direction);
+
+  function load() {
+    setLoading(true);
+    api
+      .get(`/flights?isFlightOnward=${active.isFlightOnward}`)
+      .then(({ flights }) => setItems(flights))
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(load, [direction]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function handleDelete(id) {
+    await api.del(`/admin/flights/${id}`);
+    setItems((list) => list.filter((i) => i.id !== id));
+  }
+
+  return (
+    <div>
+      <div className="mb-4 flex flex-wrap gap-2">
+        {FLIGHT_DIRECTIONS.map((d) => (
+          <button
+            key={d.key}
+            onClick={() => setDirection(d.key)}
+            className={`rounded-full border px-4 py-2 text-xs font-semibold ${
+              direction === d.key ? 'border-ink bg-ink text-white' : 'border-line-light bg-white text-[#666]'
+            }`}
+          >
+            {d.label}
+          </button>
+        ))}
+      </div>
+
+      <FlightForm
+        key={direction}
+        isFlightOnward={active.isFlightOnward}
+        directionLabel={active.label}
+        onAdded={(flight) => setItems((list) => [flight, ...list])}
+      />
+
+      {loading ? (
+        <p className="text-xs text-muted">Loading…</p>
+      ) : items.length === 0 ? (
+        <p className="text-xs text-muted">No {active.label.toLowerCase()} flights added yet.</p>
+      ) : (
+        <Table
+          columns={['Flight', 'Source', 'Destination', 'Departure date', 'Price', '']}
+          rows={items}
+          renderRow={(flight) => (
+            <tr key={flight.id} className="border-b border-line-light last:border-0">
+              <td className="px-3 py-2 font-semibold">{flight.name}</td>
+              <td className="px-3 py-2">{flight.source}</td>
+              <td className="px-3 py-2">{flight.destination}</td>
+              <td className="px-3 py-2">{new Date(flight.departure_date).toLocaleDateString()}</td>
+              <td className="px-3 py-2">{flight.price != null ? `₹${flight.price}` : '—'}</td>
+              <td className="px-3 py-2 text-right">
+                <button onClick={() => handleDelete(flight.id)} className="text-xs text-[#a5162d] hover:underline">
+                  Delete
+                </button>
+              </td>
+            </tr>
+          )}
+        />
+      )}
+    </div>
+  );
+}
+
 // Product Catalog "Inclusions & Exclusions" tab, next to Meals — reusable,
 // name-only phrases the admin curates once (e.g. "Daily breakfast",
 // "International flights") for reference when typing a quotation's
@@ -886,6 +1070,8 @@ export default function ProductCatalog() {
           <MealsTab />
         ) : tab === 'visa' ? (
           <VisaTab />
+        ) : tab === 'flights' ? (
+          <FlightsTab />
         ) : (
           <InclusionsExclusionsTab />
         )}

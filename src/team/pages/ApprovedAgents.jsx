@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
+import { LuUserCheck, LuBuilding2, LuMail } from 'react-icons/lu';
 import { api } from '../api/client.js';
-import { Badge, Card, ErrorText, TextInput } from '../components/ui.jsx';
+import { Badge, Card, EmptyState, ErrorText, LoadingState, PageHeader, TextInput } from '../components/ui.jsx';
 
 const TIER_TONE = { gold: 'amber', silver: 'grey', bronze: 'grey' };
 
@@ -27,31 +28,43 @@ export default function ApprovedAgents() {
 
   return (
     <div className="mx-auto max-w-5xl p-6 lg:p-10">
-      <h2 className="text-2xl font-bold text-team-ink">Approved Agents</h2>
-      <p className="mt-1.5 text-sm text-team-muted">Agencies assigned to you as their Relationship Manager.</p>
+      <PageHeader
+        icon={LuUserCheck}
+        title="Approved Agents"
+        subtitle="Agencies assigned to you as their Relationship Manager."
+        count={!loading ? agencies.length : null}
+      />
 
-      <TextInput placeholder="Search by agency name…" value={search} onChange={(e) => setSearch(e.target.value)} className="mt-5 max-w-sm" />
+      <TextInput placeholder="Search by agency name…" value={search} onChange={(e) => setSearch(e.target.value)} className="mb-5 max-w-sm" />
 
-      {loading && <p className="mt-4 text-xs text-team-muted">Loading…</p>}
       <ErrorText>{error}</ErrorText>
+      {loading && <LoadingState />}
       {!loading && filtered.length === 0 && !error && (
-        <Card className="mt-4">
-          <p className="text-sm text-team-muted">No approved agencies assigned to you yet.</p>
-        </Card>
+        <EmptyState icon={LuBuilding2}>No approved agencies assigned to you yet.</EmptyState>
       )}
 
-      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {filtered.map((a) => (
-          <Card key={a.id}>
+          <Card key={a.id} className="transition hover:-translate-y-0.5 hover:shadow-lg">
             <div className="flex items-start justify-between gap-2">
-              <div className="text-sm font-bold text-team-ink">{a.name}</div>
+              <div className="flex items-start gap-2.5">
+                <span className="mt-0.5 flex h-8 w-8 flex-none items-center justify-center rounded-lg bg-team-accent-soft text-team-accent-dark">
+                  <LuBuilding2 size={15} />
+                </span>
+                <div>
+                  <div className="text-sm font-bold text-team-ink">{a.name}</div>
+                  <p className="text-xs text-team-muted">
+                    {a.type?.replace(/_/g, ' ')} · {a.country}
+                  </p>
+                </div>
+              </div>
               {a.tier && <Badge tone={TIER_TONE[a.tier] || 'grey'}>{a.tier}</Badge>}
             </div>
-            <p className="mt-1.5 text-xs text-team-muted">
-              {a.type?.replace(/_/g, ' ')} · {a.country}
-            </p>
-            <div className="mt-3 space-y-1 text-[11px] text-team-muted">
-              <div>Owner: {a.ownerName || '—'} {a.ownerEmail ? `(${a.ownerEmail})` : ''}</div>
+            <div className="mt-3 space-y-1 border-t border-team-line-light pt-3 text-[11px] text-team-muted">
+              <div className="flex items-center gap-1.5">
+                <LuMail size={12} className="flex-none" />
+                {a.ownerName || '—'} {a.ownerEmail ? `(${a.ownerEmail})` : ''}
+              </div>
               <div>Credit limit: {a.creditLimit ?? '—'} {a.currencyPreference || ''}</div>
             </div>
           </Card>
