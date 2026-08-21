@@ -239,3 +239,36 @@ export function resolveItemMeta(type, id, { hotels, tours, transfers, activities
   if (type === 'activity') return (activities || []).find((a) => a.id === id) || null;
   return null;
 }
+
+// True if any day of a composed itinerary ({dayNumber, notes, items:
+// [{type, ...}]}) carries an item of this type — e.g. itineraryHasItemType
+// in admin/components/InclusionExclusionList.jsx, hoisted here so read-only
+// pages outside admin (agent/pages/DepartureDetail.jsx) can check "does this
+// package actually include a hotel/tour/activity" too, without importing an
+// admin component into the agent tree.
+export function itineraryHasItemType(itinerary, type) {
+  return (itinerary || []).some((day) => (day.items || []).some((item) => item.type === type));
+}
+
+// "2N Phuket | 2N Krabi" style nights-by-city summary for the departure
+// detail page's basic-details card (DepartureDetail.jsx) — walks the
+// composed itinerary day by day, takes each day's city from whichever item
+// on that day actually carries one (only hotel items do — see
+// composeItinerary's `city: ref?.city ?? null` in fdPackages.model.js), and
+// tallies how many days land on each city, in first-seen order. A day with
+// no hotel item (and so no resolvable city) is simply not counted — it
+// doesn't break the running city or introduce an "unknown" entry.
+export function computeNightsByCity(itinerary) {
+  const order = [];
+  const nightsByCity = new Map();
+  for (const day of itinerary || []) {
+    const city = (day.items || []).map((item) => item.city).find(Boolean);
+    if (!city) continue;
+    if (!nightsByCity.has(city)) {
+      nightsByCity.set(city, 0);
+      order.push(city);
+    }
+    nightsByCity.set(city, nightsByCity.get(city) + 1);
+  }
+  return order.map((city) => ({ city, nights: nightsByCity.get(city) }));
+}

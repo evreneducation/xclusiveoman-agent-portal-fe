@@ -1,6 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import { FieldLabel, TextInput } from './ui.jsx';
+import { itineraryHasItemType } from '../../shared/itinerary/index.js';
+
+// True if any day of a composed itinerary ({dayNumber, notes, items: [{type,
+// ...}]}) carries an item of this type — drives both pages' Inclusions
+// default-seed (hotel -> "Accommodation", tour -> "Tours", activity ->
+// "Activity"; meals are checked separately since they're a package-wide
+// add-on, not a per-day itinerary item). Re-exported for backward
+// compatibility — FdPackageEditor.jsx and QuoteInboxDetail.jsx both still
+// import this from here. The actual implementation now lives in
+// shared/itinerary/index.js so read-only pages outside admin
+// (agent/pages/DepartureDetail.jsx) can use it too, without importing an
+// admin component into the agent tree.
+export { itineraryHasItemType };
 
 // Shared by QuoteInboxDetail.jsx (Custom FIT quotes) and FdPackageEditor.jsx
 // (FD Packages) — both persist Inclusions/Exclusions as one newline-
@@ -17,15 +30,6 @@ export function linesFromText(text) {
 
 export function textFromLines(lines) {
   return lines.join('\n');
-}
-
-// True if any day of a composed itinerary ({dayNumber, notes, items: [{type,
-// ...}]}) carries an item of this type — drives both pages' Inclusions
-// default-seed (hotel -> "Accommodation", tour -> "Tours", activity ->
-// "Activity"; meals are checked separately since they're a package-wide
-// add-on, not a per-day itinerary item).
-export function itineraryHasItemType(itinerary, type) {
-  return (itinerary || []).some((day) => (day.items || []).some((item) => item.type === type));
 }
 
 // Inclusions/Exclusions editor — a combobox sourced from the Product

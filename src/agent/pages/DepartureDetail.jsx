@@ -1,97 +1,486 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  LuArrowLeft,
+  LuArrowRight,
+  LuBusFront,
+  LuCalendarDays,
+  LuCamera,
+  LuCheck,
+  LuChevronDown,
+  LuChevronLeft,
+  LuChevronRight,
+  LuCircleCheck,
+  LuCircleX,
+  LuClipboardList,
+  LuClock,
+  LuCompass,
+  LuHotel,
+  LuMap,
+  LuMapPin,
+  LuMessageCircle,
+  LuPlane,
+  LuPlaneLanding,
+  LuPlaneTakeoff,
+  LuPlus,
+  LuSparkles,
+  LuTicket,
+  LuUtensils,
+  LuX,
+} from 'react-icons/lu';
 import { api } from '../api/client.js';
-import { Badge, Button, Card, Checkbox, ErrorText, Select, StarRating, TextInput } from '../components/ui.jsx';
-import { formatCurrency, formatShortDate, getFdBadges, getSeatsLeft } from '../../shared/fdPackage/index.js';
-import { ITINERARY_ITEM_TYPE_META } from '../../shared/itinerary/index.js';
+import { Button, Card, Checkbox, ErrorText, Select, TextInput } from '../components/ui.jsx';
+import { formatCurrency, formatShortDate, getSeatsLeft } from '../../shared/fdPackage/index.js';
+import { computeNightsByCity, ITINERARY_ITEM_TYPE_META, itineraryHasItemType } from '../../shared/itinerary/index.js';
 
-// Airbnb/Booking.com-style photo grid — one large hero image on the left,
-// up to 4 more actual images on the right (no empty placeholder tiles for
-// slots the package doesn't have — the grid adapts to however many exist).
-// The back button overlays the top-left corner of the hero image instead of
-// sitting as a separate line above the gallery.
-const GRID_LAYOUT_BY_COUNT = {
-  1: 'grid-cols-1 grid-rows-1',
-  2: 'grid-cols-1 grid-rows-2',
-  3: 'grid-cols-2 grid-rows-2',
-  4: 'grid-cols-2 grid-rows-2',
-};
+// This page's own primary-CTA treatment — a deep-teal-to-brand-teal gradient
+// (the exact same stops AgentLayout.jsx's sidebar already uses, just
+// left-to-right instead of top-to-bottom) laid over Button's shared "accent"
+// variant via className, the same override pattern already used everywhere
+// on this page (e.g. Card's default border/rounding). This only restyles
+// Button instances here — it doesn't touch ui.jsx, so every other page's
+// gold/coral "accent" buttons are unaffected.
+const PRIMARY_CTA_CLASS = 'border-transparent bg-gradient-to-r from-[#083A36] via-[#0B4F4A] to-[#0D9488] hover:opacity-90';
 
-function HeroGallery({ heroImageUrl, images, onBack }) {
-  const gallery = [heroImageUrl, ...(images || [])].filter(Boolean);
-  const main = gallery[0];
-  const gridImages = gallery.slice(1, 5); // only real images, capped at 4
-  const extraCount = Math.max(gallery.length - 5, 0);
-
-  const backButton = (
-    <button
-      type="button"
-      onClick={onBack}
-      aria-label="Back to departures"
-      className="absolute left-4 top-4 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-white text-agent-ink shadow-lg transition hover:scale-105 hover:bg-agent-panel"
-    >
-      ←
-    </button>
-  );
-
-  if (!main) {
-    return (
-      <div className="relative mb-6 flex h-72 items-center justify-center rounded-2xl bg-[repeating-linear-gradient(45deg,#eee,#eee_6px,#f7f7f7_6px,#f7f7f7_12px)] font-mono text-[10px] text-[#999] sm:h-96">
-        {backButton}
-        No image
-      </div>
-    );
-  }
+// Full-screen photo viewer opened by clicking any hero/carousel image below
+// — `gallery` is the full ordered image list, `index` the one currently
+// shown. Prev/Next wrap around; Escape or clicking the backdrop closes it.
+// Body scroll is suspended while open so the page behind it can't scroll.
+function Lightbox({ gallery, index, onClose, onNavigate }) {
+  useEffect(() => {
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    function handleKeyDown(e) {
+      if (e.key === 'Escape') onClose();
+      else if (e.key === 'ArrowLeft') onNavigate(-1);
+      else if (e.key === 'ArrowRight') onNavigate(1);
+    }
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [onClose, onNavigate]);
 
   return (
     <div
-      className={`relative mb-6 grid h-72 gap-1.5 overflow-hidden rounded-2xl shadow-lg shadow-black/10 sm:h-96 ${
-        gridImages.length > 0 ? 'grid-cols-2' : 'grid-cols-1'
-      }`}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 sm:p-10"
+      onClick={onClose}
     >
-      <div className="group relative h-full overflow-hidden">
-        <img
-          src={main}
-          alt=""
-          className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
-        />
-        {backButton}
-      </div>
-      {gridImages.length > 0 && (
-        <div className={`grid h-full gap-1.5 ${GRID_LAYOUT_BY_COUNT[gridImages.length]}`}>
-          {gridImages.map((url, i) => (
-            <div
-              key={url + i}
-              className={`group relative h-full w-full overflow-hidden bg-agent-panel ${
-                // 3 real images: first spans the full width on its own row,
-                // the other two split the row below it.
-                gridImages.length === 3 && i === 0 ? 'col-span-2' : ''
-              }`}
-            >
-              <img src={url} alt="" className="h-full w-full object-cover transition duration-300 group-hover:scale-105" />
-              {i === gridImages.length - 1 && extraCount > 0 && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/50 text-sm font-semibold text-white backdrop-blur-[1px]">
-                  +{extraCount} photos
-                </div>
-              )}
-            </div>
-          ))}
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Close"
+        className="absolute right-4 top-4 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
+      >
+        <LuX size={20} />
+      </button>
+      {gallery.length > 1 && (
+        <>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onNavigate(-1);
+            }}
+            aria-label="Previous photo"
+            className="absolute left-2 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20 sm:left-4"
+          >
+            <LuChevronLeft size={22} />
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onNavigate(1);
+            }}
+            aria-label="Next photo"
+            className="absolute right-2 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20 sm:right-4"
+          >
+            <LuChevronRight size={22} />
+          </button>
+        </>
+      )}
+      <img
+        src={gallery[index]}
+        alt=""
+        onClick={(e) => e.stopPropagation()}
+        className="max-h-full max-w-full rounded-lg object-contain shadow-2xl"
+      />
+      {gallery.length > 1 && (
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-black/50 px-3 py-1 text-xs font-semibold text-white">
+          {index + 1} / {gallery.length}
         </div>
       )}
     </div>
   );
 }
 
+// Airbnb/Booking.com-style photo grid — one large hero image on the left,
+// the package's carousel images on the right (FD packages require a minimum
+// of 4 — see MIN_CAROUSEL_IMAGES in fdPackagesAdmin.controller.js — but a
+// package can have more; a 2x2-visible, horizontally scrollable strip
+// (overflow-x-auto) is how the rest become reachable instead of hard-capping
+// at 4 and hiding them). Hovering a photo zooms/dims it slightly and clicking
+// any photo (hero or grid) opens it full-screen in the Lightbox above.
+//
+// min-h-0/min-w-0 on every grid item below is load-bearing, not decoration:
+// grid (and flex) items default to `min-height: auto`/`min-width: auto`,
+// which lets an <img>'s own intrinsic aspect ratio force its cell (and the
+// row/column track itself) to grow past the fixed h-72/h-96 the container
+// asks for. overflow-hidden alone doesn't stop that growth — it only clips
+// what's already an inflated box — so object-cover ends up scaling the
+// image up to cover that bigger box, which is exactly what reads as
+// "zoomed in". Pinning min-h-0/min-w-0 overrides that default so the
+// fixed container height actually wins and object-cover only ever covers
+// the real, intended cell size.
+// The back button overlays the top-left corner of the hero image instead of
+// sitting as a separate line above the gallery.
+function HeroGallery({ heroImageUrl, images, onBack }) {
+  const [lightboxIndex, setLightboxIndex] = useState(null);
+  const gridImages = images || [];
+  const gallery = [heroImageUrl, ...gridImages].filter(Boolean);
+  const main = heroImageUrl || gridImages[0];
+
+  function navigateLightbox(delta) {
+    setLightboxIndex((i) => (i == null ? i : (i + delta + gallery.length) % gallery.length));
+  }
+
+  return (
+    <>
+      <div className="relative mb-6 grid h-72 grid-cols-2 grid-rows-1 gap-1.5 overflow-hidden rounded-2xl shadow-lg shadow-black/10 sm:h-96">
+        <div className="relative h-full min-h-0 w-full min-w-0 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setLightboxIndex(0)}
+            aria-label="View photo"
+            className="group block h-full w-full cursor-zoom-in"
+          >
+            <img
+              src={main}
+              alt=""
+              className="h-full w-full object-cover object-center transition duration-300 group-hover:scale-105 group-hover:brightness-95"
+            />
+          </button>
+          <button
+            type="button"
+            onClick={onBack}
+            aria-label="Back to departures"
+            className="absolute left-4 top-4 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-white text-agent-ink shadow-lg transition hover:scale-105 hover:bg-agent-panel"
+          >
+            <LuArrowLeft size={18} />
+          </button>
+        </div>
+        <div className="grid h-full min-h-0 w-full min-w-0 grid-flow-col grid-rows-2 auto-cols-[46%] gap-1.5 overflow-x-auto scroll-smooth sm:auto-cols-[47%]">
+          {gridImages.map((url, i) => (
+            <button
+              key={url + i}
+              type="button"
+              onClick={() => setLightboxIndex(i + 1)}
+              aria-label="View photo"
+              className="group h-full min-h-0 w-full min-w-0 cursor-zoom-in overflow-hidden bg-agent-panel"
+            >
+              <img
+                src={url}
+                alt=""
+                className="h-full w-full object-cover object-center transition duration-300 group-hover:scale-110 group-hover:brightness-95"
+              />
+            </button>
+          ))}
+        </div>
+      </div>
+      {lightboxIndex != null && (
+        <Lightbox
+          gallery={gallery}
+          index={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+          onNavigate={navigateLightbox}
+        />
+      )}
+    </>
+  );
+}
+
 // Consistent section header — small accent icon chip + bold title — used
 // across every content card below so the page reads as one designed system
-// instead of a stack of generic boxes.
-function SectionHeading({ icon, children }) {
+// instead of a stack of generic boxes. `icon` is a react-icons component
+// (e.g. LuHotel), not an emoji, matching FlightDetailsSection's own icon chip.
+function SectionHeading({ icon: Icon, children }) {
   return (
     <div className="mb-3 flex items-center gap-2.5">
-      <span className="flex h-8 w-8 flex-none items-center justify-center rounded-lg bg-agent-accent-soft text-base">
-        {icon}
+      <span className="flex h-8 w-8 flex-none items-center justify-center rounded-lg bg-agent-accent-soft text-agent-accent-dark">
+        <Icon size={16} />
       </span>
       <h3 className="text-sm font-bold uppercase tracking-wide text-agent-ink">{children}</h3>
+    </div>
+  );
+}
+
+// Read-only mirror of the admin's Flights section (FdPackageEditor.jsx) —
+// `flights` is resolveFlightDetails' output (fdPackages.model.js): null
+// whenever the package doesn't have a flight included directly (either no
+// flights at all, or they're only offered as add-ons), in which case this
+// renders nothing at all rather than an empty/placeholder card. Collapsible
+// like every other section here, default open, framer-motion height/opacity
+// animation instead of an abrupt show/hide.
+function FlightDetailsSection({ flights }) {
+  const [open, setOpen] = useState(true);
+  if (!flights) return null;
+
+  const legs = [
+    {
+      key: 'onward',
+      label: 'Onward',
+      Icon: LuPlaneTakeoff,
+      data: flights.onward,
+      iconBg: 'bg-agent-panel',
+      iconColor: 'text-agent-ink-dark',
+    },
+    {
+      key: 'return',
+      label: 'Return',
+      Icon: LuPlaneLanding,
+      data: flights.return,
+      iconBg: 'bg-agent-accent-soft',
+      iconColor: 'text-agent-accent-dark',
+    },
+  ];
+
+  return (
+    <Card className="border-white rounded-2xl p-5 sm:p-6">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center justify-between gap-2 text-left"
+      >
+        <div className="flex items-center gap-2.5">
+          <span className="flex h-8 w-8 flex-none items-center justify-center rounded-lg bg-agent-accent-soft text-agent-accent-dark">
+            <LuPlane size={16} />
+          </span>
+          <h3 className="text-sm font-bold uppercase tracking-wide text-agent-ink">Flight Details</h3>
+        </div>
+        <LuChevronDown
+          size={18}
+          className={`flex-none text-agent-muted transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+        />
+      </button>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.25, ease: 'easeInOut' }}
+            className="overflow-hidden"
+          >
+            <div className="mt-4 grid grid-cols-1 gap-3 border-t border-agent-line-light pt-4 sm:grid-cols-2">
+              {legs.map(({ key, label, Icon, data, iconBg, iconColor }) => (
+                <div key={key} className="rounded-xl bg-agent-bg px-4 py-4">
+                  <div className="mb-3 flex items-center gap-2">
+                    <span
+                      className={`flex h-8 w-8 flex-none items-center justify-center rounded-full ${iconBg} ${iconColor}`}
+                    >
+                      <Icon size={16} />
+                    </span>
+                    <span className="text-sm font-bold text-agent-ink">{label}</span>
+                  </div>
+                  <div className="text-sm font-semibold text-agent-ink">{data.name}</div>
+                  <div className="mt-0.5 text-xs text-agent-muted">
+                    {data.source} → {data.destination}
+                  </div>
+                  <div className="mt-2 flex items-center gap-1.5 text-xs font-medium text-agent-muted">
+                    <LuClock size={13} className="flex-none" />
+                    Departure: {formatShortDate(data.departureDate)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </Card>
+  );
+}
+
+// Quick-glance tabbed summary below the Flights section — Hotel/Sightseeing/
+// Meals/Transfer, one "Overview" panel visible at a time. Deliberately a
+// lighter-weight teaser than the full sections further down the page
+// (HotelInformation, ItineraryTimeline, MealsSummary): it doesn't replace
+// them, it just gives the agent a fast first look before scrolling.
+// Sightseeing pulls real tour/activity items straight off the itinerary — a
+// day with neither simply isn't shown, nothing invented for it. Meals/
+// Transfer only render a real, data-backed line ("Meals as per itinerary" /
+// "Transfers included") when the package actually has one — there's no
+// per-meal or per-transfer detail to summarize here (that's what the
+// existing Meals section below is for), so this stays a flat yes/no read.
+const OVERVIEW_TABS = [
+  { key: 'hotel', label: 'Hotel', icon: LuHotel },
+  { key: 'sightseeing', label: 'Sightseeing', icon: LuCamera },
+  { key: 'meals', label: 'Meals', icon: LuUtensils },
+  { key: 'transfer', label: 'Transfer', icon: LuBusFront },
+];
+
+function ItineraryOverviewTabs({ departure }) {
+  const [activeTab, setActiveTab] = useState('hotel');
+
+  const sightseeingItems = (departure.itinerary || [])
+    .flatMap((day) => day.items || [])
+    .filter((item) => item.type === 'tour' || item.type === 'activity');
+  const hasMeals = (departure.meals || []).length > 0;
+  const hasTransfers = itineraryHasItemType(departure.itinerary, 'transfer');
+
+  return (
+    <Card className="border-white rounded-2xl p-5 sm:p-6">
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+        {OVERVIEW_TABS.map(({ key, label, icon: Icon }) => {
+          const active = activeTab === key;
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setActiveTab(key)}
+              className={`flex items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left transition-colors ${
+                active ? 'border-agent-accent bg-agent-panel' : 'border-agent-line-light bg-white hover:bg-agent-panel/60'
+              }`}
+            >
+              <span
+                className={`flex h-9 w-9 flex-none items-center justify-center rounded-full border ${
+                  active
+                    ? 'border-agent-accent bg-white text-agent-ink-dark'
+                    : 'border-agent-line-light bg-agent-bg text-agent-muted'
+                }`}
+              >
+                <Icon size={16} />
+              </span>
+              <div>
+                <div className="text-sm font-bold text-agent-ink">{label}</div>
+                <div className="text-[11px] font-medium text-agent-accent-dark">Tap to view</div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="mt-4 rounded-xl bg-agent-bg p-4">
+        {activeTab === 'hotel' && <HotelOverviewPanel hotel={departure.hotel} />}
+        {activeTab === 'sightseeing' && <SightseeingOverviewPanel items={sightseeingItems} />}
+        {activeTab === 'meals' && <MealsOverviewPanel hasMeals={hasMeals} />}
+        {activeTab === 'transfer' && <TransferOverviewPanel hasTransfers={hasTransfers} />}
+      </div>
+    </Card>
+  );
+}
+
+function HotelOverviewPanel({ hotel }) {
+  if (!hotel) {
+    return <p className="text-sm text-agent-muted">No hotel selected for this package.</p>;
+  }
+  return (
+    <div>
+      <div className="mb-3 text-sm font-bold text-agent-ink">Hotel Overview</div>
+      <div className="max-w-xs overflow-hidden rounded-xl border border-agent-line-light bg-white shadow-sm">
+        <div className="relative h-40 w-full bg-agent-panel">
+          {hotel.images?.[0] ? (
+            <img src={hotel.images[0]} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center text-agent-muted">
+              <LuHotel size={28} />
+            </div>
+          )}
+          {hotel.category != null && (
+            <span className="absolute right-2 top-2 flex items-center gap-1 rounded-md bg-white px-2 py-1 text-xs font-bold text-agent-ink shadow-sm">
+              {hotel.category} <span className="text-agent-accent">★</span>
+            </span>
+          )}
+        </div>
+        <div className="p-3">
+          <div className="text-sm font-bold text-agent-ink">{hotel.name}</div>
+          <div className="mt-1 flex items-center gap-1 text-xs text-agent-muted">
+            <LuMapPin size={12} className="flex-none text-agent-accent-dark" /> {hotel.city || '—'}
+          </div>
+          {hotel.boardBasisOptions?.[0] && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              <span className="rounded-full bg-agent-panel px-2.5 py-1 text-[11px] font-medium text-agent-ink">
+                Meal: {hotel.boardBasisOptions[0]}
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SightseeingOverviewPanel({ items }) {
+  if (items.length === 0) {
+    return <p className="text-sm text-agent-muted">No sightseeing included in this package.</p>;
+  }
+  return (
+    <div>
+      <div className="mb-3 text-sm font-bold text-agent-ink">Sightseeing Overview</div>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        {items.map((item, idx) => (
+          <div
+            key={`${item.type}:${item.id}:${idx}`}
+            className="overflow-hidden rounded-xl border border-agent-line-light bg-white shadow-sm"
+          >
+            <div className="h-24 w-full bg-agent-panel">
+              {item.images?.[0] ? (
+                <img src={item.images[0]} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-agent-muted">
+                  <LuCamera size={20} />
+                </div>
+              )}
+            </div>
+            <div className="p-2.5">
+              <div className="text-xs font-bold leading-snug text-agent-ink">{item.name || 'Untitled'}</div>
+              {item.city && (
+                <div className="mt-1 flex items-center gap-1 text-[11px] text-agent-muted">
+                  <LuMapPin size={11} className="flex-none text-agent-accent-dark" /> {item.city}
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MealsOverviewPanel({ hasMeals }) {
+  return (
+    <div>
+      <div className="mb-2 text-sm font-bold text-agent-ink">Meals Overview</div>
+      {hasMeals ? (
+        <ul className="space-y-1 text-sm text-agent-ink">
+          <li className="flex items-center gap-2">
+            <span className="h-1.5 w-1.5 flex-none rounded-full bg-agent-ink-dark" />
+            Meals as per itinerary
+          </li>
+        </ul>
+      ) : (
+        <p className="text-sm text-agent-muted">No meals included in this package.</p>
+      )}
+    </div>
+  );
+}
+
+function TransferOverviewPanel({ hasTransfers }) {
+  return (
+    <div>
+      <div className="mb-2 text-sm font-bold text-agent-ink">Transfer Overview</div>
+      {hasTransfers ? (
+        <ul className="space-y-1 text-sm text-agent-ink">
+          <li className="flex items-center gap-2">
+            <span className="h-1.5 w-1.5 flex-none rounded-full bg-agent-ink-dark" />
+            Transfers included
+          </li>
+        </ul>
+      ) : (
+        <p className="text-sm text-agent-muted">No transfers included in this package.</p>
+      )}
     </div>
   );
 }
@@ -99,8 +488,8 @@ function SectionHeading({ icon, children }) {
 function HotelInformation({ hotel }) {
   if (!hotel) return null;
   return (
-    <Card className="border-white">
-      <SectionHeading icon="🏨">Hotel information</SectionHeading>
+    <Card className="border-white rounded-2xl p-5 sm:p-6">
+      <SectionHeading icon={LuHotel}>Hotel information</SectionHeading>
       <div className="flex gap-4">
         {hotel.images?.[0] && (
           <img
@@ -130,31 +519,55 @@ function HotelInformation({ hotel }) {
   );
 }
 
-// Vertical timeline instead of a plain stacked list — each day gets a
-// numbered node connected by a line, which reads far more like a premium
-// travel itinerary than plain "Day 1 — ..." text rows. `itinerary` is the
-// wire shape composed server-side (fdPackages.model.js's composeItinerary):
+// Each day's one-line title, shown collapsed next to its "Day N" pill —
+// the admin's own day note when there is one (e.g. "Arrival In Phu Quoc"),
+// else the first named itinerary item on that day (e.g. a tour called
+// "North Island Tour"), else a plain fallback. `itinerary` is the wire shape
+// composed server-side (fdPackages.model.js's composeItinerary):
 // [{ dayNumber, notes, items: [{ type, id, name, city, note }] }] — the same
-// shape the admin's Day-by-day itinerary builder now saves (see
-// admin/pages/FdPackageEditor.jsx), not the old single free-text
-// `description` per day.
-function ItineraryTimeline({ itinerary }) {
+// shape the admin's Day-by-day itinerary builder saves (see
+// admin/pages/FdPackageEditor.jsx).
+function dayTitle(day) {
+  if (day.notes?.trim()) return day.notes.trim();
+  const firstNamed = (day.items || []).find((item) => item.name);
+  return firstNamed?.name || 'Itinerary details';
+}
+
+// Each day is its own collapsible row (default collapsed) rather than an
+// always-expanded vertical timeline — matches the reference layout: a "Day
+// N" pill + bold title, a +/× toggle on the right, and the day's full item
+// list only mounted once expanded. Same framer-motion height/opacity
+// animation as every other collapsible section on this page.
+function ItineraryDayRow({ day }) {
+  const [open, setOpen] = useState(false);
   return (
-    <Card className="border-white">
-      <SectionHeading icon="🗺️">Day-by-day itinerary</SectionHeading>
-      <div className="space-y-0">
-        {itinerary.map((day, idx) => (
-          <div key={day.dayNumber} className="relative flex gap-4 pb-5 last:pb-0">
-            {idx < itinerary.length - 1 && (
-              <span className="absolute left-[15px] top-8 h-[calc(100%-1.25rem)] w-px bg-agent-line-light" />
-            )}
-            <span className="relative z-10 flex h-8 w-8 flex-none items-center justify-center rounded-full bg-agent-ink text-xs font-bold text-white shadow-sm">
-              {day.dayNumber}
-            </span>
-            <div className="flex-1 pt-1 text-sm text-agent-ink">
-              <div className="mb-1.5 text-xs font-bold uppercase tracking-wide text-agent-accent-dark">Day {day.dayNumber}</div>
-              {day.items?.length > 0 && (
-                <div className="mb-2 space-y-1">
+    <div className="overflow-hidden rounded-xl border border-agent-line-light">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-agent-panel/60"
+      >
+        <span className="flex-none rounded-full border border-agent-line bg-agent-panel px-3 py-1 text-xs font-bold text-agent-ink-dark">
+          Day {day.dayNumber}
+        </span>
+        <span className="flex-1 text-sm font-bold text-agent-ink">{dayTitle(day)}</span>
+        <LuPlus
+          size={16}
+          className={`flex-none text-agent-muted transition-transform duration-200 ${open ? 'rotate-45' : ''}`}
+        />
+      </button>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.25, ease: 'easeInOut' }}
+            className="overflow-hidden"
+          >
+            <div className="border-t border-agent-line-light px-4 py-3">
+              {day.items?.length > 0 ? (
+                <div className="space-y-1">
                   {day.items.map((item, itemIdx) => {
                     const meta = ITINERARY_ITEM_TYPE_META[item.type];
                     return (
@@ -177,11 +590,24 @@ function ItineraryTimeline({ itinerary }) {
                     );
                   })}
                 </div>
+              ) : (
+                <p className="text-sm text-agent-muted">Nothing planned yet.</p>
               )}
-              {day.notes && <p>{day.notes}</p>}
-              {!day.items?.length && !day.notes && <p className="text-agent-muted">Nothing planned yet.</p>}
             </div>
-          </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function ItineraryTimeline({ itinerary }) {
+  return (
+    <Card className="border-white rounded-2xl p-5 sm:p-6">
+      <SectionHeading icon={LuMap}>Day-by-day itinerary</SectionHeading>
+      <div className="space-y-2.5">
+        {itinerary.map((day) => (
+          <ItineraryDayRow key={day.dayNumber} day={day} />
         ))}
       </div>
     </Card>
@@ -194,8 +620,8 @@ function ItineraryTimeline({ itinerary }) {
 function MealsSummary({ meals }) {
   if (!meals?.length) return null;
   return (
-    <Card className="border-white">
-      <SectionHeading icon="🍽️">Meals</SectionHeading>
+    <Card className="border-white rounded-2xl p-5 sm:p-6">
+      <SectionHeading icon={LuUtensils}>Meals</SectionHeading>
       <div className="space-y-2">
         {meals.map((meal) => (
           <div key={meal.type} className="flex items-center justify-between rounded-xl border border-agent-line-light px-3.5 py-2.5">
@@ -234,8 +660,8 @@ function InclusionsExclusionsSummary({ inclusions, exclusions }) {
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
       {inclusionLines.length > 0 && (
-        <Card className="border-white">
-          <SectionHeading icon="✅">Inclusions</SectionHeading>
+        <Card className="border-white rounded-2xl p-5 sm:p-6">
+          <SectionHeading icon={LuCircleCheck}>Inclusions</SectionHeading>
           <ul className="list-disc space-y-1 pl-5 text-sm text-agent-ink">
             {inclusionLines.map((line, idx) => (
               <li key={idx}>{line}</li>
@@ -244,8 +670,8 @@ function InclusionsExclusionsSummary({ inclusions, exclusions }) {
         </Card>
       )}
       {exclusionLines.length > 0 && (
-        <Card className="border-white">
-          <SectionHeading icon="🚫">Exclusions</SectionHeading>
+        <Card className="border-white rounded-2xl p-5 sm:p-6">
+          <SectionHeading icon={LuCircleX}>Exclusions</SectionHeading>
           <ul className="list-disc space-y-1 pl-5 text-sm text-agent-ink">
             {exclusionLines.map((line, idx) => (
               <li key={idx}>{line}</li>
@@ -253,6 +679,95 @@ function InclusionsExclusionsSummary({ inclusions, exclusions }) {
           </ul>
         </Card>
       )}
+    </div>
+  );
+}
+
+// Category heading + icon per add-on `type` (departures.controller.js's
+// getDeparture derives this from whichever of activity_id/tour_id/
+// transfer_id/flight_id is set on the fd_addons row) — fixed display order
+// regardless of what order the API happens to return them in, so the
+// section always reads Activities -> Tours -> Transfers -> Flights.
+const ADDON_CATEGORY_META = {
+  activity: { label: 'Activities', icon: LuSparkles },
+  tour: { label: 'Tours', icon: LuCompass },
+  transfer: { label: 'Transfers', icon: LuBusFront },
+  flight: { label: 'Flights', icon: LuPlane },
+};
+const ADDON_CATEGORY_ORDER = ['activity', 'tour', 'transfer', 'flight'];
+
+function groupAddonsByType(addons) {
+  const groups = {};
+  for (const addon of addons || []) {
+    const type = addon.type || 'activity';
+    (groups[type] ||= []).push(addon);
+  }
+  return groups;
+}
+
+// One collapsible category (e.g. "Tours (2)") inside the Add-ons card below
+// — click the heading to reveal that category's own selectable add-ons,
+// same collapsible/framer-motion pattern as every other section on this page.
+function AddonCategorySection({ type, addons, selectedAddonIds, onToggle }) {
+  const [open, setOpen] = useState(false);
+  const meta = ADDON_CATEGORY_META[type] || { label: 'Other', icon: LuTicket };
+  const Icon = meta.icon;
+  const selectedCount = addons.filter((a) => selectedAddonIds.includes(a.id)).length;
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-agent-line-light">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-agent-panel/60"
+      >
+        <span className="flex h-8 w-8 flex-none items-center justify-center rounded-lg bg-agent-accent-soft text-agent-accent-dark">
+          <Icon size={16} />
+        </span>
+        <span className="flex-1 text-sm font-bold text-agent-ink">
+          {meta.label} <span className="font-normal text-agent-muted">({addons.length})</span>
+        </span>
+        {selectedCount > 0 && (
+          <span className="flex-none rounded-full bg-agent-panel px-2 py-0.5 text-[10px] font-semibold text-agent-ink-dark">
+            {selectedCount} selected
+          </span>
+        )}
+        <LuChevronDown
+          size={16}
+          className={`flex-none text-agent-muted transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+        />
+      </button>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.25, ease: 'easeInOut' }}
+            className="overflow-hidden"
+          >
+            <div className="space-y-2 border-t border-agent-line-light px-4 py-3">
+              {addons.map((addon) => (
+                <div
+                  key={addon.id}
+                  className={`rounded-xl border px-3.5 py-2.5 transition-colors ${
+                    selectedAddonIds.includes(addon.id)
+                      ? 'border-agent-accent bg-agent-accent-soft/50'
+                      : 'border-agent-line-light hover:bg-agent-panel'
+                  }`}
+                >
+                  <Checkbox
+                    checked={selectedAddonIds.includes(addon.id)}
+                    onChange={() => onToggle(addon.id)}
+                    label={addon.name}
+                    hint={`+ ${formatCurrency(addon.pricePerPax)} pp`}
+                  />
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -395,59 +910,91 @@ export default function DepartureDetail() {
     return <div className="p-8 text-sm text-agent-muted">Loading…</div>;
   }
 
-  const badges = getFdBadges(departure);
+  // "2N Phuket | 2N Krabi" — each day's city comes from whichever item on
+  // that day actually carries one (hotel items only), tallied in first-seen
+  // order. See computeNightsByCity in shared/itinerary/index.js.
+  const nightsByCity = computeNightsByCity(departure.itinerary);
+  // Earliest upcoming departure's location (listDepartureDates orders by
+  // date ascending) — the "Ex-{location}" badge next to the title.
+  const exLocation = departure.departureDates?.[0]?.location;
+  // Add-ons grouped by category (Activities/Tours/Transfers/Flights) for the
+  // "Included tours, transfers & add-on activities" section below.
+  const addonsByType = groupAddonsByType(departure.addons);
+  // Stay/Sightseeing stay derived straight from the itinerary (same as
+  // before) — everything else in this row comes from the admin-curated
+  // Inclusions list (InclusionExclusionList.jsx), minus whatever already
+  // reads as "Accommodation" or "Activity" since those two concepts are
+  // exactly what Stay/Sightseeing already show; a line like "Tour as per
+  // itinerary" or "VISA" isn't covered by either tick, so it's shown
+  // verbatim instead. Meals gets its own tick too, straight off whether the
+  // package actually has any (departure.meals, same check MealsSummary uses).
+  const ALREADY_SHOWN_INCLUSION_KEYWORDS = ['accommodation', 'activity'];
+  const extraInclusionTicks = splitLines(departure.inclusions).filter(
+    (line) => !ALREADY_SHOWN_INCLUSION_KEYWORDS.some((kw) => line.toLowerCase().includes(kw))
+  );
+  const tickItems = [
+    itineraryHasItemType(departure.itinerary, 'hotel') && 'Stay Included',
+    (itineraryHasItemType(departure.itinerary, 'tour') || itineraryHasItemType(departure.itinerary, 'activity')) &&
+      'Sightseeing Included',
+    ...extraInclusionTicks,
+    departure.meals?.length > 0 && 'Meals Included',
+  ].filter(Boolean);
 
   return (
-    <div className="mx-auto max-w-6xl p-5 lg:p-8">
+    <div className="mx-auto w-full max-w-[1600px] p-5 lg:p-8 xl:p-10">
       <HeroGallery
         heroImageUrl={departure.heroImageUrl}
         images={departure.images}
         onBack={() => navigate('/agent/departures')}
       />
 
-      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[1.4fr_1fr]">
-        <div className="space-y-5">
-          {/* Title block */}
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[1.7fr_1fr]">
+        <div className="space-y-6">
+          {/* Basic details card */}
           <div className="rounded-2xl border border-white bg-white p-5 shadow-sm sm:p-6">
-            {badges.length > 0 && (
-              <div className="mb-3 flex flex-wrap gap-1.5">
-                {badges.map((b) => (
-                  <Badge key={b.label} tone={b.tone}>
-                    {b.label}
-                  </Badge>
-                ))}
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <h1 className="text-2xl font-bold leading-tight text-agent-ink sm:text-3xl">{departure.title}</h1>
+                  {exLocation && (
+                    <span className="rounded-md bg-agent-accent-soft px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-agent-accent-dark">
+                      Ex-{exLocation}
+                    </span>
+                  )}
+                </div>
+                {nightsByCity.length > 0 && (
+                  <p className="mt-1.5 text-sm text-agent-muted">
+                    {nightsByCity.map((c) => `${c.nights}N ${c.city}`).join(' | ')}
+                  </p>
+                )}
+                {tickItems.length > 0 && (
+                  <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-agent-line-light pt-4">
+                    {tickItems.map((label) => (
+                      <span
+                        key={label}
+                        className="inline-flex items-center gap-1.5 rounded-full bg-agent-panel px-3 py-1.5 text-xs font-semibold text-agent-ink"
+                      >
+                        <LuCheck size={13} className="flex-none text-agent-ink-dark" /> {label}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
-            )}
-            <h1 className="text-2xl font-bold leading-tight text-agent-ink sm:text-3xl">{departure.title}</h1>
-            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-agent-muted">
-              <span className="inline-flex items-center gap-1">📍 {departure.destination || 'Destination TBA'}</span>
-              <span className="text-agent-line">•</span>
-              <span className="inline-flex items-center gap-1">🗓️ {departure.duration}</span>
-              {departure.theme && (
-                <>
-                  <span className="text-agent-line">•</span>
-                  <span className="inline-flex items-center gap-1">✨ {departure.theme}</span>
-                </>
-              )}
+              <div className="flex-none rounded-xl bg-agent-panel px-5 py-4 text-right">
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-agent-muted">Starting at</div>
+                <div className="text-2xl font-bold text-agent-ink">{formatCurrency(departure.ratePerPax)}</div>
+                <div className="text-xs text-agent-muted">per person</div>
+              </div>
             </div>
-            <div className="mt-3 flex flex-wrap items-center gap-3">
-              <span className="rounded-full bg-agent-panel px-3 py-1">
-                <StarRating rating={Number(departure.rating) || 0} reviewCount={departure.reviewCount} />
-              </span>
-              {departure.suitableAgeMin != null && (
-                <span className="text-xs text-agent-muted">👥 Suitable ages {departure.suitableAgeMin}+</span>
-              )}
-            </div>
-            {departure.shortDescription && (
-              <p className="mt-4 border-t border-agent-line-light pt-4 text-sm leading-relaxed text-agent-ink">
-                {departure.shortDescription}
-              </p>
-            )}
           </div>
 
+          <FlightDetailsSection flights={departure.flights} />
+
+          <ItineraryOverviewTabs departure={departure} />
+
           {departure.departureDates?.length > 0 && (
-            <Card className="border-white">
-              <SectionHeading icon="📅">Departure dates &amp; availability</SectionHeading>
+            <Card className="border-white rounded-2xl p-5 sm:p-6">
+              <SectionHeading icon={LuCalendarDays}>Departure dates &amp; availability</SectionHeading>
               <div className="flex flex-wrap gap-2">
                 {departure.departureDates.map((d) => (
                   <span
@@ -476,32 +1023,24 @@ export default function DepartureDetail() {
           <HotelInformation hotel={departure.hotel} />
 
           {departure.addons?.length > 0 && (
-            <Card className="border-white">
-              <SectionHeading icon="🎟️">Included tours, transfers &amp; add-on activities</SectionHeading>
-              <div className="space-y-2">
-                {departure.addons.map((addon) => (
-                  <div
-                    key={addon.id}
-                    className={`rounded-xl border px-3.5 py-2.5 transition-colors ${
-                      selectedAddonIds.includes(addon.id)
-                        ? 'border-agent-accent bg-agent-accent-soft/50'
-                        : 'border-agent-line-light hover:bg-agent-panel'
-                    }`}
-                  >
-                    <Checkbox
-                      checked={selectedAddonIds.includes(addon.id)}
-                      onChange={() => toggleAddon(addon.id)}
-                      label={addon.name}
-                      hint={`+ ${formatCurrency(addon.pricePerPax)} pp`}
-                    />
-                  </div>
+            <Card className="border-white rounded-2xl p-5 sm:p-6">
+              <SectionHeading icon={LuTicket}>Included tours, transfers &amp; add-on activities</SectionHeading>
+              <div className="grid grid-cols-1 items-start gap-2.5 sm:grid-cols-2">
+                {ADDON_CATEGORY_ORDER.filter((type) => addonsByType[type]?.length > 0).map((type) => (
+                  <AddonCategorySection
+                    key={type}
+                    type={type}
+                    addons={addonsByType[type]}
+                    selectedAddonIds={selectedAddonIds}
+                    onToggle={toggleAddon}
+                  />
                 ))}
               </div>
             </Card>
           )}
 
-          <Card className="border-white">
-            <SectionHeading icon="📋">Booking terms</SectionHeading>
+          <Card className="border-white rounded-2xl p-5 sm:p-6">
+            <SectionHeading icon={LuClipboardList}>Booking terms</SectionHeading>
             <ul className="space-y-2 text-sm leading-relaxed text-agent-ink">
               <li className="flex gap-2">
                 <span className="text-agent-accent-dark">•</span>
@@ -517,10 +1056,10 @@ export default function DepartureDetail() {
 
         {/* Booking panel — sticky so it stays in view while the left column scrolls */}
         <div className="lg:sticky lg:top-6">
-          <Card className="border-white shadow-lg shadow-black/5">
+          <Card className="border-white shadow-lg shadow-black/5 rounded-2xl p-5 sm:p-6">
             {bookingResult ? (
               <div className="space-y-2 text-sm">
-                <p className="font-semibold text-[#227647]">
+                <p className="font-semibold text-agent-ink-dark">
                   Booking {bookingResult.status === 'waitlisted' ? 'waitlisted' : 'created'}!
                 </p>
                 <p>Status: {bookingResult.status}</p>
@@ -531,11 +1070,19 @@ export default function DepartureDetail() {
                   </p>
                 )}
                 {bookingResult.status === 'waitlisted' ? (
-                  <Button variant="accent" className="w-full" onClick={() => navigate('/agent/dashboard')}>
+                  <Button
+                    variant="accent"
+                    className={`w-full ${PRIMARY_CTA_CLASS}`}
+                    onClick={() => navigate('/agent/dashboard')}
+                  >
                     Back to dashboard
                   </Button>
                 ) : (
-                  <Button variant="accent" className="w-full" onClick={() => navigate(`/agent/payments/${bookingResult.id}`)}>
+                  <Button
+                    variant="accent"
+                    className={`w-full ${PRIMARY_CTA_CLASS}`}
+                    onClick={() => navigate(`/agent/payments/${bookingResult.id}`)}
+                  >
                     Continue to Payment
                   </Button>
                 )}
@@ -556,9 +1103,9 @@ export default function DepartureDetail() {
                   <button
                     type="button"
                     onClick={handleBackToDetails}
-                    className="text-xs font-semibold text-agent-accent-dark hover:underline"
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-agent-accent-dark hover:underline"
                   >
-                    ← Back
+                    <LuArrowLeft size={13} /> Back
                   </button>
                 </div>
 
@@ -590,7 +1137,19 @@ export default function DepartureDetail() {
                 </div>
 
                 <div className="my-3 space-y-1.5 rounded-xl bg-agent-panel px-3.5 py-3 text-sm">
-                  <div className="flex justify-between font-bold text-agent-ink">
+                  <div className="flex justify-between">
+                    <span className="text-agent-muted">Net rate ({formatCurrency(departure.ratePerPax)} × {pax} pax)</span>
+                    <span className="font-medium text-agent-ink">{formatCurrency(departure.ratePerPax * pax)}</span>
+                  </div>
+                  {selectedAddonIds.length > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-agent-muted">
+                        Add-ons ({selectedAddonIds.length} selected × {pax} pax)
+                      </span>
+                      <span className="font-medium text-agent-ink">+ {formatCurrency(addonTotalPerPax * pax)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between border-t border-agent-line-light pt-1.5 text-base font-bold text-agent-ink">
                     <span>Total</span>
                     <span>{formatCurrency(total)}</span>
                   </div>
@@ -600,7 +1159,7 @@ export default function DepartureDetail() {
 
                 <Button
                   variant="accent"
-                  className="mb-2 w-full py-3 text-sm"
+                  className={`mb-2 w-full gap-1.5 py-3 text-sm ${PRIMARY_CTA_CLASS}`}
                   disabled={submitting}
                   onClick={handleConfirmBooking}
                 >
@@ -654,13 +1213,15 @@ export default function DepartureDetail() {
 
                 <div className="my-3 space-y-1.5 rounded-xl bg-agent-panel px-3.5 py-3 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-agent-muted">Net rate</span>
-                    <span className="font-medium text-agent-ink">{formatCurrency(departure.ratePerPax)} pp</span>
+                    <span className="text-agent-muted">Net rate ({formatCurrency(departure.ratePerPax)} × {pax} pax)</span>
+                    <span className="font-medium text-agent-ink">{formatCurrency(departure.ratePerPax * pax)}</span>
                   </div>
                   {selectedAddonIds.length > 0 && (
                     <div className="flex justify-between">
-                      <span className="text-agent-muted">Add-ons ({selectedAddonIds.length} selected)</span>
-                      <span className="font-medium text-agent-ink">+ {formatCurrency(addonTotalPerPax)} pp</span>
+                      <span className="text-agent-muted">
+                        Add-ons ({selectedAddonIds.length} selected × {pax} pax)
+                      </span>
+                      <span className="font-medium text-agent-ink">+ {formatCurrency(addonTotalPerPax * pax)}</span>
                     </div>
                   )}
                   <div className="flex justify-between border-t border-agent-line-light pt-1.5 text-base font-bold text-agent-ink">
@@ -673,14 +1234,14 @@ export default function DepartureDetail() {
 
                 <Button
                   variant="accent"
-                  className="mb-2 w-full py-3 text-sm"
+                  className={`mb-2 w-full gap-1.5 py-3 text-sm ${PRIMARY_CTA_CLASS}`}
                   disabled={!departureDateId}
                   onClick={handleBookNowClick}
                 >
-                  Book Now
+                  Book Now <LuArrowRight size={15} />
                 </Button>
-                <Button className="mb-3 w-full" onClick={handleEnquireNow}>
-                  💬 Enquire Now
+                <Button className="mb-3 w-full gap-1.5" onClick={handleEnquireNow}>
+                  <LuMessageCircle size={15} /> Enquire Now
                 </Button>
               </>
             )}
