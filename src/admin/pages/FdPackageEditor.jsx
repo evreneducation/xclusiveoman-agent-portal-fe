@@ -50,6 +50,12 @@ function HeroImageUpload({ packageId, value, onUploaded }) {
   );
 }
 
+// Mandatory gallery size for an FD package's own carousel — enforced here
+// (the hint below) and again in handlePublish's findCarouselImagesError, the
+// same "frontend-only gate checked again right before Publish" pattern
+// findItineraryPublishError already uses for the day-by-day itinerary.
+const MIN_CAROUSEL_IMAGES = 4;
+
 function CarouselImagesUpload({ packageId, images, onChange }) {
   async function upload(files) {
     const formData = new FormData();
@@ -66,6 +72,7 @@ function CarouselImagesUpload({ packageId, images, onChange }) {
   return (
     <ImageUpload
       label="Carousel images"
+      required
       multiple
       value={images}
       onChange={onChange}
@@ -73,6 +80,11 @@ function CarouselImagesUpload({ packageId, images, onChange }) {
       onRemove={remove}
       disabled={!packageId}
       disabledHint="Setting up…"
+      hint={
+        images.length < MIN_CAROUSEL_IMAGES
+          ? `Upload at least ${MIN_CAROUSEL_IMAGES} images (${images.length}/${MIN_CAROUSEL_IMAGES} so far). The first image is used as the primary listing photo.`
+          : undefined
+      }
     />
   );
 }
@@ -1160,12 +1172,27 @@ export default function FdPackageEditor() {
     return null;
   }
 
+  // Mirrors findItineraryPublishError just above — checked once more, right
+  // before Publish, since CarouselImagesUpload's own inline hint only warns
+  // rather than blocking anything on its own.
+  function findCarouselImagesError() {
+    if ((form.images || []).length < MIN_CAROUSEL_IMAGES) {
+      return `Add at least ${MIN_CAROUSEL_IMAGES} carousel images before publishing.`;
+    }
+    return null;
+  }
+
   // Task 2 — "Save as Draft" is gone (autosave above covers it); this is now
   // just the one remaining explicit action, publishing.
   async function handlePublish() {
     const itineraryError = findItineraryPublishError();
     if (itineraryError) {
       toast.error(itineraryError);
+      return;
+    }
+    const carouselImagesError = findCarouselImagesError();
+    if (carouselImagesError) {
+      toast.error(carouselImagesError);
       return;
     }
     setSubmitting('published');
