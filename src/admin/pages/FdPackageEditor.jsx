@@ -842,13 +842,122 @@ function ItineraryManager({ fdPackageId, itinerary, duration, onChange, onComput
   );
 }
 
+function flightOptionLabel(flight) {
+  const route = [flight.source, flight.destination].filter(Boolean).join(' → ');
+  const date = flight.departure_date ? new Date(flight.departure_date).toLocaleDateString() : null;
+  // Price (0065_flights_price.sql) — shown here for both callers of this
+  // label: FlightsSection's own dropdown (where it *does* fold into the net
+  // rate, see its onComputedRateChange effect below) and AddonsManager's
+  // checkbox list (where it's a separate opt-in a-la-carte charge instead,
+  // same as every other add-on — never both at once, since the two are
+  // mutually exclusive per flight direction).
+  const price = flight.price != null ? formatCurrency(flight.price) : null;
+  return [flight.name, route, date, price].filter(Boolean).join(' — ');
+}
+
+// Flights section, rendered directly below the day-by-day itinerary builder
+// — flightsEnabled true locks in exactly one Onward + one Return flight
+// directly on the package (onwardFlightId/returnFlightId); false leaves both
+// unset, and AddonsManager further down offers the same Onward/Return
+// catalogs as ordinary checkbox add-ons instead (hidden whenever this is
+// on) — same "included directly, or offered as an opt-in add-on, never
+// both" split Visa/Meals already established just below this section.
+// Unchecking clears both picks, same "off wipes the value" behavior those
+// use too, so a stale onward/return id can never linger once the section is
+// switched off. Priced into the net rate exactly the same way Visa/Meals are
+// (onComputedRateChange, mirroring AddonsManager's own live-preview effect)
+// — but only while flightsEnabled: a flight offered as an add-on instead is
+// deliberately never folded in here (mirrors resolveRatePerPax/
+// resolveFlightsPerPax on the backend, the actual source of truth this is a
+// client-side preview of).
+function FlightsSection({ form, update, onComputedRateChange }) {
+  const [onwardFlights, setOnwardFlights] = useState([]);
+  const [returnFlights, setReturnFlights] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    Promise.all([api.get('/flights?isFlightOnward=true'), api.get('/flights?isFlightOnward=false')])
+      .then(([onward, ret]) => {
+        setOnwardFlights(onward.flights || []);
+        setReturnFlights(ret.flights || []);
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  const flightsPerPax = form.flightsEnabled
+    ? Number(onwardFlights.find((f) => f.id === form.onwardFlightId)?.price || 0) +
+      Number(returnFlights.find((f) => f.id === form.returnFlightId)?.price || 0)
+    : 0;
+
+  useEffect(() => {
+    if (loading) return;
+    onComputedRateChange?.(flightsPerPax);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flightsPerPax, loading]);
+
+  function toggle(enabled) {
+    update('flightsEnabled', enabled);
+    if (!enabled) {
+      update('onwardFlightId', null);
+      update('returnFlightId', null);
+    }
+  }
+
+  return (
+    <Card label="Flights" className="border-white">
+      <Checkbox
+        checked={!!form.flightsEnabled}
+        onChange={toggle}
+        label="Include flights directly on this package"
+        hint="Off makes these flights available as an add-on instead."
+      />
+
+      {form.flightsEnabled &&
+        (loading ? (
+          <p className="mt-3 text-xs text-muted">Loading flights…</p>
+        ) : (
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <FieldLabel>Onward flight</FieldLabel>
+              <Select value={form.onwardFlightId || ''} onChange={(e) => update('onwardFlightId', e.target.value || null)}>
+                <option value="">Select an onward flight…</option>
+                {onwardFlights.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {flightOptionLabel(f)}
+                  </option>
+                ))}
+              </Select>
+              {onwardFlights.length === 0 && (
+                <p className="mt-1 text-[11px] text-muted">No onward flights in the catalog yet.</p>
+              )}
+            </div>
+            <div>
+              <FieldLabel>Return flight</FieldLabel>
+              <Select value={form.returnFlightId || ''} onChange={(e) => update('returnFlightId', e.target.value || null)}>
+                <option value="">Select a return flight…</option>
+                {returnFlights.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {flightOptionLabel(f)}
+                  </option>
+                ))}
+              </Select>
+              {returnFlights.length === 0 && (
+                <p className="mt-1 text-[11px] text-muted">No return flights in the catalog yet.</p>
+              )}
+            </div>
+          </div>
+        ))}
+    </Card>
+  );
+}
+
 // Task 5 — one catalog-item checkbox per row, straight from the Product
 // Catalog; checking it creates a real fd_addons row (price read
 // automatically off the item, never typed by hand), unchecking removes it.
 // Reused for Activities/Tours/Transfers below (AddonsManager) — only the
 // catalog list, id field, and display price field differ per type.
-const ADDON_ID_FIELD = { activity: 'activityId', tour: 'tourId', transfer: 'transferId' };
-const ADDON_PRICE_FIELD = { activity: 'price_per_pax', tour: 'price', transfer: 'price' };
+const ADDON_ID_FIELD = { activity: 'activityId', tour: 'tourId', transfer: 'transferId', flight: 'flightId' };
+const ADDON_PRICE_FIELD = { activity: 'price_per_pax', tour: 'price', transfer: 'price', flight: 'price' };
 
 function AddonCheckboxGroup({ type, label, catalog, addons, onToggle }) {
   const idField = ADDON_ID_FIELD[type];
@@ -895,16 +1004,28 @@ function AddonsManager({ fdPackageId, addons, onChange, form, update, duration, 
   const [activities, setActivities] = useState([]);
   const [tours, setTours] = useState([]);
   const [transfers, setTransfers] = useState([]);
+  const [onwardFlights, setOnwardFlights] = useState([]);
+  const [returnFlights, setReturnFlights] = useState([]);
   const [meals, setMeals] = useState([]);
   const [visa, setVisa] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([api.get('/activities'), api.get('/tours'), api.get('/transfers'), api.get('/meals'), api.get('/visas')])
-      .then(([a, t, tr, m, v]) => {
+    Promise.all([
+      api.get('/activities'),
+      api.get('/tours'),
+      api.get('/transfers'),
+      api.get('/flights?isFlightOnward=true'),
+      api.get('/flights?isFlightOnward=false'),
+      api.get('/meals'),
+      api.get('/visas'),
+    ])
+      .then(([a, t, tr, fOnward, fReturn, m, v]) => {
         setActivities(a.activities || []);
         setTours(t.tours || []);
         setTransfers(tr.transfers || []);
+        setOnwardFlights(fOnward.flights || []);
+        setReturnFlights(fReturn.flights || []);
         setMeals(m.meals || []);
         setVisa((v.visas || [])[0] || null);
       })
@@ -952,6 +1073,33 @@ function AddonsManager({ fdPackageId, addons, onChange, form, update, duration, 
           <AddonCheckboxGroup type="activity" label="Activities" catalog={activities} addons={addons} onToggle={toggleAddon} />
           <AddonCheckboxGroup type="tour" label="Tours" catalog={tours} addons={addons} onToggle={toggleAddon} />
           <AddonCheckboxGroup type="transfer" label="Transfers" catalog={transfers} addons={addons} onToggle={toggleAddon} />
+          {/* Only shown when the Flights section above is off — flightsEnabled
+              already locks in one Onward + one Return flight directly on the
+              package, so offering the same two catalogs again here as
+              add-ons would be a duplicate, not an alternative. */}
+          {!form.flightsEnabled && (
+            <>
+              {/* AddonCheckboxGroup renders each catalog row's plain `name` as
+                  its checkbox label — remapped here to the fuller
+                  name/route/date label (flightOptionLabel) so two flights
+                  sharing a name are still distinguishable, without special-
+                  casing the shared component itself for one entity type. */}
+              <AddonCheckboxGroup
+                type="flight"
+                label="Onward flights"
+                catalog={onwardFlights.map((f) => ({ ...f, name: flightOptionLabel(f) }))}
+                addons={addons}
+                onToggle={toggleAddon}
+              />
+              <AddonCheckboxGroup
+                type="flight"
+                label="Return flights"
+                catalog={returnFlights.map((f) => ({ ...f, name: flightOptionLabel(f) }))}
+                addons={addons}
+                onToggle={toggleAddon}
+              />
+            </>
+          )}
 
           <div>
             <FieldLabel>Visa</FieldLabel>
@@ -1043,16 +1191,21 @@ export default function FdPackageEditor() {
   const [addons, setAddons] = useState([]);
   const [submitting, setSubmitting] = useState('');
   // Live "auto" net rate — the itinerary total (ItineraryManager) plus any
-  // included meals/visa (AddonsManager), each reported independently as
-  // they're edited so neither has to wait on the other or on a save round
-  // trip. Both start at null ("still calculating") rather than 0, so the
-  // Net rate field shows "—" instead of flashing ₹0 before either has
-  // finished its first pass. Kept separate from `form` so this never gets
-  // sent back to the server as if it were the override.
+  // included meals/visa (AddonsManager) plus any directly-included flights
+  // (FlightsSection, only while flightsEnabled — see its own comment), each
+  // reported independently as they're edited so none has to wait on the
+  // others or on a save round trip. All three start at null ("still
+  // calculating") rather than 0, so the Net rate field shows "—" instead of
+  // flashing ₹0 before all have finished their first pass. Kept separate
+  // from `form` so this never gets sent back to the server as if it were
+  // the override.
   const [itineraryRatePerPax, setItineraryRatePerPax] = useState(null);
   const [mealsRatePerPax, setMealsRatePerPax] = useState(null);
+  const [flightsRatePerPax, setFlightsRatePerPax] = useState(null);
   const computedRatePerPax =
-    itineraryRatePerPax == null || mealsRatePerPax == null ? null : itineraryRatePerPax + mealsRatePerPax;
+    itineraryRatePerPax == null || mealsRatePerPax == null || flightsRatePerPax == null
+      ? null
+      : itineraryRatePerPax + mealsRatePerPax + flightsRatePerPax;
 
   // Task 2 — auto-save to draft. `hasUserEditedRef` is set only by update()
   // below (a real, user-driven field change) — never by the initial load's
@@ -1182,6 +1335,16 @@ export default function FdPackageEditor() {
     return null;
   }
 
+  // Mirrors findCarouselImagesError just above — only fires once the
+  // Flights section is actually switched on; leaving it off is always fine
+  // (the flights just show up as add-ons in AddonsManager instead).
+  function findFlightsSelectionError() {
+    if (form.flightsEnabled && (!form.onwardFlightId || !form.returnFlightId)) {
+      return 'Select both an Onward and a Return flight, or turn off the Flights section, before publishing.';
+    }
+    return null;
+  }
+
   // Task 2 — "Save as Draft" is gone (autosave above covers it); this is now
   // just the one remaining explicit action, publishing.
   async function handlePublish() {
@@ -1193,6 +1356,11 @@ export default function FdPackageEditor() {
     const carouselImagesError = findCarouselImagesError();
     if (carouselImagesError) {
       toast.error(carouselImagesError);
+      return;
+    }
+    const flightsSelectionError = findFlightsSelectionError();
+    if (flightsSelectionError) {
+      toast.error(flightsSelectionError);
       return;
     }
     setSubmitting('published');
@@ -1234,6 +1402,11 @@ export default function FdPackageEditor() {
               onChange={setItinerary}
               onComputedRateChange={setItineraryRatePerPax}
             />
+            {/* Below the day-by-day itinerary, above Merchandising — either
+                lock in one Onward + one Return flight directly here, or
+                leave it off and let AddonsManager offer the same two
+                catalogs as add-ons instead. */}
+            <FlightsSection form={form} update={update} onComputedRateChange={setFlightsRatePerPax} />
             {/* Moved below the day-by-day itinerary builder (Task 3) — was
                 previously right after Basics. */}
             <MerchandisingForm form={form} update={update} />

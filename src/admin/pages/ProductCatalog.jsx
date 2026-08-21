@@ -748,7 +748,7 @@ const FLIGHT_DIRECTIONS = [
   { key: 'return', label: 'Return', isFlightOnward: false },
 ];
 
-const EMPTY_FLIGHT_FORM = { name: '', source: '', destination: '', departureDate: '' };
+const EMPTY_FLIGHT_FORM = { name: '', source: '', destination: '', departureDate: '', price: '' };
 
 // Today, as a "YYYY-MM-DD" string in the browser's local timezone — matches
 // what <input type="date"> reads/writes, so it can be used directly as a
@@ -787,7 +787,16 @@ function FlightForm({ isFlightOnward, directionLabel, onAdded }) {
     }
     setSubmitting(true);
     try {
-      const { flight } = await api.post('/admin/flights', { ...form, isFlightOnward });
+      // Optional, same as Tours/Transfers' own price fields — omitted
+      // entirely (rather than sent as an empty string) when left blank, so
+      // it can still be added and priced in later.
+      const payload = { ...form, isFlightOnward };
+      if (form.price !== '') {
+        payload.price = Number(form.price);
+      } else {
+        delete payload.price;
+      }
+      const { flight } = await api.post('/admin/flights', payload);
       onAdded(flight);
       setForm(EMPTY_FLIGHT_FORM);
     } catch (err) {
@@ -799,7 +808,7 @@ function FlightForm({ isFlightOnward, directionLabel, onAdded }) {
 
   return (
     <Card label={`Add ${directionLabel.toLowerCase()} flight`} className="mb-4 border-white">
-      <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+      <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-3 sm:grid-cols-5">
         <div>
           <FieldLabel>Flight name</FieldLabel>
           <TextInput value={form.name} onChange={(e) => update('name', e.target.value)} />
@@ -821,12 +830,16 @@ function FlightForm({ isFlightOnward, directionLabel, onAdded }) {
             onChange={(e) => update('departureDate', e.target.value)}
           />
         </div>
-        <div className="flex items-center gap-3 sm:col-span-4">
+        <div>
+          <FieldLabel>Price (₹)</FieldLabel>
+          <TextInput type="number" min="0" value={form.price} onChange={(e) => update('price', e.target.value)} />
+        </div>
+        <div className="flex items-center gap-3 sm:col-span-5">
           <Button variant="accent" type="submit" disabled={submitting}>
             {submitting ? 'Adding…' : `+ Add ${directionLabel.toLowerCase()} flight`}
           </Button>
         </div>
-        <div className="sm:col-span-4">
+        <div className="sm:col-span-5">
           <ErrorText>{error}</ErrorText>
         </div>
       </form>
@@ -884,7 +897,7 @@ function FlightsTab() {
         <p className="text-xs text-muted">No {active.label.toLowerCase()} flights added yet.</p>
       ) : (
         <Table
-          columns={['Flight', 'Source', 'Destination', 'Departure date', '']}
+          columns={['Flight', 'Source', 'Destination', 'Departure date', 'Price', '']}
           rows={items}
           renderRow={(flight) => (
             <tr key={flight.id} className="border-b border-line-light last:border-0">
@@ -892,6 +905,7 @@ function FlightsTab() {
               <td className="px-3 py-2">{flight.source}</td>
               <td className="px-3 py-2">{flight.destination}</td>
               <td className="px-3 py-2">{new Date(flight.departure_date).toLocaleDateString()}</td>
+              <td className="px-3 py-2">{flight.price != null ? `₹${flight.price}` : '—'}</td>
               <td className="px-3 py-2 text-right">
                 <button onClick={() => handleDelete(flight.id)} className="text-xs text-[#a5162d] hover:underline">
                   Delete
