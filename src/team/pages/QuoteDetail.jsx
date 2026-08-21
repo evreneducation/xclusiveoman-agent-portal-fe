@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
-import { Badge, Button, Card, ErrorText, FieldLabel, Select, Textarea, TextInput } from '../components/ui.jsx';
+import { Badge, Button, Card, ErrorText, FieldLabel, Select, Table, Textarea, TextInput } from '../components/ui.jsx';
+import { formatCurrency } from '../../shared/fdPackage/index.js';
+import { ITINERARY_ITEM_TYPE_META } from '../../shared/itinerary/index.js';
 
 const KINDS = {
   fit: {
@@ -17,6 +19,16 @@ const KINDS = {
     // line-item overrides (that stays the Admin Console's own Quote Details
     // screen) — a deliberately smaller surface than the full admin editor.
     costingOverrides: { hotelCost: null, tourCost: null, transferCost: null, extraCost: null, visaCost: null },
+    // Landing Cost Breakdown rows — same keys packageRequestsAdmin.controller.js
+    // #toDetail's own `costing` object already returns, just given a display label.
+    costingComponents: [
+      { key: 'hotels', label: 'Hotels' },
+      { key: 'tours', label: 'Tours' },
+      { key: 'transfers', label: 'Transfers' },
+      { key: 'extras', label: 'Extras' },
+      { key: 'meals', label: 'Meals' },
+      { key: 'visa', label: 'Visa' },
+    ],
   },
   mice: {
     label: 'MICE Request',
@@ -25,8 +37,87 @@ const KINDS = {
     publishEndpoint: (id) => `/admin/mice-rfqs/${id}/publish`,
     detailKey: 'miceRfq',
     costingOverrides: { hotelCost: null, toursActivitiesCost: null, transferCost: null, venueCost: null, miscellaneousCost: null },
+    costingComponents: [
+      { key: 'hotels', label: 'Hotels' },
+      { key: 'toursActivities', label: 'Tours & Activities' },
+      { key: 'transfers', label: 'Transfers' },
+      { key: 'venue', label: 'Venue' },
+      { key: 'miscellaneous', label: 'Miscellaneous' },
+    ],
   },
 };
+
+// One placed item within a day (hotel/tour/transfer/extra) — read-only,
+// mirrors the icon/label the agent/admin itinerary builders already use
+// (shared/itinerary/index.js's ITINERARY_ITEM_TYPE_META) so this reads as
+// the same data, not a re-interpretation of it.
+function ItineraryItemRow({ item }) {
+  const meta = ITINERARY_ITEM_TYPE_META[item.type];
+  return (
+    <div className="flex items-center gap-2 rounded-md border border-team-line-light bg-white px-2.5 py-1.5 text-xs">
+      <span className="flex-none">{meta?.icon}</span>
+      <div className="min-w-0 flex-1">
+        <div className="truncate font-semibold text-team-ink">{item.name || meta?.label || 'Item'}</div>
+        {(item.city || item.note) && (
+          <div className="truncate text-[10px] text-team-muted">{[item.city, item.note].filter(Boolean).join(' · ')}</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Day-by-Day Itinerary — read-only (editing the itinerary itself stays the
+// Admin Console's own job, same "smaller surface" split costingOverrides'
+// own comment above already documents for costing). `itinerary` is already
+// composed server-side (composeItinerary, packageRequestsAdmin.controller.js
+// / miceRfqsAdmin.controller.js) — this just renders it.
+function ItineraryCard({ itinerary }) {
+  if (!itinerary?.length) return null;
+  return (
+    <Card label="Day-by-Day Itinerary">
+      <div className="space-y-3">
+        {itinerary.map((day) => (
+          <div key={day.dayNumber} className="rounded-md border border-team-line-light p-3">
+            <div className="mb-2 text-xs font-bold uppercase tracking-wide text-team-accent-dark">Day {day.dayNumber}</div>
+            {day.items?.length > 0 && (
+              <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                {day.items.map((item, idx) => (
+                  <ItineraryItemRow key={`${item.type}:${item.id}:${idx}`} item={item} />
+                ))}
+              </div>
+            )}
+            {day.notes && <p className="mt-2 text-xs text-team-muted">{day.notes}</p>}
+            {!day.items?.length && !day.notes && <p className="text-xs text-team-muted">Nothing planned yet.</p>}
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+// Traveler list — FIT only (MICE has no per-traveler roster, just a group
+// size). Blind-pricing aside, this is the same traveler data the agent's
+// own PackageBuilder submitted (name/passport/DOB/room-share/child flag).
+function TravelersCard({ travelers }) {
+  if (!travelers?.length) return null;
+  return (
+    <Card label="Travelers">
+      <Table
+        columns={['Name', 'Passport No.', 'DOB', 'Room Share', 'Child']}
+        rows={travelers}
+        renderRow={(t) => (
+          <tr key={t.id} className="border-b border-team-line-light last:border-0">
+            <td className="px-3 py-2">{t.name}</td>
+            <td className="px-3 py-2">{t.passportNo || '—'}</td>
+            <td className="px-3 py-2">{t.dob || '—'}</td>
+            <td className="px-3 py-2">{t.roomShareGroup || '—'}</td>
+            <td className="px-3 py-2">{t.isChild ? 'Yes' : 'No'}</td>
+          </tr>
+        )}
+      />
+    </Card>
+  );
+}
 
 export default function QuoteDetail() {
   const { kind, id } = useParams();
@@ -121,8 +212,13 @@ export default function QuoteDetail() {
       <Card label="Request Details">
         <div className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-3">
           <div>
+            <div className="text-[10px] uppercase text-team-muted">Agency</div>
+            <div className="font-semibold text-team-ink">{quote.agencyName}</div>
+          </div>
+          <div>
             <div className="text-[10px] uppercase text-team-muted">Agent</div>
             <div className="font-semibold text-team-ink">{quote.agentName}</div>
+            {quote.agentEmail && <div className="text-[11px] text-team-muted">{quote.agentEmail}</div>}
           </div>
           <div>
             <div className="text-[10px] uppercase text-team-muted">Submitted</div>
@@ -158,12 +254,56 @@ export default function QuoteDetail() {
         </div>
       </Card>
 
-      <Card label="Costing & Markup">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <div>
-            <div className="text-[10px] uppercase text-team-muted">Landing Cost (auto)</div>
-            <div className="text-lg font-bold text-team-ink">{quote.landingCost != null ? quote.landingCost.toFixed(2) : '—'}</div>
+      {kind === 'mice' && (quote.hallCapacityNeeded || quote.seatingStyle || quote.avNeeds || quote.otherRequirements) && (
+        <Card label="Event Requirements">
+          <div className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
+            <div>
+              <div className="text-[10px] uppercase text-team-muted">Hall Capacity Needed</div>
+              <div className="font-semibold text-team-ink">{quote.hallCapacityNeeded ?? '—'}</div>
+            </div>
+            <div>
+              <div className="text-[10px] uppercase text-team-muted">Seating Style</div>
+              <div className="font-semibold text-team-ink">{quote.seatingStyle || '—'}</div>
+            </div>
+            <div className="sm:col-span-2">
+              <div className="text-[10px] uppercase text-team-muted">AV Needs</div>
+              <div className="text-team-ink">{quote.avNeeds || '—'}</div>
+            </div>
+            <div className="sm:col-span-2">
+              <div className="text-[10px] uppercase text-team-muted">Other Requirements</div>
+              <div className="text-team-ink">{quote.otherRequirements || '—'}</div>
+            </div>
           </div>
+        </Card>
+      )}
+
+      <ItineraryCard itinerary={quote.itinerary} />
+      {kind === 'fit' && <TravelersCard travelers={quote.travelers} />}
+
+      <Card label="Costing & Markup">
+        {/* Landing Cost Breakdown — same components/auto-totals the Admin
+            Console's own Quote Details screen shows (packageRequestsAdmin/
+            miceRfqsAdmin.controller.js's `costing` object); read-only here,
+            editing individual line items stays admin-only (see
+            costingOverrides' own comment above on why). */}
+        <div className="mb-4 space-y-1.5">
+          {cfg.costingComponents.map(({ key, label }) => {
+            const component = quote.costing?.[key];
+            if (!component) return null;
+            return (
+              <div key={key} className="flex items-center justify-between rounded-md border border-team-line-light px-3 py-2 text-xs">
+                <span className="text-team-muted">{label}</span>
+                <span className="font-semibold text-team-ink">{formatCurrency(component.total)}</span>
+              </div>
+            );
+          })}
+          <div className="flex items-center justify-between rounded-md bg-team-panel px-3 py-2 text-xs font-bold">
+            <span className="text-team-ink">Landing Cost (total)</span>
+            <span className="text-team-ink">{formatCurrency(quote.landingCost)}</span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <FieldLabel>Markup type</FieldLabel>
             <Select value={markupType} onChange={(e) => setMarkupType(e.target.value)} disabled={!canEdit}>
@@ -178,7 +318,7 @@ export default function QuoteDetail() {
         </div>
         <div className="mt-3">
           <div className="text-[10px] uppercase text-team-muted">Sell Price</div>
-          <div className="text-lg font-bold text-team-accent-dark">{quote.sellPrice != null ? quote.sellPrice.toFixed(2) : '—'}</div>
+          <div className="text-lg font-bold text-team-accent-dark">{formatCurrency(quote.sellPrice)}</div>
         </div>
 
         <div className="mt-4">

@@ -113,10 +113,60 @@ export function Table({ columns, rows, renderRow }) {
   );
 }
 
-export function EmptyState({ children }) {
+export function EmptyState({ icon: Icon, children }) {
   return (
-    <p className="rounded-lg border border-team-line-light bg-team-panel px-4 py-6 text-center text-xs text-team-muted">
-      {children}
-    </p>
+    <div className="rounded-lg border border-dashed border-team-line-light bg-team-panel/60 px-4 py-10 text-center">
+      {Icon && (
+        <span className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-white text-team-line shadow-sm">
+          <Icon size={20} />
+        </span>
+      )}
+      <p className="text-xs text-team-muted">{children}</p>
+    </div>
   );
+}
+
+// Consistent icon + title (+ live count) + subtitle header, used at the top
+// of every list page instead of each one hand-rolling its own bare <h2>/<p>
+// pair with no visual anchor.
+export function PageHeader({ icon: Icon, title, subtitle, count }) {
+  return (
+    <div className="mb-6 flex items-start gap-3.5">
+      {Icon && (
+        <span className="flex h-11 w-11 flex-none items-center justify-center rounded-xl bg-gradient-to-br from-team-accent to-[#E11D48] text-white shadow-md shadow-team-accent/25">
+          <Icon size={20} />
+        </span>
+      )}
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-2xl font-bold text-team-ink">{title}</h2>
+          {count != null && (
+            <span className="rounded-full bg-team-panel px-2.5 py-0.5 text-xs font-semibold text-team-muted">
+              {count}
+            </span>
+          )}
+        </div>
+        {subtitle && <p className="mt-1 text-sm text-team-muted">{subtitle}</p>}
+      </div>
+    </div>
+  );
+}
+
+// A handful of pulsing skeleton cards instead of bare "Loading…" text —
+// `rows` controls how many placeholders (roughly matching how many real
+// cards the page would show on a first load). `variant="list"` stacks them
+// full-width instead of gridding them, for pages that render a vertical
+// list of full-width rows (e.g. Support Tickets) rather than a card grid.
+export function LoadingState({ rows = 3, variant = 'grid' }) {
+  const placeholder = (i) => (
+    <div key={i} className="animate-pulse rounded-lg border border-team-line-light bg-white p-4">
+      <div className="h-3 w-2/3 rounded bg-team-panel" />
+      <div className="mt-2.5 h-2.5 w-1/2 rounded bg-team-panel" />
+      <div className="mt-4 h-2.5 w-1/3 rounded bg-team-panel" />
+    </div>
+  );
+  if (variant === 'list') {
+    return <div className="space-y-3">{Array.from({ length: rows }, (_, i) => placeholder(i))}</div>;
+  }
+  return <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">{Array.from({ length: rows }, (_, i) => placeholder(i))}</div>;
 }

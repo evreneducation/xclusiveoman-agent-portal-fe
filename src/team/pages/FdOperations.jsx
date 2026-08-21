@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { LuTruck } from 'react-icons/lu';
 import { api } from '../api/client.js';
-import { Badge, Card, ErrorText, TextInput } from '../components/ui.jsx';
+import { Badge, Card, EmptyState, ErrorText, LoadingState, PageHeader, TextInput } from '../components/ui.jsx';
 
 const STAGE_LABELS = {
   docs_collected: 'Documents Collected',
@@ -31,20 +32,20 @@ export default function FdOperations() {
 
   return (
     <div className="mx-auto max-w-5xl p-6 lg:p-10">
-      <h2 className="text-2xl font-bold text-team-ink">FD Operation</h2>
-      <p className="mt-1.5 text-sm text-team-muted">Track upcoming departures through to dispatch.</p>
+      <PageHeader
+        icon={LuTruck}
+        title="FD Operation"
+        subtitle="Track upcoming departures through to dispatch."
+        count={!loading ? departures.length : null}
+      />
 
-      <TextInput placeholder="Search by package…" value={search} onChange={(e) => setSearch(e.target.value)} className="mt-5 max-w-sm" />
+      <TextInput placeholder="Search by package…" value={search} onChange={(e) => setSearch(e.target.value)} className="mb-5 max-w-sm" />
 
-      {loading && <p className="mt-4 text-xs text-team-muted">Loading…</p>}
       <ErrorText>{error}</ErrorText>
-      {!loading && filtered.length === 0 && !error && (
-        <Card className="mt-4">
-          <p className="text-sm text-team-muted">No departures with bookings yet.</p>
-        </Card>
-      )}
+      {loading && <LoadingState />}
+      {!loading && filtered.length === 0 && !error && <EmptyState icon={LuTruck}>No departures with bookings yet.</EmptyState>}
 
-      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {filtered.map((d) => (
           <Link key={d.departureDateId} to={`/team/fd-operations/${d.departureDateId}`}>
             <Card className="h-full transition hover:-translate-y-0.5 hover:shadow-lg">

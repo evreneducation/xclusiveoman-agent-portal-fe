@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { LuHeadset } from 'react-icons/lu';
 import { api } from '../api/client.js';
-import { Badge, Card, ErrorText, TextInput } from '../components/ui.jsx';
+import { Badge, Card, EmptyState, ErrorText, LoadingState, PageHeader, TextInput } from '../components/ui.jsx';
 
 const STATUS_TONE = { open: 'amber', in_progress: 'amber', resolved: 'green', closed: 'grey' };
 const PRIORITY_TONE = { low: 'grey', medium: 'amber', high: 'red', urgent: 'red' };
@@ -31,20 +32,20 @@ export default function SupportTickets() {
 
   return (
     <div className="mx-auto max-w-5xl p-6 lg:p-10">
-      <h2 className="text-2xl font-bold text-team-ink">Support Tickets</h2>
-      <p className="mt-1.5 text-sm text-team-muted">Helpdesk tickets raised by your agencies.</p>
+      <PageHeader
+        icon={LuHeadset}
+        title="Support Tickets"
+        subtitle="Helpdesk tickets raised by your agencies."
+        count={!loading ? tickets.length : null}
+      />
 
-      <TextInput placeholder="Search by subject or agency…" value={search} onChange={(e) => setSearch(e.target.value)} className="mt-5 max-w-sm" />
+      <TextInput placeholder="Search by subject or agency…" value={search} onChange={(e) => setSearch(e.target.value)} className="mb-5 max-w-sm" />
 
-      {loading && <p className="mt-4 text-xs text-team-muted">Loading…</p>}
       <ErrorText>{error}</ErrorText>
-      {!loading && filtered.length === 0 && !error && (
-        <Card className="mt-4">
-          <p className="text-sm text-team-muted">No support tickets from your agencies.</p>
-        </Card>
-      )}
+      {loading && <LoadingState rows={2} variant="list" />}
+      {!loading && filtered.length === 0 && !error && <EmptyState icon={LuHeadset}>No support tickets from your agencies.</EmptyState>}
 
-      <div className="mt-4 space-y-3">
+      <div className="space-y-3">
         {filtered.map((t) => (
           <Link key={t.id} to={`/team/support-tickets/${t.id}`}>
             <Card className="transition hover:-translate-y-0.5 hover:shadow-lg">

@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { LuClipboardCheck } from 'react-icons/lu';
 import { api } from '../api/client.js';
-import { Badge, Card, ErrorText, TextInput } from '../components/ui.jsx';
+import { Badge, Card, EmptyState, ErrorText, LoadingState, PageHeader, TextInput } from '../components/ui.jsx';
 
 const STATUS_TONE = {
   confirmed: 'green',
@@ -36,25 +37,25 @@ export default function BookingsDocs() {
 
   return (
     <div className="mx-auto max-w-6xl p-6 lg:p-10">
-      <h2 className="text-2xl font-bold text-team-ink">Bookings & Docs</h2>
-      <p className="mt-1.5 text-sm text-team-muted">Fixed Group Departure bookings and traveler documents.</p>
+      <PageHeader
+        icon={LuClipboardCheck}
+        title="Bookings & Docs"
+        subtitle="Fixed Group Departure bookings and traveler documents."
+        count={!loading ? bookings.length : null}
+      />
 
       <TextInput
         placeholder="Search by agency or package…"
         value={search}
         onChange={(e) => setSearch(e.target.value)}
-        className="mt-5 max-w-sm"
+        className="mb-5 max-w-sm"
       />
 
-      {loading && <p className="mt-4 text-xs text-team-muted">Loading…</p>}
       <ErrorText>{error}</ErrorText>
-      {!loading && filtered.length === 0 && !error && (
-        <Card className="mt-4">
-          <p className="text-sm text-team-muted">No bookings found.</p>
-        </Card>
-      )}
+      {loading && <LoadingState />}
+      {!loading && filtered.length === 0 && !error && <EmptyState icon={LuClipboardCheck}>No bookings found.</EmptyState>}
 
-      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {filtered.map((b) => (
           <Link key={b.id} to={`/team/bookings-docs/${b.id}`}>
             <Card className="h-full transition hover:-translate-y-0.5 hover:shadow-lg">

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
@@ -9,6 +10,7 @@ import {
   LuUserCheck,
   LuHeadset,
   LuLogOut,
+  LuRefreshCw,
 } from 'react-icons/lu';
 import { useAuth } from '../context/AuthContext.jsx';
 import { Button } from './ui.jsx';
@@ -43,12 +45,27 @@ function isActive(pathname, to) {
 }
 
 export default function TeamLayout() {
-  const { user, logout, hasFeature, isLeadManager, socketConnected } = useAuth();
+  const { user, logout, hasFeature, isLeadManager, socketConnected, refreshUser } = useAuth();
   const { pathname } = useLocation();
   const navigate = useNavigate();
+  const [refreshing, setRefreshing] = useState(false);
 
   const navSource = isLeadManager ? LM_NAV : RM_NAV;
   const navItems = navSource.filter((item) => hasFeature(item.feature));
+
+  // Manual re-sync — an admin telling you "I just updated your access" is
+  // the one case the automatic window-focus refresh (AuthContext.jsx) can't
+  // catch on its own (you're already focused on this tab). Re-fetches
+  // /auth/me, which requireFeature's own 403 on the backend already proves
+  // is always checked fresh regardless of what this tab previously cached.
+  async function handleRefreshAccess() {
+    setRefreshing(true);
+    try {
+      await refreshUser();
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   return (
     <div className="flex min-h-screen bg-team-bg">
@@ -98,13 +115,32 @@ export default function TeamLayout() {
           })}
 
           {navItems.length === 0 && (
-            <p className="rounded-lg border border-white/10 bg-white/5 px-3 py-3 text-xs text-white/60">
-              No Access Features are enabled on your account yet. Contact an admin to request access.
-            </p>
+            <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-3 text-xs text-white/60">
+              <p>No Access Features are enabled on your account yet. Contact an admin to request access.</p>
+              <button
+                type="button"
+                onClick={handleRefreshAccess}
+                disabled={refreshing}
+                className="mt-2 inline-flex items-center gap-1.5 font-semibold text-white/80 hover:text-white disabled:opacity-50"
+              >
+                <LuRefreshCw size={12} className={refreshing ? 'animate-spin' : ''} />
+                {refreshing ? 'Checking…' : "Already granted access? Check again"}
+              </button>
+            </div>
           )}
         </nav>
 
         <div className="space-y-3 border-t border-white/10 px-4 py-5">
+          <button
+            type="button"
+            onClick={handleRefreshAccess}
+            disabled={refreshing}
+            title="Re-check your Access Features"
+            className="flex w-full items-center gap-2.5 rounded-xl bg-white/10 px-3.5 py-2.5 text-xs text-white/70 transition hover:bg-white/15 hover:text-white disabled:opacity-60"
+          >
+            <LuRefreshCw size={13} className={`flex-none ${refreshing ? 'animate-spin' : ''}`} />
+            {refreshing ? 'Checking for updates…' : 'Refresh access'}
+          </button>
           <div className="flex items-center gap-2.5 rounded-xl bg-white/10 px-3.5 py-2.5 text-xs">
             <span
               className={`h-2.5 w-2.5 flex-none rounded-full ${
