@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { LuLayoutGrid, LuSearchX } from 'react-icons/lu';
 import { api } from '../api/client.js';
-import { Badge, Card, ErrorText, TextInput } from '../components/ui.jsx';
+import { Badge, Card, EmptyState, ErrorText, LoadingState, PageHeader, TextInput } from '../components/ui.jsx';
 
 // Catalog browse — read-only. Editing the Product Catalog stays an
 // ops_admin+/content job in the full Admin Console; the Team Portal's
@@ -40,13 +41,9 @@ function CatalogGrid({ tab }) {
   return (
     <div className="space-y-4">
       <TextInput placeholder="Search…" value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-sm" />
-      {loading && <p className="text-xs text-team-muted">Loading…</p>}
       <ErrorText>{error}</ErrorText>
-      {!loading && filtered.length === 0 && !error && (
-        <Card>
-          <p className="text-sm text-team-muted">Nothing here yet.</p>
-        </Card>
-      )}
+      {loading && <LoadingState />}
+      {!loading && filtered.length === 0 && !error && <EmptyState icon={LuSearchX}>Nothing here yet.</EmptyState>}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {filtered.map((it) => (
           <Card key={it.id}>
@@ -76,16 +73,17 @@ export default function Catalog() {
 
   return (
     <div className="mx-auto max-w-6xl p-6 lg:p-10">
-      <h2 className="text-2xl font-bold text-team-ink">Catalog</h2>
-      <p className="mt-1.5 text-sm text-team-muted">Browse the live Product & MICE catalog.</p>
+      <PageHeader icon={LuLayoutGrid} title="Catalog" subtitle="Browse the live Product & MICE catalog." />
 
-      <div className="mt-5 flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2">
         {TABS.map((t) => (
           <button
             key={t.key}
             onClick={() => setSearchParams({ tab: t.key })}
-            className={`rounded-t-lg border border-b-0 px-4 py-2.5 text-xs font-semibold ${
-              tab.key === t.key ? 'border-team-line-light bg-team-panel text-team-ink' : 'border-transparent text-team-muted hover:text-team-ink'
+            className={`rounded-t-lg border border-b-0 px-4 py-2.5 text-xs font-semibold transition-colors ${
+              tab.key === t.key
+                ? 'border-team-line-light bg-team-panel text-team-accent-dark'
+                : 'border-transparent text-team-muted hover:text-team-ink'
             }`}
           >
             {t.label}
