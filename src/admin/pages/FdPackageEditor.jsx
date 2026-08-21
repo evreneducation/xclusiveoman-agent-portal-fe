@@ -1,5 +1,26 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  LuGift,
+  LuFootprints,
+  LuBriefcase,
+  LuCar,
+  LuPlaneTakeoff,
+  LuPlaneLanding,
+  LuChevronDown,
+  LuWallet,
+  LuFileText,
+  LuCalendarDays,
+  LuMap,
+  LuPlane,
+  LuTag,
+  LuShieldCheck,
+  LuUtensils,
+  LuShield,
+  LuIndianRupee,
+  LuCircleCheck,
+} from 'react-icons/lu';
 import { api } from '../api/client.js';
 import { useToast } from '../../shared/components/ToastProvider.jsx';
 import { Button, Card, Checkbox, FieldLabel, Select, Tag, Table, TextInput } from '../components/ui.jsx';
@@ -97,8 +118,9 @@ function CarouselImagesUpload({ packageId, images, onChange }) {
 // left a big empty gap under the theme tags. No field was removed, only
 // reordered/regrouped.
 function BasicsForm({ form, update, packageId }) {
+  const [open, setOpen] = useState(true);
   return (
-    <Card label="Basics" className="border-white">
+    <CollapsibleSection icon={LuFileText} title="Basics" open={open} onToggle={() => setOpen((o) => !o)}>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <FieldLabel>Title</FieldLabel>
@@ -133,7 +155,10 @@ function BasicsForm({ form, update, packageId }) {
           <TextInput value={form.shortDescription || ''} onChange={(e) => update('shortDescription', e.target.value)} />
         </div>
       </div>
-      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+      {/* Each its own full-width row (was a 2-col grid) — matches the
+          redesigned layout; the upload mechanics themselves (ImageUpload)
+          are unchanged. */}
+      <div className="mt-3 space-y-4">
         <HeroImageUpload packageId={packageId} value={form.heroImageUrl} onUploaded={(url) => update('heroImageUrl', url)} />
         {/* images (carousel) now lives in `form` like every other field —
             previously it had its own parallel `images` state that never
@@ -142,7 +167,7 @@ function BasicsForm({ form, update, packageId }) {
             the images the upload endpoint had already saved to the DB. */}
         <CarouselImagesUpload packageId={packageId} images={form.images || []} onChange={(imgs) => update('images', imgs)} />
       </div>
-    </Card>
+    </CollapsibleSection>
   );
 }
 
@@ -157,11 +182,12 @@ function BasicsForm({ form, update, packageId }) {
 // settings either — every booking now uses a fixed lead time server-side.
 function PricingForm({ form, update, computedRatePerPax }) {
   const [editing, setEditing] = useState(false);
+  const [open, setOpen] = useState(true);
   const isOverridden = form.ratePerPax != null;
   const effective = isOverridden ? form.ratePerPax : computedRatePerPax;
 
   return (
-    <Card label="Pricing" className="border-white">
+    <CollapsibleSection icon={LuIndianRupee} title="Pricing" open={open} onToggle={() => setOpen((o) => !o)}>
       <FieldLabel>Net rate (per pax)</FieldLabel>
       {editing ? (
         <div className="flex items-center gap-2">
@@ -195,19 +221,28 @@ function PricingForm({ form, update, computedRatePerPax }) {
       <p className="mt-1 text-[11px] text-muted">
         {isOverridden ? 'Manually set — saved with the rest of this form.' : 'Calculated automatically from the itinerary and meals above.'}
       </p>
-    </Card>
+    </CollapsibleSection>
   );
 }
 
-// Task 5 — the "Add-ons" enable-toggle that used to live here is gone: the
-// Add-ons & Inclusions section (AddonsManager) now always renders once a
-// package exists, since it's opt-in per item by checkbox anyway.
-function MerchandisingForm({ form, update }) {
+// Brought back — the master "Add-ons" toggle used to live here (pre-Task-5),
+// then was removed on the theory that Add-ons & Inclusions being opt-in per
+// item made a master switch redundant. Restored as the same frontend-only,
+// non-persisted gate it always was (addonsEnabled/onToggleAddons — see
+// FdPackageEditor's own state), seeded from whether this package already has
+// any addons on load: it only hides/shows the priced Activities/Tours/
+// Transfers/Onward/Return Flights cards inside AddonsManager (and the total
+// summary bar under them) — never deletes anything, and never touches Visa/
+// Meals, which stay visible either way since those are plain package
+// inclusions, not "priced add-ons" the way this toggle was ever scoped to.
+function MerchandisingForm({ form, update, addonsEnabled, onToggleAddons }) {
+  const [open, setOpen] = useState(true);
   return (
-    <Card label="Merchandising & discovery attributes" className="border-white">
+    <CollapsibleSection icon={LuTag} title="Merchandising & discovery attributes" open={open} onToggle={() => setOpen((o) => !o)}>
       <Checkbox checked={!!form.isFeatured} onChange={(v) => update('isFeatured', v)} label="Mark as Featured / Highly Recommended" />
       <Checkbox checked={!!form.isBestseller} onChange={(v) => update('isBestseller', v)} label="Mark as Bestseller" />
-    </Card>
+      <Checkbox checked={addonsEnabled} onChange={onToggleAddons} label="Add-ons" />
+    </CollapsibleSection>
   );
 }
 
@@ -217,6 +252,7 @@ function DepartureDatesManager({ fdPackageId, dates, onChange }) {
   const [seatsTotal, setSeatsTotal] = useState(20);
   const [location, setLocation] = useState('');
   const [locations, setLocations] = useState([]);
+  const [open, setOpen] = useState(true);
 
   useEffect(() => {
     api.get('/departure-locations').then((d) => setLocations(d.locations || []));
@@ -248,7 +284,7 @@ function DepartureDatesManager({ fdPackageId, dates, onChange }) {
   }
 
   return (
-    <Card label="Departure dates & inventory" className="border-white">
+    <CollapsibleSection icon={LuCalendarDays} title="Departure dates & inventory" open={open} onToggle={() => setOpen((o) => !o)}>
       <Table
         columns={['Date', 'Location', 'Seats', '']}
         rows={dates}
@@ -291,7 +327,7 @@ function DepartureDatesManager({ fdPackageId, dates, onChange }) {
           + Add departure date
         </Button>
       </div>
-    </Card>
+    </CollapsibleSection>
   );
 }
 
@@ -684,6 +720,7 @@ function ItineraryManager({ fdPackageId, itinerary, duration, onChange, onComput
   const [itineraryItems, setItineraryItems] = useState(() => deserializeItinerary(itinerary).items);
   const [dayNotes, setDayNotes] = useState(() => deserializeItinerary(itinerary).dayNotes);
   const [saving, setSaving] = useState(false);
+  const [open, setOpen] = useState(true);
 
   const [hotels, setHotels] = useState([]);
   const [tours, setTours] = useState([]);
@@ -790,7 +827,7 @@ function ItineraryManager({ fdPackageId, itinerary, duration, onChange, onComput
   }
 
   return (
-    <Card label="Day-by-day itinerary builder" className="border-white">
+    <CollapsibleSection icon={LuMap} title="Day-by-day itinerary builder" open={open} onToggle={() => setOpen((o) => !o)}>
       <p className="mb-3 text-[10px] text-muted">
         {dayCount
           ? `${dayCount} day${dayCount === 1 ? '' : 's'}, generated from Duration above. Each day picks its own hotel plus tours/transfers/activities straight from the catalog.`
@@ -838,7 +875,7 @@ function ItineraryManager({ fdPackageId, itinerary, duration, onChange, onComput
           {saving ? 'Saving…' : 'Save Itinerary'}
         </Button>
       </div>
-    </Card>
+    </CollapsibleSection>
   );
 }
 
@@ -904,13 +941,21 @@ function FlightsSection({ form, update, onComputedRateChange }) {
   }
 
   return (
-    <Card label="Flights" className="border-white">
-      <Checkbox
-        checked={!!form.flightsEnabled}
-        onChange={toggle}
-        label="Include flights directly on this package"
-        hint="Off makes these flights available as an add-on instead."
-      />
+    <Card className="border-white">
+      {/* Checkbox sits right in the header row (was its own row below, with
+          a long label + hint) — cleaner, and its meaning is obvious next to
+          the "Flights" title itself: checked = included directly on the
+          package; unchecked = the same two catalogs show up as an add-on in
+          Add-ons & Inclusions instead. */}
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-7 w-7 flex-none items-center justify-center rounded-md bg-[#EEF0FF]">
+            <LuPlane size={14} className="text-[#4F46E5]" />
+          </div>
+          <div className="text-xs font-bold uppercase tracking-wide text-[#4F46E5]">Flights</div>
+        </div>
+        <Checkbox checked={!!form.flightsEnabled} onChange={toggle} label="Include directly" />
+      </div>
 
       {form.flightsEnabled &&
         (loading ? (
@@ -959,31 +1004,236 @@ function FlightsSection({ form, update, onComputedRateChange }) {
 const ADDON_ID_FIELD = { activity: 'activityId', tour: 'tourId', transfer: 'transferId', flight: 'flightId' };
 const ADDON_PRICE_FIELD = { activity: 'price_per_pax', tour: 'price', transfer: 'price', flight: 'price' };
 
-function AddonCheckboxGroup({ type, label, catalog, addons, onToggle }) {
+// Per-card color identity (icon avatar, "N selected" badge, selected-item
+// pills, footer total figure) — purely cosmetic, keyed the same as
+// ADDON_ID_FIELD/ADDON_PRICE_FIELD above so each AddonMultiSelectCard below
+// just looks up its own type's theme rather than repeating className strings
+// per card. onwardFlight/returnFlight get their own theme keys distinct from
+// the generic 'flight' addon type (both post the same `flightId` either way
+// — see ADDON_ID_FIELD — this split only decides which color each card uses).
+const ADDON_CARD_THEME = {
+  activity: {
+    border: 'border-[#E4DEFB]',
+    iconBg: 'bg-[#EDE9FE]',
+    iconText: 'text-[#7C3AED]',
+    badge: 'bg-[#EDE9FE] text-[#6D28D9]',
+    pill: 'bg-[#EDE9FE] text-[#6D28D9]',
+    total: 'text-[#6D28D9]',
+  },
+  tour: {
+    border: 'border-[#BFDBFE]',
+    iconBg: 'bg-[#DBEAFE]',
+    iconText: 'text-[#2563EB]',
+    badge: 'bg-[#DBEAFE] text-[#1D4ED8]',
+    pill: 'bg-[#DBEAFE] text-[#1D4ED8]',
+    total: 'text-[#1D4ED8]',
+  },
+  transfer: {
+    border: 'border-[#FED7AA]',
+    iconBg: 'bg-[#FFEDD5]',
+    iconText: 'text-[#EA580C]',
+    badge: 'bg-[#FFEDD5] text-[#C2410C]',
+    pill: 'bg-[#FFEDD5] text-[#C2410C]',
+    total: 'text-[#C2410C]',
+  },
+  onwardFlight: {
+    border: 'border-[#DDD6FE]',
+    iconBg: 'bg-[#EDE9FE]',
+    iconText: 'text-[#6D28D9]',
+    badge: 'bg-[#EDE9FE] text-[#6D28D9]',
+    pill: 'border border-[#DDD6FE] bg-white text-[#6D28D9]',
+    total: 'text-[#6D28D9]',
+  },
+  returnFlight: {
+    border: 'border-[#BBF7D0]',
+    iconBg: 'bg-[#DCFCE7]',
+    iconText: 'text-[#16A34A]',
+    badge: 'bg-[#DCFCE7] text-[#15803D]',
+    pill: 'border border-[#BBF7D0] bg-[#F0FDF4] text-[#15803D]',
+    total: 'text-[#15803D]',
+  },
+};
+
+// Replaces the old checkbox-list-in-a-scroll-box UI (previously
+// AddonCheckboxGroup) with a searchable multi-select combobox: selected
+// items show as removable pills on the closed trigger, opening it reveals a
+// search box + the same checkbox-per-catalog-item list as before. Toggling
+// an item (via the dropdown checkbox or a pill's ×) is still exactly
+// onToggle(type, item, existing) — the same fd_addons POST/DELETE per click
+// AddonsManager already had; only the presentation around it changed.
+function AddonMultiSelectCard({ type, themeKey, icon: Icon, title, subtitle, itemNounPlural, catalog, addons, onToggle }) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const boxRef = useRef(null);
   const idField = ADDON_ID_FIELD[type];
   const priceField = ADDON_PRICE_FIELD[type];
+  const theme = ADDON_CARD_THEME[themeKey];
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (boxRef.current && !boxRef.current.contains(e.target)) setOpen(false);
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const selected = catalog.filter((item) => addons.some((a) => a[idField] === item.id));
+  const totalPrice = selected.reduce((sum, item) => sum + Number(item[priceField] || 0), 0);
+  const filtered = search.trim()
+    ? catalog.filter((item) => item.name.toLowerCase().includes(search.trim().toLowerCase()))
+    : catalog;
+
+  function toggleItem(item) {
+    const existing = addons.find((a) => a[idField] === item.id);
+    onToggle(type, item, existing);
+  }
+
   return (
-    <div>
-      <FieldLabel>{label}</FieldLabel>
-      {catalog.length === 0 ? (
-        <p className="text-[11px] text-muted">No {label.toLowerCase()} in the catalog yet.</p>
-      ) : (
-        <div className="max-h-44 space-y-0.5 overflow-y-auto rounded-md border border-line-light p-2">
-          {catalog.map((item) => {
-            const existing = addons.find((a) => a[idField] === item.id);
-            return (
-              <Checkbox
-                key={item.id}
-                checked={!!existing}
-                onChange={() => onToggle(type, item, existing)}
-                label={item.name}
-                hint={item[priceField] != null ? `${formatCurrency(item[priceField])} / pax` : undefined}
-              />
-            );
-          })}
+    // Full-width row (was a narrow grid card) — stacking Activities/Tours/
+    // Transfers/Onward/Return each across the whole width, one under the
+    // other, gives each enough room for its label + selector + total to sit
+    // on one line instead of the cramped multi-column grid this replaced.
+    <div ref={boxRef} className={`relative flex flex-col gap-3 rounded-xl border bg-white p-4 sm:flex-row sm:items-center ${theme.border}`}>
+      <div className="flex flex-none items-start gap-3 sm:w-64">
+        <div className={`flex h-9 w-9 flex-none items-center justify-center rounded-lg ${theme.iconBg}`}>
+          <Icon size={16} className={theme.iconText} />
         </div>
-      )}
+        <div>
+          <div className="text-sm font-bold text-ink">{title}</div>
+          <p className="mt-0.5 text-[11px] text-muted">{subtitle}</p>
+        </div>
+      </div>
+
+      <div className="relative flex-1">
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className="flex min-h-[2.75rem] w-full flex-wrap items-center gap-1.5 rounded-lg border border-line-light bg-white px-2.5 py-2 text-left"
+        >
+          {selected.length === 0 ? (
+            <span className="text-xs text-muted">Select…</span>
+          ) : (
+            selected.map((item) => (
+              <span key={item.id} className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-semibold ${theme.pill}`}>
+                {item.name}
+                <span
+                  role="button"
+                  aria-label={`Remove ${item.name}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleItem(item);
+                  }}
+                  className="cursor-pointer opacity-70 hover:opacity-100"
+                >
+                  ×
+                </span>
+              </span>
+            ))
+          )}
+          <LuChevronDown size={14} className={`ml-auto flex-none text-muted transition-transform ${open ? 'rotate-180' : ''}`} />
+        </button>
+
+        {open && (
+          <div className="absolute inset-x-0 z-20 mt-1.5 rounded-lg border border-line-light bg-white p-2 shadow-lg">
+            <TextInput
+              autoFocus
+              placeholder={`Search ${title.toLowerCase()}`}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="mb-2 py-2 text-xs"
+            />
+            <div className="max-h-44 space-y-0.5 overflow-y-auto">
+              {catalog.length === 0 ? (
+                <p className="px-1 py-2 text-[11px] text-muted">No {title.toLowerCase()} in the catalog yet.</p>
+              ) : filtered.length === 0 ? (
+                <p className="px-1 py-2 text-[11px] text-muted">No matches.</p>
+              ) : (
+                filtered.map((item) => {
+                  const checked = addons.some((a) => a[idField] === item.id);
+                  return (
+                    <Checkbox
+                      key={item.id}
+                      checked={checked}
+                      onChange={() => toggleItem(item)}
+                      label={item.name}
+                      hint={item[priceField] != null ? `${formatCurrency(item[priceField])} / pax` : undefined}
+                    />
+                  );
+                })
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="flex flex-none items-center justify-between gap-3 sm:w-36 sm:flex-col sm:items-end sm:justify-center sm:gap-1 sm:border-l sm:border-line-light sm:pl-4">
+        {selected.length > 0 && (
+          <span className={`flex-none rounded-full px-2 py-0.5 text-[10px] font-semibold ${theme.badge}`}>
+            {selected.length} selected
+          </span>
+        )}
+        <div className="text-right">
+          <p className="text-[10px] text-muted">
+            Total for {selected.length} {selected.length === 1 ? itemNounPlural.singular : itemNounPlural.plural}
+          </p>
+          <span className={`text-sm font-bold ${theme.total}`}>{selected.length > 0 ? formatCurrency(totalPrice) : '—'}</span>
+        </div>
+      </div>
     </div>
+  );
+}
+
+// Visa/Meals — each its own collapsible card (a clickable header row, a
+// chevron that flips, content shown only while open) rather than plain
+// static boxes: click the heading to expand and choose, click again to
+// collapse. `open` is owned by the caller (AddonsManager) so it can seed it
+// true once this package already has a value set, without fighting a
+// manual collapse afterward.
+// Every section Card in this editor is one of these now — click the header
+// row to expand/collapse, smooth height/opacity animation via framer-motion
+// (AnimatePresence handles the exit animation too, not just enter) rather
+// than an abrupt show/hide. `iconBg`/`iconColor` default to the same indigo
+// square every other section already uses so most
+// callers don't need to think about it; Visa/Meals below still override
+// them for their own blue/amber identity. `open`/`onToggle` are owned by
+// each caller's own local state — some default open (most sections, so
+// nothing looks hidden on first load), Visa/Meals seed theirs from whether
+// this package already has a value set (see AddonsManager's own effect).
+function CollapsibleSection({
+  icon: Icon,
+  iconBg = 'bg-[#EEF0FF]',
+  iconColor = 'text-[#4F46E5]',
+  title,
+  open,
+  onToggle,
+  children,
+}) {
+  return (
+    <Card className="border-white">
+      <button type="button" onClick={onToggle} className="flex w-full items-center justify-between gap-2 text-left">
+        <div className="flex items-center gap-2.5">
+          <div className={`flex h-7 w-7 flex-none items-center justify-center rounded-md ${iconBg}`}>
+            <Icon size={14} className={iconColor} />
+          </div>
+          <span className="text-xs font-bold uppercase tracking-wide text-[#4F46E5]">{title}</span>
+        </div>
+        <LuChevronDown size={16} className={`flex-none text-muted transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
+      </button>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            key="content"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.25, ease: 'easeInOut' }}
+            className="overflow-hidden"
+          >
+            <div className="mt-4">{children}</div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </Card>
   );
 }
 
@@ -1000,7 +1250,7 @@ function AddonCheckboxGroup({ type, label, catalog, addons, onToggle }) {
 // computeFdMealsPerPax, utils/meals.js — kept in sync by hand since this is
 // a client-side preview, not the source of truth); the real charge is
 // resolved server-side at booking time either way.
-function AddonsManager({ fdPackageId, addons, onChange, form, update, duration, onComputedRateChange }) {
+function AddonsManager({ fdPackageId, addons, onChange, form, update, duration, onComputedRateChange, addonsEnabled }) {
   const [activities, setActivities] = useState([]);
   const [tours, setTours] = useState([]);
   const [transfers, setTransfers] = useState([]);
@@ -1009,6 +1259,18 @@ function AddonsManager({ fdPackageId, addons, onChange, form, update, duration, 
   const [meals, setMeals] = useState([]);
   const [visa, setVisa] = useState(null);
   const [loading, setLoading] = useState(true);
+  // Visa/Meals collapsible cards default closed, then force themselves open
+  // exactly once the moment loading finishes if this package already has a
+  // value set — so opening an already-configured package doesn't look like
+  // that setting vanished, but a brand-new package starts clean/collapsed.
+  // Only ever forces open, never closed, so a manual collapse afterward
+  // always sticks.
+  const [visaOpen, setVisaOpen] = useState(false);
+  const [mealsOpen, setMealsOpen] = useState(false);
+  // Independent of addonsEnabled — that's what shows/hides this whole card
+  // in the first place; this just lets the admin collapse it locally once
+  // it's on, same "click the heading" behavior as every other section.
+  const [addonsSectionOpen, setAddonsSectionOpen] = useState(true);
 
   useEffect(() => {
     Promise.all([
@@ -1064,79 +1326,180 @@ function AddonsManager({ fdPackageId, addons, onChange, form, update, duration, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mealsAndVisaPerPax, loading]);
 
+  useEffect(() => {
+    if (loading) return;
+    if (form.visaEnabled) setVisaOpen(true);
+    if (form.lunchMealId != null || form.dinnerMealId != null) setMealsOpen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
+
+  // Bottom summary bar — purely a sum over whatever fd_addons rows already
+  // exist (activities + tours + transfers + flights combined, regardless of
+  // which cards are currently visible), not a separately-tracked figure —
+  // so it can never drift from what the 5 cards above already show.
+  const totalAddonsCost = addons.reduce((sum, a) => sum + Number(a.pricePerPax || 0), 0);
+
   return (
-    <Card label="Add-ons & Inclusions" className="border-white">
-      {loading ? (
-        <p className="text-sm text-muted">Loading catalog…</p>
-      ) : (
-        <div className="space-y-4">
-          <AddonCheckboxGroup type="activity" label="Activities" catalog={activities} addons={addons} onToggle={toggleAddon} />
-          <AddonCheckboxGroup type="tour" label="Tours" catalog={tours} addons={addons} onToggle={toggleAddon} />
-          <AddonCheckboxGroup type="transfer" label="Transfers" catalog={transfers} addons={addons} onToggle={toggleAddon} />
-          {/* Only shown when the Flights section above is off — flightsEnabled
-              already locks in one Onward + one Return flight directly on the
-              package, so offering the same two catalogs again here as
-              add-ons would be a duplicate, not an alternative. */}
-          {!form.flightsEnabled && (
-            <>
-              {/* AddonCheckboxGroup renders each catalog row's plain `name` as
-                  its checkbox label — remapped here to the fuller
-                  name/route/date label (flightOptionLabel) so two flights
-                  sharing a name are still distinguishable, without special-
-                  casing the shared component itself for one entity type. */}
-              <AddonCheckboxGroup
-                type="flight"
-                label="Onward flights"
-                catalog={onwardFlights.map((f) => ({ ...f, name: flightOptionLabel(f) }))}
-                addons={addons}
-                onToggle={toggleAddon}
-              />
-              <AddonCheckboxGroup
-                type="flight"
-                label="Return flights"
-                catalog={returnFlights.map((f) => ({ ...f, name: flightOptionLabel(f) }))}
-                addons={addons}
-                onToggle={toggleAddon}
-              />
-            </>
-          )}
+    <div className="space-y-4">
+      {/* The entire Add-ons & Inclusions card — heading included — only
+          shows up while the master "Add-ons" checkbox (Merchandising &
+          Discovery Attributes, above) is on. Off means it doesn't render at
+          all rather than showing a placeholder; nothing already selected is
+          deleted, it just isn't on screen until re-enabled. Visa/Meals below
+          are separate cards and always render regardless. */}
+      {addonsEnabled && (
+        <CollapsibleSection
+          icon={LuGift}
+          title="Add-ons & Inclusions"
+          open={addonsSectionOpen}
+          onToggle={() => setAddonsSectionOpen((o) => !o)}
+        >
+          <p className="-mt-1 mb-4 text-xs text-muted">Select the add-on activities, tours, transfers and flights to include in this package.</p>
 
-          <div>
-            <FieldLabel>Visa</FieldLabel>
-            <Checkbox
-              checked={!!form.visaEnabled}
-              onChange={(v) => update('visaEnabled', v)}
-              label="Visa assistance included"
-              hint={visa?.price_per_person != null ? `${formatCurrency(visa.price_per_person)} / pax` : 'No visa price configured in the catalog yet'}
-            />
-          </div>
+          {loading ? (
+            <p className="text-sm text-muted">Loading catalog…</p>
+          ) : (
+            <div className="space-y-4">
+              {/* Stacked, one full-width row per category (was a 5-column
+                  grid that left almost no room per card) — each
+                  AddonMultiSelectCard is itself a horizontal row now
+                  (label | selector | total), so this just lines those rows
+                  up top to bottom. */}
+              <div className="space-y-3">
+                <AddonMultiSelectCard
+                  type="activity"
+                  themeKey="activity"
+                  icon={LuFootprints}
+                  title="Activities"
+                  subtitle="Choose one or more activities"
+                  itemNounPlural={{ singular: 'activity', plural: 'activities' }}
+                  catalog={activities}
+                  addons={addons}
+                  onToggle={toggleAddon}
+                />
+                <AddonMultiSelectCard
+                  type="tour"
+                  themeKey="tour"
+                  icon={LuBriefcase}
+                  title="Tours"
+                  subtitle="Choose one or more tours"
+                  itemNounPlural={{ singular: 'tour', plural: 'tours' }}
+                  catalog={tours}
+                  addons={addons}
+                  onToggle={toggleAddon}
+                />
+                <AddonMultiSelectCard
+                  type="transfer"
+                  themeKey="transfer"
+                  icon={LuCar}
+                  title="Transfers"
+                  subtitle="Choose one or more transfer options"
+                  itemNounPlural={{ singular: 'transfer', plural: 'transfers' }}
+                  catalog={transfers}
+                  addons={addons}
+                  onToggle={toggleAddon}
+                />
+                {/* Only shown when the Flights section above is off —
+                    flightsEnabled already locks in one Onward + one Return
+                    flight directly on the package, so offering the same two
+                    catalogs again here as add-ons would be a duplicate, not
+                    an alternative. */}
+                {!form.flightsEnabled && (
+                  <>
+                    <AddonMultiSelectCard
+                      type="flight"
+                      themeKey="onwardFlight"
+                      icon={LuPlaneTakeoff}
+                      title="Onward Flights"
+                      subtitle="Choose onward flight"
+                      itemNounPlural={{ singular: 'onward flight', plural: 'onward flights' }}
+                      catalog={onwardFlights.map((f) => ({ ...f, name: flightOptionLabel(f) }))}
+                      addons={addons}
+                      onToggle={toggleAddon}
+                    />
+                    <AddonMultiSelectCard
+                      type="flight"
+                      themeKey="returnFlight"
+                      icon={LuPlaneLanding}
+                      title="Return Flights"
+                      subtitle="Choose return flight"
+                      itemNounPlural={{ singular: 'return flight', plural: 'return flights' }}
+                      catalog={returnFlights.map((f) => ({ ...f, name: flightOptionLabel(f) }))}
+                      addons={addons}
+                      onToggle={toggleAddon}
+                    />
+                  </>
+                )}
+              </div>
 
-          <div>
-            <FieldLabel>Meals</FieldLabel>
-            <div className="space-y-1.5">
-              <Checkbox
-                checked={form.lunchMealId != null}
-                onChange={(v) => update('lunchMealId', v ? (lunchMeal?.id ?? null) : null)}
-                label="Lunch included"
-                hint={lunchMeal?.price_per_day != null ? `${formatCurrency(lunchMeal.price_per_day)} / pax / day` : 'No lunch price configured yet'}
-              />
-              <Checkbox
-                checked={form.dinnerMealId != null}
-                onChange={(v) => update('dinnerMealId', v ? (dinnerMeal?.id ?? null) : null)}
-                label="Dinner included"
-                hint={dinnerMeal?.price_per_day != null ? `${formatCurrency(dinnerMeal.price_per_day)} / pax / day` : 'No dinner price configured yet'}
-              />
+              <div className="flex items-center justify-between rounded-xl border border-[#E4E9FB] bg-[#F7F8FF] px-4 py-3.5">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-9 w-9 flex-none items-center justify-center rounded-lg bg-[#EDE9FE]">
+                    <LuWallet size={16} className="text-[#7C3AED]" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-bold text-ink">Total Add-ons & Inclusions</div>
+                    <p className="text-[11px] text-muted">{addons.length} item{addons.length === 1 ? '' : 's'} selected</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-lg font-bold text-[#4F46E5]">{formatCurrency(totalAddonsCost)}</div>
+                  <p className="text-[11px] text-muted">Total additional cost</p>
+                </div>
+              </div>
             </div>
-          </div>
-
-          {mealsAndVisaPerPax > 0 && (
-            <p className="text-xs text-muted">
-              Meals + visa add {formatCurrency(mealsAndVisaPerPax)}/pax to the Net rate below.
-            </p>
           )}
-        </div>
+        </CollapsibleSection>
       )}
-    </Card>
+
+      {/* Visa/Meals — their own heading each, outside Add-ons & Inclusions,
+          always shown regardless of addonsEnabled (they're plain package
+          inclusions, not priced add-ons). Each collapsible — click the
+          heading to open it and choose, click again to close. */}
+      <CollapsibleSection
+        icon={LuShieldCheck}
+        iconBg="bg-[#DBEAFE]"
+        iconColor="text-[#2563EB]"
+        title="Visa"
+        open={visaOpen}
+        onToggle={() => setVisaOpen((o) => !o)}
+      >
+        <Checkbox
+          checked={!!form.visaEnabled}
+          onChange={(v) => update('visaEnabled', v)}
+          label="Visa assistance included"
+          hint={visa?.price_per_person != null ? `${formatCurrency(visa.price_per_person)} / pax` : 'No visa price configured in the catalog yet'}
+        />
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        icon={LuUtensils}
+        iconBg="bg-[#FEF3C7]"
+        iconColor="text-[#D97706]"
+        title="Meals"
+        open={mealsOpen}
+        onToggle={() => setMealsOpen((o) => !o)}
+      >
+        <div className="space-y-1.5">
+          <Checkbox
+            checked={form.lunchMealId != null}
+            onChange={(v) => update('lunchMealId', v ? (lunchMeal?.id ?? null) : null)}
+            label="Lunch included"
+            hint={lunchMeal?.price_per_day != null ? `${formatCurrency(lunchMeal.price_per_day)} / pax / day` : 'No lunch price configured yet'}
+          />
+          <Checkbox
+            checked={form.dinnerMealId != null}
+            onChange={(v) => update('dinnerMealId', v ? (dinnerMeal?.id ?? null) : null)}
+            label="Dinner included"
+            hint={dinnerMeal?.price_per_day != null ? `${formatCurrency(dinnerMeal.price_per_day)} / pax / day` : 'No dinner price configured yet'}
+          />
+        </div>
+      </CollapsibleSection>
+
+      {mealsAndVisaPerPax > 0 && (
+        <p className="text-xs text-muted">Meals + visa add {formatCurrency(mealsAndVisaPerPax)}/pax to the Net rate below.</p>
+      )}
+    </div>
   );
 }
 
@@ -1148,8 +1511,9 @@ function AddonsManager({ fdPackageId, addons, onChange, form, update, duration, 
 // newline-delimited string each — so they ride along with the rest of Save
 // as Draft/Publish Package, no separate save step.
 function InclusionsExclusionsForm({ form, update }) {
+  const [open, setOpen] = useState(true);
   return (
-    <Card label="Inclusions & Exclusions" className="border-white">
+    <CollapsibleSection icon={LuShield} title="Inclusions & Exclusions" open={open} onToggle={() => setOpen((o) => !o)}>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <InclusionExclusionList
           catalogEntityPath="inclusions"
@@ -1164,7 +1528,7 @@ function InclusionsExclusionsForm({ form, update }) {
           onItemsChange={(items) => update('exclusions', textFromLines(items))}
         />
       </div>
-    </Card>
+    </CollapsibleSection>
   );
 }
 
@@ -1189,6 +1553,13 @@ export default function FdPackageEditor() {
   const [dates, setDates] = useState([]);
   const [itinerary, setItinerary] = useState([]);
   const [addons, setAddons] = useState([]);
+  // Master "Add-ons" switch (MerchandisingForm) — frontend-only, never
+  // persisted (mirrors its old pre-Task-5 self exactly): seeded true only
+  // when this package already has addons saved, so an existing package with
+  // add-ons doesn't look like they vanished on open. Gates only the priced
+  // Activities/Tours/Transfers/Onward/Return Flights cards inside
+  // AddonsManager — Visa/Meals there stay visible regardless.
+  const [addonsEnabled, setAddonsEnabled] = useState(false);
   const [submitting, setSubmitting] = useState('');
   // Live "auto" net rate — the itinerary total (ItineraryManager) plus any
   // included meals/visa (AddonsManager) plus any directly-included flights
@@ -1237,6 +1608,7 @@ export default function FdPackageEditor() {
       setDates(fdPackage.departureDates || []);
       setItinerary(fdPackage.itinerary || []);
       setAddons(fdPackage.addons || []);
+      setAddonsEnabled((fdPackage.addons || []).length > 0);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, isNew]);
@@ -1402,18 +1774,20 @@ export default function FdPackageEditor() {
               onChange={setItinerary}
               onComputedRateChange={setItineraryRatePerPax}
             />
-            {/* Below the day-by-day itinerary, above Merchandising — either
-                lock in one Onward + one Return flight directly here, or
-                leave it off and let AddonsManager offer the same two
-                catalogs as add-ons instead. */}
+            {/* Back to full-width, one per row — side by side made the
+                Flights checkbox's label wrap onto 4-5 cramped lines next to
+                its hint text in a half-width column. Below the day-by-day
+                itinerary, above Add-ons & Inclusions: Flights either locks
+                in one Onward + one Return flight directly here, or is left
+                off and AddonsManager offers the same two catalogs as
+                add-ons instead. */}
             <FlightsSection form={form} update={update} onComputedRateChange={setFlightsRatePerPax} />
-            {/* Moved below the day-by-day itinerary builder (Task 3) — was
-                previously right after Basics. */}
-            <MerchandisingForm form={form} update={update} />
-            {/* Task 4/5 — replaces both the old (gated-behind-a-toggle)
-                AddonsManager and the separate Meals card that used to sit
-                below this section; now always renders, each item opt-in by
-                its own checkbox. */}
+            <MerchandisingForm form={form} update={update} addonsEnabled={addonsEnabled} onToggleAddons={setAddonsEnabled} />
+            {/* Task 4/5 replaced the old gated-behind-a-toggle AddonsManager
+                with one that always renders, each item opt-in by its own
+                checkbox — the master toggle itself is back (Merchandising's
+                "Add-ons" checkbox above), but only hides/shows the priced
+                catalog cards inside; Visa/Meals here still always render. */}
             <AddonsManager
               fdPackageId={packageId}
               addons={addons}
@@ -1422,6 +1796,7 @@ export default function FdPackageEditor() {
               update={update}
               duration={form.duration}
               onComputedRateChange={setMealsRatePerPax}
+              addonsEnabled={addonsEnabled}
             />
           </>
         )}
@@ -1437,10 +1812,17 @@ export default function FdPackageEditor() {
             else is set. */}
         <PricingForm form={form} update={update} computedRatePerPax={computedRatePerPax} />
 
-        <div className="flex items-center justify-end gap-2">
+        <div className="flex items-center justify-between rounded-lg border border-line-light bg-white px-5 py-4">
           {/* Task 2 — replaces "Save as Draft": every field above autosaves
-              a moment after you stop typing, nothing to click. */}
-          <span className="text-[11px] text-muted">{autosaving ? 'Saving…' : 'All changes saved'}</span>
+              a moment after you stop typing, nothing to click. No separate
+              Save as Draft button here by design — this bar restyles that
+              same autosave indicator + Publish action, nothing new added. */}
+          <span
+            className={`flex items-center gap-1.5 text-xs font-semibold ${autosaving ? 'text-muted' : 'text-[#16A34A]'}`}
+          >
+            <LuCircleCheck size={14} className="flex-none" />
+            {autosaving ? 'Saving…' : 'All changes saved'}
+          </span>
           <Button variant="accent" disabled={!!submitting} onClick={handlePublish}>
             {submitting === 'published' ? 'Publishing…' : 'Publish Package'}
           </Button>
