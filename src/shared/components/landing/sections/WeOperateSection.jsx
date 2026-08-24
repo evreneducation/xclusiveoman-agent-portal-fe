@@ -40,47 +40,63 @@ export function WeOperateSection() {
         />
       </div>
 
-      <div className="mx-auto grid max-w-6xl gap-10 px-6 py-16 sm:px-10 md:grid-cols-2 md:items-center">
+      <div className="mx-auto grid max-w-6xl gap-12 px-6 py-16 sm:px-10 md:grid-cols-2 md:items-start md:gap-16">
         <div>
-          <p className="text-sm leading-relaxed text-[#5B6472] sm:text-base">
+          <span className="block h-px w-52 bg-[#E8B84B]" />
+
+          <p className="mt-6 text-base leading-relaxed text-[#1B1B1B]">
             From Muscat's coastline to the mountain forts of the interior, our operations team designs, prices and
-            runs every itinerary locally — so what your client books is exactly what they get on the ground. Every
-            itinerary on this page is built by our own destination specialists, using vetted local guides, drivers
-            and camps. No sub-agents, no guesswork — just a single reliable partner for your Oman programme.
+            runs every itinerary locally — so what your client books is exactly what they get.
+          </p>
+          <p className="mt-5 text-base leading-relaxed text-[#1B1B1B]">
+            Every itinerary on this page is built by our own destination specialists, using vetted local guides,
+            drivers and camps. No sub-agents, no guesswork — just a single reliable partner for your Oman programme.
           </p>
 
-          <ul className="mt-8 space-y-5">
+          <span className="mt-6 block h-px w-52 bg-[#E8B84B]" />
+
+          <ul className="mt-10 space-y-8">
             {HERO_STATS.map((stat) => (
-              <li key={stat.label} className="flex items-center gap-4">
-                <span className="h-2.5 w-2.5 flex-shrink-0 rounded-full bg-[#C9A24A]" />
+              <li key={stat.label} className="flex items-start gap-4">
+                <span className="mt-1 h-7 w-7 flex-shrink-0 rounded-full border-2 border-[#E8B84B]" />
                 <span>
-                  <span className="block text-lg font-bold text-[#1B2333]">{stat.value}</span>
-                  <span className="block text-sm text-[#5B6472]">{stat.label}</span>
+                  <span className="block text-3xl font-bold leading-none text-[#1B1B1B]">{stat.value}</span>
+                  <span className="mt-2 block text-sm text-[#6B7280]">{stat.label}</span>
                 </span>
               </li>
             ))}
           </ul>
         </div>
 
-        {/* Photo collage — three offset crops of the same source photo,
-            standing in for the reference's desert/mountain/wadi trio until
-            real photography is dropped in. */}
-        <div className="grid grid-cols-3 gap-3">
-          <img
-            src="/oman_pic.jpg"
-            alt="Oman desert"
-            className="col-span-2 h-40 w-full rounded-2xl object-cover object-left sm:h-48"
-          />
-          <img
-            src="/oman_pic.jpg"
-            alt="Oman mountains"
-            className="h-40 w-full rounded-2xl object-cover object-right sm:h-48"
-          />
-          <img
-            src="/oman_pic.jpg"
-            alt="Oman wadi"
-            className="col-span-3 h-32 w-full rounded-2xl object-cover object-bottom sm:h-40"
-          />
+        {/* Photo collage — three real Oman shots (desert caravan, mountain
+            fort at sunset, turquoise cove) stacked with hairline gaps inside
+            one clipped container. The reference's left edge isn't a simple
+            corner radius — it's one continuous organic wave that swings in
+            and out along the *entire* height of the stack (a "waist" bulges
+            back out around the 2nd image), which plain CSS border-radius
+            can't do (it only bends at the box's actual corners). Traced as
+            a single cubic-bezier clip-path instead, in objectBoundingBox
+            units (0–1) so it scales with the container at any breakpoint. */}
+        <svg width="0" height="0" className="absolute">
+          <defs>
+            <clipPath id="operate-collage-blob" clipPathUnits="objectBoundingBox">
+              <path
+                d="M1,0 L1,1 L0.2,1
+                   C0.17,0.9633 0.0133,0.8633 0.02,0.78
+                   C0.0267,0.6967 0.24,0.5933 0.24,0.5
+                   C0.24,0.4067 0.0317,0.3033 0.02,0.22
+                   C0.0083,0.1367 0.145,0.0367 0.17,0
+                   Z"
+              />
+            </clipPath>
+          </defs>
+        </svg>
+        <div className="[clip-path:url(#operate-collage-blob)]">
+          <div className="flex flex-col gap-1.5">
+            <img src="/travel_1.png" alt="Camel caravan in the Sharqiya Sands" className="h-56 w-full object-cover sm:h-72" />
+            <img src="/travel_2.png" alt="Mountain fort at sunset in the Hajar Mountains" className="h-56 w-full object-cover sm:h-72" />
+            <img src="/travel_3.png" alt="Turquoise cove with boats on the Musandam coast" className="h-56 w-full object-cover sm:h-72" />
+          </div>
         </div>
       </div>
     </section>
