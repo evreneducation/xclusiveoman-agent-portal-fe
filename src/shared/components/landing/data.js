@@ -19,31 +19,37 @@ export const HERO_STATS = [
   { value: '24/7', label: 'On-Ground Op Support' },
 ];
 
-// TourCard's `gradient` picks a distinct warm tone per card so a grid of
-// placeholder cards doesn't read as one repeated broken image.
+// Signature Tours cards use real photos (reusing what's already in
+// /public — see the reference-matching pass on SignatureToursSection.jsx):
+// We_Operate_Section.png for the Grand Mosque card, oman_pic.jpg for the two
+// Nizwa cards. The reference screenshot itself repeats "Nizwa Heritage
+// Trail" for both the 1st and 3rd card (same photo, same copy, same
+// badge) — reproduced as-is rather than diversified, since the brief was
+// to match the reference exactly, not improve on it.
 export const SIGNATURE_TOURS = [
   {
     title: 'Nizwa Heritage Trail',
     description:
-      "The 17th-century Nizwa Fort, Friday goat souq, and the terraced date plantations of Oman's former capital.",
+      "The 17th-century Nizwa Fort, the Friday goat souq, and the terraced date plantations of Oman's former capital.",
     duration: 'Full Day Tour',
-    price: 'AED 145',
-    gradient: 'from-[#C98A24] to-[#8A5A20]',
+    nights: '4N | 5D',
+    image: '/oman_pic.jpg',
   },
   {
     title: 'Muscat City & Grand Mosque',
     description:
-      'Sultan Qaboos Grand Mosque, Al Alam Palace, Mutrah Souq and the corniche — the essential introduction to the capital.',
+      'Sultan Qaboos Grand Mosque, Al Alam Palace, Mutrah Souq and the corniche — the essential half-day introduction to the capital.',
     duration: 'Full Day Tour',
-    price: 'AED 120',
-    gradient: 'from-[#2E5F63] to-[#16343A]',
+    nights: '4N | 5D',
+    image: '/We_Operate_Section.png',
   },
   {
-    title: 'Wahiba Sands Desert Safari',
-    description: 'Dune bashing, a Bedouin camp dinner and overnight stargazing deep in the Sharqiya Sands.',
+    title: 'Nizwa Heritage Trail',
+    description:
+      "The 17th-century Nizwa Fort, the Friday goat souq, and the terraced date plantations of Oman's former capital.",
     duration: 'Full Day Tour',
-    price: 'AED 210',
-    gradient: 'from-[#B4552C] to-[#6E3319]',
+    nights: '4N | 5D',
+    image: '/oman_pic.jpg',
   },
 ];
 
