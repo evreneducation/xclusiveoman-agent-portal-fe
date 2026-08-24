@@ -393,54 +393,203 @@ function CatalogCard({ imageUrl, badge, title, meta, price, priceLabel = 'Price'
   );
 }
 
-function HotelsTab() {
-  const [items, setItems] = useState([]);
-  const [search, setSearch] = useState('');
-  const [loading, setLoading] = useState(true);
+// Small generic confirm-before-delete modal, reusing the local Modal/
+// FieldTile shell above — HotelsTab's own delete used to fire straight off
+// a single click with no confirmation step at all; a standalone icon button
+// (this table's Delete action) is easier to mis-click than the old card's
+// inline text link was, so a confirm step is worth adding here even though
+// it wasn't asked for outright.
+function ConfirmDeleteModal({ title, message, onCancel, onConfirm }) {
+  const [error, setError] = useState('');
+  const [deleting, setDeleting] = useState(false);
 
-  function load() {
-    setLoading(true);
-    api
-      .get(`/hotels${search ? `?search=${encodeURIComponent(search)}` : ''}`)
-      .then(({ hotels }) => setItems(hotels))
-      .finally(() => setLoading(false));
+  async function handleConfirm() {
+    setError('');
+    setDeleting(true);
+    try {
+      await onConfirm();
+    } catch (err) {
+      setError(err.message || 'Unable to delete');
+      setDeleting(false);
+    }
   }
 
-  useEffect(load, [search]); // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <Modal
+      title={title}
+      onClose={deleting ? () => {} : onCancel}
+      footer={
+        <>
+          <Button onClick={onCancel} disabled={deleting}>
+            Cancel
+          </Button>
+          <Button variant="danger" onClick={handleConfirm} disabled={deleting}>
+            {deleting ? 'Deleting…' : 'Delete'}
+          </Button>
+        </>
+      }
+    >
+      <p className="text-sm text-ink">{message}</p>
+      {error && (
+        <div className="mt-3">
+          <ErrorText>{error}</ErrorText>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+function HotelPreviewModal({ hotel, onClose }) {
+  return (
+    <Modal title={hotel.name} onClose={onClose} footer={<Button onClick={onClose}>Close</Button>}>
+      {hotel.images?.[0] && <img src={hotel.images[0]} alt="" className="mb-4 h-40 w-full rounded-lg object-cover" />}
+      <div className="grid gap-3 text-sm sm:grid-cols-2">
+        <FieldTile label="Location">{[hotel.city, hotel.state].filter(Boolean).join(', ') || '—'}</FieldTile>
+        <FieldTile label="Category">{hotel.category ? `${hotel.category}★` : '—'}</FieldTile>
+        <FieldTile label="Address">{hotel.address || '—'}</FieldTile>
+        <FieldTile label="Email">{hotel.email || '—'}</FieldTile>
+        <FieldTile label="Price / night">{formatCurrency(hotel.price_per_night)}</FieldTile>
+        <FieldTile label="MICE enabled">{hotel.is_mice_enabled ? 'Yes' : 'No'}</FieldTile>
+      </div>
+      {hotel.description && (
+        <div className="mt-4">
+          <FieldLabel>Description</FieldLabel>
+          <p className="text-sm text-ink">{hotel.description}</p>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+// Table (not the CatalogCard grid Tours/Activities/Transfers still use) —
+// same reasoning, and same server-side search/pagination (10/page), as
+// FdPackagesTab above.
+function HotelsTab() {
+  const [items, setItems] = useState([]);
+  const [pagination, setPagination] = useState({ total: 0, page: 1, pageSize: PAGE_SIZE, totalPages: 1 });
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [previewing, setPreviewing] = useState(null);
+  const [pendingDelete, setPendingDelete] = useState(null);
+
+  function updateSearch(v) {
+    setSearch(v);
+    setPage(1);
+  }
+
+  useEffect(() => {
+    setLoading(true);
+    setError('');
+    const params = new URLSearchParams();
+    if (search) params.set('search', search);
+    params.set('page', String(page));
+    params.set('pageSize', String(PAGE_SIZE));
+
+    api
+      .get(`/hotels?${params.toString()}`)
+      .then(({ hotels, pagination: p }) => {
+        setItems(hotels);
+        setPagination(p);
+      })
+      .catch((err) => setError(err.message || 'Unable to load hotels'))
+      .finally(() => setLoading(false));
+  }, [search, page]);
 
   async function handleDelete(id) {
     await api.del(`/admin/hotels/${id}`);
     setItems((list) => list.filter((i) => i.id !== id));
+    setPagination((p) => ({ ...p, total: Math.max(0, p.total - 1) }));
+    setPendingDelete(null);
   }
 
   return (
     <div>
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <TextInput className="flex-1" placeholder="Search hotels…" value={search} onChange={(e) => setSearch(e.target.value)} />
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <TextInput className="flex-1" placeholder="Search hotels…" value={search} onChange={(e) => updateSearch(e.target.value)} />
         <Link to="/admin/catalog/hotels/new">
           <Button variant="accent">+ Add New Hotel</Button>
         </Link>
       </div>
+
+      <ErrorText>{error}</ErrorText>
+
       {loading ? (
         <p className="text-xs text-muted">Loading…</p>
       ) : items.length === 0 ? (
-        <p className="text-xs text-muted">No hotels match that search.</p>
+        <p className="text-xs text-muted">{search ? 'No hotels match that search.' : 'No hotels yet.'}</p>
       ) : (
-        <div className="grid grid-cols-1 items-start gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {items.map((hotel) => (
-            <CatalogCard
-              key={hotel.id}
-              imageUrl={hotel.images?.[0]}
-              badge={hotel.category ? `${hotel.category}★` : null}
-              title={hotel.name}
-              meta={[hotel.city, hotel.state].filter(Boolean)}
-              price={formatCurrency(hotel.price_per_night)}
-              priceLabel="Price / night"
-              editHref={`/admin/catalog/hotels/${hotel.id}`}
-              onDelete={() => handleDelete(hotel.id)}
-            />
-          ))}
-        </div>
+        <>
+          <Table
+            columns={['Hotel Name', 'Location', 'Category', 'Price / Night', 'MICE', { label: 'Actions', align: 'right' }]}
+            rows={items}
+            renderRow={(hotel) => (
+              <tr key={hotel.id} className="border-b border-line-light transition-colors last:border-0 hover:bg-panel/50">
+                <td className="px-3 py-3 align-middle font-semibold text-ink">{hotel.name}</td>
+                <td className="px-3 py-3 align-middle whitespace-nowrap">
+                  {[hotel.city, hotel.state].filter(Boolean).join(', ') || '—'}
+                </td>
+                <td className="px-3 py-3 align-middle whitespace-nowrap">{hotel.category ? `${hotel.category}★` : '—'}</td>
+                <td className="px-3 py-3 align-middle whitespace-nowrap">{formatCurrency(hotel.price_per_night)}</td>
+                <td className="px-3 py-3 align-middle">
+                  {hotel.is_mice_enabled ? (
+                    <span className="rounded-full bg-emerald-500 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-white">
+                      Yes
+                    </span>
+                  ) : (
+                    <span className="text-xs text-muted">—</span>
+                  )}
+                </td>
+                <td className="px-3 py-3 align-middle">
+                  <div className="flex flex-nowrap items-center justify-end gap-2">
+                    <Button size="sm" className="whitespace-nowrap" onClick={() => setPreviewing(hotel)}>
+                      <LuEye className="mr-1.5 flex-shrink-0" size={14} />
+                      View
+                    </Button>
+                    <Link to={`/admin/catalog/hotels/${hotel.id}`}>
+                      <Button size="sm" variant="accent" className="whitespace-nowrap">
+                        <LuPencil className="mr-1.5 flex-shrink-0" size={14} />
+                        Edit
+                      </Button>
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => setPendingDelete(hotel)}
+                      aria-label={`Delete ${hotel.name}`}
+                      className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md border border-[#FECACA] text-[#B91C1C] hover:bg-[#FEF2F2]"
+                    >
+                      <LuTrash2 size={14} />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            )}
+          />
+
+          <Pagination
+            page={pagination.page}
+            totalPages={pagination.totalPages}
+            total={pagination.total}
+            pageSize={pagination.pageSize}
+            onChange={setPage}
+            itemLabel="hotels"
+          />
+        </>
+      )}
+
+      {previewing && <HotelPreviewModal hotel={previewing} onClose={() => setPreviewing(null)} />}
+      {pendingDelete && (
+        <ConfirmDeleteModal
+          title="Delete hotel?"
+          message={
+            <>
+              Delete <span className="font-semibold">"{pendingDelete.name}"</span>? This can't be undone.
+            </>
+          }
+          onCancel={() => setPendingDelete(null)}
+          onConfirm={() => handleDelete(pendingDelete.id)}
+        />
       )}
     </div>
   );

@@ -1216,6 +1216,28 @@ function CollapsibleSection({
   onToggle,
   children,
 }) {
+  // overflow-hidden is only needed *during* the height:0<->auto animation
+  // (so the grow/shrink itself clips cleanly) — left on permanently (a
+  // static class, as this used to be) it also clips anything inside that's
+  // meant to visually escape the card once fully open, e.g.
+  // InclusionExclusionList's absolutely-positioned catalog dropdown getting
+  // cut off mid-row instead of floating over the page. `expanded` flips
+  // true only once the open animation actually finishes, and back to false
+  // the instant `open` goes false (before the close animation starts), so
+  // overflow is only ever hidden while a transition is actually in flight.
+  //
+  // Initialized to `open` itself, not always `false` — AnimatePresence's
+  // `initial={false}` below means a section that starts already expanded
+  // (InclusionsExclusionsForm's `useState(true)`) never actually plays an
+  // enter animation on first mount, so onAnimationComplete below would
+  // never fire and `expanded` would stay stuck at `false` (overflow-hidden
+  // stuck on) forever for exactly that section — which is what was still
+  // clipping the dropdown after the first pass at this fix.
+  const [expanded, setExpanded] = useState(open);
+  useEffect(() => {
+    if (!open) setExpanded(false);
+  }, [open]);
+
   return (
     <Card className="border-white">
       <button type="button" onClick={onToggle} className="flex w-full items-center justify-between gap-2 text-left">
@@ -1235,7 +1257,10 @@ function CollapsibleSection({
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.25, ease: 'easeInOut' }}
-            className="overflow-hidden"
+            onAnimationComplete={() => {
+              if (open) setExpanded(true);
+            }}
+            className={expanded ? '' : 'overflow-hidden'}
           >
             <div className="mt-4">{children}</div>
           </motion.div>
