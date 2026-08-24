@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { LuFileText, LuUserRound } from 'react-icons/lu';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api/client.js';
-import { Badge, Button, Card, ErrorText, FieldLabel, Tag, TextInput } from '../components/ui.jsx';
+import { Badge, Button, Card, ErrorText, FieldLabel, Pagination, Table, Tag, TextInput } from '../components/ui.jsx';
 
 const STATUS_TABS = [
   { value: '', label: 'All' },
@@ -19,6 +20,39 @@ const STATUS_BADGE = {
   rejected: 'red',
   suspended: 'grey',
 };
+
+const PAGE_SIZE = 10;
+
+// Same page-chrome convention as every other paginated admin list
+// (Support.jsx, QuoteInbox.jsx, OperationsList.jsx, BookingsDocuments.jsx):
+// a centered `max-w-6xl` column, not a full-bleed table.
+function Modal({ title, onClose, children, footer, size = 'md' }) {
+  const sizeClass = size === 'xl' ? 'max-w-4xl' : size === 'lg' ? 'max-w-2xl' : 'max-w-md';
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 bg-black/30" onClick={onClose} />
+      <div className={`relative z-10 flex max-h-[85vh] w-full ${sizeClass} flex-col rounded-lg border border-line-light bg-white p-5 shadow-lg sm:p-6`}>
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <h3 className="text-lg font-bold text-ink">{title}</h3>
+          <button type="button" onClick={onClose} aria-label="Close" className="text-lg leading-none text-muted hover:text-ink">
+            ×
+          </button>
+        </div>
+        <div className="overflow-y-auto">{children}</div>
+        {footer && <div className="mt-5 flex flex-wrap justify-end gap-2 border-t border-line-light pt-4">{footer}</div>}
+      </div>
+    </div>
+  );
+}
+
+function FieldTile({ label, children }) {
+  return (
+    <div className="rounded-md bg-panel px-3 py-2">
+      <div className="text-[10px] font-semibold uppercase text-muted">{label}</div>
+      <div>{children}</div>
+    </div>
+  );
+}
 
 // What the panel actually lets an admin *do* next depends entirely on the
 // agency's current status — a pending agency gets the tier/credit + Approve/
@@ -141,23 +175,113 @@ function DecisionPanel({ agency, onDecided }) {
   );
 }
 
+// A quick, read-only glance at who the agency is — no decision controls.
+// "View Profile" and "View Details" both open a modal over the same table
+// (there's no separate agency-profile route in this app to link out to);
+// this is the shorter of the two, "View Details" below is the full
+// submitted-details + decision workflow.
+function AgencyProfileModal({ agency, onClose }) {
+  return (
+    <Modal title={agency.name} onClose={onClose} footer={<Button onClick={onClose}>Close</Button>}>
+      <div className="mb-4 flex items-center gap-2">
+        <Badge tone={STATUS_BADGE[agency.status] || 'grey'}>{agency.status}</Badge>
+        <span className="text-xs text-muted">Registered {new Date(agency.createdAt).toLocaleDateString()}</span>
+      </div>
+      <div className="grid gap-3 text-sm sm:grid-cols-2">
+        <FieldTile label="Type">{agency.type === 'mice_company' ? 'MICE Company' : 'Travel Agent'}</FieldTile>
+        <FieldTile label="Country">{agency.country}</FieldTile>
+        <FieldTile label="License / IATA no.">{agency.licenseNumber || '—'}</FieldTile>
+        <FieldTile label="Relationship Manager">{agency.rmName || '—'}</FieldTile>
+        {agency.tier && <FieldTile label="Current tier"><span className="capitalize">{agency.tier}</span></FieldTile>}
+        {agency.creditLimit != null && (
+          <FieldTile label="Credit limit">₹{Number(agency.creditLimit).toLocaleString('en-IN')}</FieldTile>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+// The full workflow view — submitted details plus (for Super Admins) the
+// approve/reject/deactivate/reactivate decision panel.
+function AgencyDetailsModal({ agency, isSuperAdmin, onClose, onDecided }) {
+  return (
+    <Modal title={`${agency.name} — Details`} onClose={onClose} size="lg">
+      <div className="mb-5 flex flex-wrap items-start justify-between gap-3 rounded-xl border border-line-light bg-panel/60 p-4">
+        <div className="text-sm text-muted">Registered {new Date(agency.createdAt).toLocaleDateString()}</div>
+        <Badge tone={STATUS_BADGE[agency.status] || 'grey'}>{agency.status}</Badge>
+      </div>
+
+      <Card label="Submitted details" className="mb-5 border-white">
+        <div className="grid gap-3 text-sm leading-relaxed sm:grid-cols-2">
+          <FieldTile label="Type">{agency.type === 'mice_company' ? 'MICE Company' : 'Travel Agent'}</FieldTile>
+          <FieldTile label="Country">{agency.country}</FieldTile>
+          <FieldTile label="License / IATA no.">{agency.licenseNumber || '—'}</FieldTile>
+          {agency.tier && <FieldTile label="Current tier"><span className="capitalize">{agency.tier}</span></FieldTile>}
+          {agency.creditLimit != null && (
+            <FieldTile label="Credit limit">₹{Number(agency.creditLimit).toLocaleString('en-IN')}</FieldTile>
+          )}
+          {agency.rmUserId && (
+            <div className="rounded-md bg-panel px-3 py-2">
+              <div className="text-[10px] font-semibold uppercase text-muted">Relationship Manager</div>
+              <div>{agency.rmName || 'Assigned'}</div>
+              <div className="text-[10px] text-muted">Assigned automatically, round-robin</div>
+            </div>
+          )}
+        </div>
+      </Card>
+
+      {isSuperAdmin ? (
+        <DecisionPanel agency={agency} onDecided={onDecided} />
+      ) : (
+        <p className="rounded-lg border border-line-light bg-white p-4 text-sm text-muted shadow-sm">
+          Only Super Admins can approve, reject, or reassign agencies — you're viewing this read-only.
+        </p>
+      )}
+    </Modal>
+  );
+}
+
 export default function AgentApprovals() {
   const { isSuperAdmin } = useAuth();
   const [statusFilter, setStatusFilter] = useState('pending');
-  const [agencies, setAgencies] = useState([]);
   const [search, setSearch] = useState('');
-  const [selectedId, setSelectedId] = useState(null);
+  const [page, setPage] = useState(1);
+
+  const [agencies, setAgencies] = useState([]);
+  const [pagination, setPagination] = useState({ total: 0, page: 1, pageSize: PAGE_SIZE, totalPages: 1 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  const [profileAgency, setProfileAgency] = useState(null);
+  const [detailsAgency, setDetailsAgency] = useState(null);
+
+  function updateStatusFilter(v) {
+    setStatusFilter(v);
+    setPage(1);
+  }
+  function updateSearch(v) {
+    setSearch(v);
+    setPage(1);
+  }
+
+  // Pagination is fully server-side (Task: Agent Approvals table) — every
+  // filter (status, search) *and* the page slicing itself round-trip to
+  // GET /admin/agencies, matching the convention every other paginated
+  // admin list already uses (Support.jsx, QuoteInbox.jsx). No page of
+  // agencies beyond the current 10 is ever fetched to the browser.
   async function loadAgencies() {
     setLoading(true);
     setError('');
     try {
-      const query = statusFilter ? `?status=${statusFilter}` : '';
-      const { agencies: list } = await api.get(`/admin/agencies${query}`);
+      const params = new URLSearchParams();
+      if (statusFilter) params.set('status', statusFilter);
+      if (search) params.set('search', search);
+      params.set('page', String(page));
+      params.set('pageSize', String(PAGE_SIZE));
+
+      const { agencies: list, pagination: p } = await api.get(`/admin/agencies?${params.toString()}`);
       setAgencies(list);
-      setSelectedId((current) => (list.some((a) => a.id === current) ? current : list[0]?.id || null));
+      setPagination(p);
     } catch (err) {
       setError(err.message || 'Unable to load agencies');
     } finally {
@@ -168,162 +292,128 @@ export default function AgentApprovals() {
   useEffect(() => {
     loadAgencies();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusFilter]);
-
-  // Client-side — the status tabs already round-trip to the API, and this
-  // list is a single admin's agency roster (never paginated), so filtering
-  // the already-fetched page by name/country/license is enough without a
-  // second network round-trip per keystroke.
-  const filteredAgencies = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return agencies;
-    return agencies.filter((a) =>
-      [a.name, a.country, a.licenseNumber].some((field) => field && field.toLowerCase().includes(q))
-    );
-  }, [agencies, search]);
-
-  const selected = useMemo(() => agencies.find((a) => a.id === selectedId) || null, [agencies, selectedId]);
+  }, [statusFilter, search, page]);
 
   function handleDecided(updatedAgency) {
-    setAgencies((list) => list.map((a) => (a.id === updatedAgency.id ? updatedAgency : a)));
-    // A pending-only view should drop the agency once it's no longer pending.
+    setDetailsAgency(updatedAgency);
+    // A status-filtered view (e.g. "Pending") should drop the agency, and
+    // the total count for this view has changed either way — simplest to
+    // just re-fetch the current page from the server rather than patch
+    // local state and second-guess whether the count/ordering still match.
     if (statusFilter && updatedAgency.status !== statusFilter) {
-      loadAgencies();
+      setDetailsAgency(null);
     }
+    loadAgencies();
   }
 
   return (
     <div className="min-h-screen bg-[#F4F7FF]">
-      <div className="flex flex-col lg:flex-row">
-        <div className="w-full flex-none border-b border-line-light bg-white/90 p-6 lg:min-h-screen lg:w-[26rem] lg:border-b-0 lg:border-r">
-          <div className="mb-6 flex items-end justify-between gap-3">
-            <div>
-              <h2 className="text-2xl font-bold">Agent Approvals</h2>
-              <p className="mt-1.5 text-sm text-muted">Review agency registrations and account status.</p>
-            </div>
-            <Badge tone="grey">{filteredAgencies.length}</Badge>
+      <div className="mx-auto max-w-6xl p-6 lg:p-10">
+        <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="text-2xl font-bold">Agent Approvals</h2>
+            <p className="mt-1.5 text-sm text-muted">Review agency registrations and account status.</p>
           </div>
-          <div className="mb-3">
+          <Badge tone="grey">{pagination.total} Total Agencies</Badge>
+        </div>
+
+        <Card className="mb-5 border-white">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <TextInput
+              className="lg:max-w-sm"
               placeholder="Search by agency, country, or license no…"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => updateSearch(e.target.value)}
             />
-          </div>
-          <div className="mb-5 flex flex-wrap gap-2">
-            {STATUS_TABS.map((tab) => (
-              <button key={tab.value} type="button" onClick={() => setStatusFilter(tab.value)}>
-                <Tag active={statusFilter === tab.value}>{tab.label}</Tag>
-              </button>
-            ))}
-          </div>
-
-          {loading && <p className="rounded-lg border border-line-light bg-panel px-3 py-2 text-xs text-muted">Loading…</p>}
-          <ErrorText>{error}</ErrorText>
-
-          {!loading && agencies.length === 0 && (
-            <p className="rounded-lg border border-line-light bg-panel px-3 py-3 text-xs text-muted">No agencies in this view.</p>
-          )}
-          {!loading && agencies.length > 0 && filteredAgencies.length === 0 && (
-            <p className="rounded-lg border border-line-light bg-panel px-3 py-3 text-xs text-muted">No agencies match that search.</p>
-          )}
-
-          <div className="space-y-3">
-            {filteredAgencies.map((agency) => (
-              <button
-                key={agency.id}
-                type="button"
-                onClick={() => setSelectedId(agency.id)}
-                className={`block w-full rounded-lg border p-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
-                  agency.id === selectedId ? 'border-accent bg-[#fff8f4]' : 'border-line-light bg-white'
-                }`}
-              >
-                <div className="text-sm font-bold">{agency.name}</div>
-                <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted">
-                  <span>{agency.type === 'mice_company' ? 'MICE Company' : 'Travel Agent'}</span>
-                  <span>·</span>
-                  <span>{agency.country}</span>
-                </div>
-                <Badge tone={STATUS_BADGE[agency.status] || 'grey'} className="mt-3">
-                  {agency.status}
-                </Badge>
-                {agency.rmName && (
-                  <div className="mt-2 text-[11px] text-muted">
-                    RM: <span className="font-semibold text-ink">{agency.rmName}</span>
-                  </div>
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="flex-1 p-6 lg:p-10">
-          {!selected && <p className="rounded-lg border border-line-light bg-white p-5 text-sm text-muted">Select an agency from the list.</p>}
-
-          {selected && (
-            <div className="max-w-4xl">
-              <div className="mb-5 rounded-xl border border-line-light bg-white p-5 shadow-sm">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <h3 className="text-2xl font-bold">{selected.name}</h3>
-                    <div className="mt-1 text-sm text-muted">
-                      Registered {new Date(selected.createdAt).toLocaleDateString()}
-                    </div>
-                  </div>
-                  <Badge tone={STATUS_BADGE[selected.status] || 'grey'}>{selected.status}</Badge>
-                </div>
-              </div>
-
-              <Card label="Submitted details" className="mb-5 border-white">
-                <div className="grid gap-3 text-sm leading-relaxed sm:grid-cols-2">
-                  <div className="rounded-md bg-panel px-3 py-2">
-                    <div className="text-[10px] font-semibold uppercase text-muted">Type</div>
-                    <div>{selected.type === 'mice_company' ? 'MICE Company' : 'Travel Agent'}</div>
-                  </div>
-                  <div className="rounded-md bg-panel px-3 py-2">
-                    <div className="text-[10px] font-semibold uppercase text-muted">Country</div>
-                    <div>{selected.country}</div>
-                  </div>
-                  <div className="rounded-md bg-panel px-3 py-2">
-                    <div className="text-[10px] font-semibold uppercase text-muted">License / IATA no.</div>
-                    <div>{selected.licenseNumber || '—'}</div>
-                  </div>
-                  {/* Current status is already shown as the badge in the header above —
-                      repeating it here just duplicated it and made the grid feel cluttered. */}
-                  {selected.tier && (
-                    <div className="rounded-md bg-panel px-3 py-2">
-                      <div className="text-[10px] font-semibold uppercase text-muted">Current tier</div>
-                      <div className="capitalize">{selected.tier}</div>
-                    </div>
-                  )}
-                  {selected.creditLimit != null && (
-                    <div className="rounded-md bg-panel px-3 py-2">
-                      <div className="text-[10px] font-semibold uppercase text-muted">Credit limit</div>
-                      <div>₹{Number(selected.creditLimit).toLocaleString('en-IN')}</div>
-                    </div>
-                  )}
-                  {selected.rmUserId && (
-                    <div className="rounded-md bg-panel px-3 py-2">
-                      <div className="text-[10px] font-semibold uppercase text-muted">Relationship Manager</div>
-                      <div>{selected.rmName || 'Assigned'}</div>
-                      <div className="text-[10px] text-muted">Assigned automatically, round-robin</div>
-                    </div>
-                  )}
-                </div>
-              </Card>
-
-              {isSuperAdmin ? (
-                <DecisionPanel agency={selected} onDecided={handleDecided} />
-              ) : (
-                <p className="rounded-lg border border-line-light bg-white p-4 text-sm text-muted shadow-sm">
-                  Only Super Admins can approve, reject, or reassign agencies — you're viewing
-                  this read-only.
-                </p>
-              )}
+            <div className="flex flex-wrap gap-2">
+              {STATUS_TABS.map((tab) => (
+                <button key={tab.value} type="button" onClick={() => updateStatusFilter(tab.value)}>
+                  <Tag active={statusFilter === tab.value}>{tab.label}</Tag>
+                </button>
+              ))}
             </div>
-          )}
-        </div>
+          </div>
+        </Card>
+
+        <ErrorText>{error}</ErrorText>
+
+        {loading ? (
+          <p className="text-sm text-muted">Loading…</p>
+        ) : agencies.length === 0 ? (
+          <p className="rounded-lg border border-line-light bg-white p-5 text-sm text-muted shadow-sm">
+            {search || statusFilter ? 'No agencies match this view.' : 'No agencies yet.'}
+          </p>
+        ) : (
+          <>
+            <Table
+              columns={['Agency', 'Type', 'Country', 'License / IATA no.', 'Relationship Manager', 'Status', { label: 'Actions', align: 'right' }]}
+              rows={agencies}
+              renderRow={(agency) => (
+                <tr key={agency.id} className="border-b border-line-light transition-colors last:border-0 hover:bg-panel/50">
+                  <td className="px-3 py-3 align-middle">
+                    <div className="font-semibold text-ink">{agency.name}</div>
+                    <div className="text-[11px] text-muted">Registered {new Date(agency.createdAt).toLocaleDateString()}</div>
+                  </td>
+                  <td className="px-3 py-3 align-middle whitespace-nowrap">{agency.type === 'mice_company' ? 'MICE Company' : 'Travel Agent'}</td>
+                  <td className="px-3 py-3 align-middle whitespace-nowrap">{agency.country}</td>
+                  <td className="px-3 py-3 align-middle">{agency.licenseNumber || '—'}</td>
+                  <td className="px-3 py-3 align-middle">
+                    {agency.rmName ? (
+                      <>
+                        <div className="whitespace-nowrap">{agency.rmName}</div>
+                        <div className="whitespace-nowrap text-[11px] text-muted">Assigned automatically</div>
+                      </>
+                    ) : (
+                      <span className="text-muted">—</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-3 align-middle">
+                    <Badge tone={STATUS_BADGE[agency.status] || 'grey'}>{agency.status}</Badge>
+                  </td>
+                  <td className="px-3 py-3 align-middle">
+                    {/* flex-nowrap, not flex-wrap — the previous version wrapped
+                        onto two ragged rows even where there was room, because
+                        the table's auto layout gave this column just enough
+                        width to fit one button. Forcing one row here (the
+                        outer overflow-x-auto wrapper scrolls horizontally on
+                        a narrow viewport instead) keeps every row the same
+                        height and the buttons flush to the column's right edge. */}
+                    <div className="flex flex-nowrap items-center justify-end gap-2">
+                      <Button size="sm" className="whitespace-nowrap" onClick={() => setDetailsAgency(agency)}>
+                        <LuFileText className="mr-1.5 flex-shrink-0" size={14} />
+                        View Details
+                      </Button>
+                      <Button size="sm" className="whitespace-nowrap" onClick={() => setProfileAgency(agency)}>
+                        <LuUserRound className="mr-1.5 flex-shrink-0" size={14} />
+                        View Profile
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              )}
+            />
+
+            <Pagination
+              page={pagination.page}
+              totalPages={pagination.totalPages}
+              total={pagination.total}
+              pageSize={pagination.pageSize}
+              onChange={setPage}
+              itemLabel="agencies"
+            />
+          </>
+        )}
       </div>
+
+      {profileAgency && <AgencyProfileModal agency={profileAgency} onClose={() => setProfileAgency(null)} />}
+      {detailsAgency && (
+        <AgencyDetailsModal
+          agency={detailsAgency}
+          isSuperAdmin={isSuperAdmin}
+          onClose={() => setDetailsAgency(null)}
+          onDecided={handleDecided}
+        />
+      )}
     </div>
   );
 }
