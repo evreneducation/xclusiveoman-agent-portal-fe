@@ -35,15 +35,6 @@ import { Button, Card, Checkbox, ErrorText, Select, TextInput } from '../compone
 import { formatCurrency, formatShortDate, formatTime, getSeatsLeft } from '../../shared/fdPackage/index.js';
 import { computeNightsByCity, ITINERARY_ITEM_TYPE_META, itineraryHasItemType } from '../../shared/itinerary/index.js';
 
-// This page's own primary-CTA treatment — a deep-teal-to-brand-teal gradient
-// (the exact same stops AgentLayout.jsx's sidebar already uses, just
-// left-to-right instead of top-to-bottom) laid over Button's shared "accent"
-// variant via className, the same override pattern already used everywhere
-// on this page (e.g. Card's default border/rounding). This only restyles
-// Button instances here — it doesn't touch ui.jsx, so every other page's
-// gold/coral "accent" buttons are unaffected.
-const PRIMARY_CTA_CLASS = 'border-transparent bg-gradient-to-r from-[#083A36] via-[#0B4F4A] to-[#0D9488] hover:opacity-90';
-
 // Booking terms card below — body_html is admin-authored (TermsAndConditions.jsx,
 // GET /site-terms) but still passes through an untrusted-input boundary
 // before ever reaching dangerouslySetInnerHTML: DOMPurify strips <script>,
@@ -139,7 +130,7 @@ function Lightbox({ gallery, index, onClose, onNavigate }) {
 // min-h-0/min-w-0 on every grid item below is load-bearing, not decoration:
 // grid (and flex) items default to `min-height: auto`/`min-width: auto`,
 // which lets an <img>'s own intrinsic aspect ratio force its cell (and the
-// row/column track itself) to grow past the fixed h-72/h-96 the container
+// row/column track itself) to grow past the fixed h-48/h-64 the container
 // asks for. overflow-hidden alone doesn't stop that growth — it only clips
 // what's already an inflated box — so object-cover ends up scaling the
 // image up to cover that bigger box, which is exactly what reads as
@@ -160,8 +151,14 @@ function HeroGallery({ heroImageUrl, images, onBack }) {
 
   return (
     <>
-      <div className="relative mb-6 grid h-72 grid-cols-2 grid-rows-1 gap-1.5 overflow-hidden rounded-2xl shadow-lg shadow-black/10 sm:h-96">
-        <div className="relative h-full min-h-0 w-full min-w-0 overflow-hidden">
+      {/* Each tile owns its own rounding/clipping/shadow now (rather than the
+          whole block sharing one outer rounded-2xl/overflow-hidden) so the
+          hero photo and every grid photo read as separate rounded cards with
+          real daylight between them, not one mosaic shape cut apart by thin
+          gap lines. gap-3 (vs. the previous gap-1.5) gives that daylight
+          enough room to actually register at a glance. */}
+      <div className="mb-6 grid h-48 grid-cols-2 grid-rows-1 gap-3 sm:h-64">
+        <div className="relative h-full min-h-0 w-full min-w-0 overflow-hidden rounded-2xl shadow-md shadow-black/10">
           <button
             type="button"
             onClick={() => setLightboxIndex(0)}
@@ -178,19 +175,19 @@ function HeroGallery({ heroImageUrl, images, onBack }) {
             type="button"
             onClick={onBack}
             aria-label="Back to departures"
-            className="absolute left-4 top-4 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-white text-agent-ink shadow-lg transition hover:scale-105 hover:bg-agent-panel"
+            className="absolute left-4 top-4 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-white text-agent-ink shadow-lg transition hover:scale-105 hover:bg-slate-100"
           >
             <LuArrowLeft size={18} />
           </button>
         </div>
-        <div className="grid h-full min-h-0 w-full min-w-0 grid-flow-col grid-rows-2 auto-cols-[46%] gap-1.5 overflow-x-auto scroll-smooth sm:auto-cols-[47%]">
+        <div className="grid h-full min-h-0 w-full min-w-0 grid-flow-col grid-rows-2 auto-cols-[46%] gap-3 overflow-x-auto scroll-smooth sm:auto-cols-[47%]">
           {gridImages.map((url, i) => (
             <button
               key={url + i}
               type="button"
               onClick={() => setLightboxIndex(i + 1)}
               aria-label="View photo"
-              className="group h-full min-h-0 w-full min-w-0 cursor-zoom-in overflow-hidden bg-agent-panel"
+              className="group h-full min-h-0 w-full min-w-0 cursor-zoom-in overflow-hidden rounded-2xl bg-slate-100 shadow-md shadow-black/10"
             >
               <img
                 src={url}
@@ -245,8 +242,12 @@ function FlightDetailsSection({ flights }) {
       label: 'Onward',
       Icon: LuPlaneTakeoff,
       data: flights.onward,
-      iconBg: 'bg-agent-panel',
-      iconColor: 'text-agent-ink-dark',
+      // Blue rather than the site's gold accent — Return already uses gold
+      // below, and the two legs read better with two distinct colors than
+      // one leg colored and the other left in the (now-removed) pale-green
+      // neutral fill.
+      iconBg: 'bg-sky-100',
+      iconColor: 'text-sky-700',
     },
     {
       key: 'return',
@@ -287,7 +288,7 @@ function FlightDetailsSection({ flights }) {
           >
             <div className="mt-4 grid grid-cols-1 gap-3 border-t border-agent-line-light pt-4 sm:grid-cols-2">
               {legs.map(({ key, label, Icon, data, iconBg, iconColor }) => (
-                <div key={key} className="rounded-xl bg-agent-bg px-4 py-4">
+                <div key={key} className="rounded-xl bg-slate-50 px-4 py-4">
                   <div className="mb-3 flex items-center gap-2">
                     <span
                       className={`flex h-8 w-8 flex-none items-center justify-center rounded-full ${iconBg} ${iconColor}`}
@@ -353,14 +354,16 @@ function ItineraryOverviewTabs({ departure }) {
               type="button"
               onClick={() => setActiveTab(key)}
               className={`flex items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left transition-colors ${
-                active ? 'border-agent-accent bg-agent-panel' : 'border-agent-line-light bg-white hover:bg-agent-panel/60'
+                active
+                  ? 'border-agent-accent bg-agent-accent-soft'
+                  : 'border-agent-line-light bg-white hover:bg-slate-50'
               }`}
             >
               <span
                 className={`flex h-9 w-9 flex-none items-center justify-center rounded-full border ${
                   active
                     ? 'border-agent-accent bg-white text-agent-ink-dark'
-                    : 'border-agent-line-light bg-agent-bg text-agent-muted'
+                    : 'border-agent-line-light bg-slate-50 text-agent-muted'
                 }`}
               >
                 <Icon size={16} />
@@ -374,7 +377,7 @@ function ItineraryOverviewTabs({ departure }) {
         })}
       </div>
 
-      <div className="mt-4 rounded-xl bg-agent-bg p-4">
+      <div className="mt-4 rounded-xl bg-slate-50 p-4">
         {activeTab === 'hotel' && <HotelOverviewPanel hotel={departure.hotel} />}
         {activeTab === 'sightseeing' && <SightseeingOverviewPanel items={sightseeingItems} />}
         {activeTab === 'meals' && <MealsOverviewPanel hasMeals={hasMeals} />}
@@ -392,7 +395,7 @@ function HotelOverviewPanel({ hotel }) {
     <div>
       <div className="mb-3 text-sm font-bold text-agent-ink">Hotel Overview</div>
       <div className="max-w-xs overflow-hidden rounded-xl border border-agent-line-light bg-white shadow-sm">
-        <div className="relative h-40 w-full bg-agent-panel">
+        <div className="relative h-40 w-full bg-slate-100">
           {hotel.images?.[0] ? (
             <img src={hotel.images[0]} alt="" className="h-full w-full object-cover" />
           ) : (
@@ -413,7 +416,7 @@ function HotelOverviewPanel({ hotel }) {
           </div>
           {hotel.boardBasisOptions?.[0] && (
             <div className="mt-2 flex flex-wrap gap-1.5">
-              <span className="rounded-full bg-agent-panel px-2.5 py-1 text-[11px] font-medium text-agent-ink">
+              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-agent-ink">
                 Meal: {hotel.boardBasisOptions[0]}
               </span>
             </div>
@@ -437,7 +440,7 @@ function SightseeingOverviewPanel({ items }) {
             key={`${item.type}:${item.id}:${idx}`}
             className="overflow-hidden rounded-xl border border-agent-line-light bg-white shadow-sm"
           >
-            <div className="h-24 w-full bg-agent-panel">
+            <div className="h-24 w-full bg-slate-100">
               {item.images?.[0] ? (
                 <img src={item.images[0]} alt="" className="h-full w-full object-cover" />
               ) : (
@@ -502,12 +505,12 @@ function HotelInformation({ hotel }) {
   return (
     <Card className="border-white rounded-2xl p-5 sm:p-6">
       <SectionHeading icon={LuHotel}>Hotel information</SectionHeading>
-      <div className="flex gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row">
         {hotel.images?.[0] && (
           <img
             src={hotel.images[0]}
             alt=""
-            className="h-20 w-20 flex-none rounded-xl border border-agent-line-light object-cover shadow-sm"
+            className="h-40 w-full flex-none rounded-xl border border-agent-line-light object-cover object-center shadow-sm sm:h-28 sm:w-44"
           />
         )}
         <div>
@@ -518,7 +521,7 @@ function HotelInformation({ hotel }) {
           {hotel.boardBasisOptions?.length > 0 && (
             <div className="mt-1.5 flex flex-wrap gap-1.5">
               {hotel.boardBasisOptions.map((b) => (
-                <span key={b} className="rounded-full bg-agent-panel px-2.5 py-0.5 text-[11px] font-medium text-agent-ink">
+                <span key={b} className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-medium text-agent-ink">
                   {b}
                 </span>
               ))}
@@ -545,6 +548,19 @@ function dayTitle(day) {
   return firstNamed?.name || 'Itinerary details';
 }
 
+// Per-item-type icon chip color, local to this file only — deliberately not
+// added to shared/itinerary/index.js's ITINERARY_ITEM_TYPE_META (that meta
+// is reused by admin/team/agent pages that each have their own unrelated
+// theme, e.g. admin's indigo/purple — a color baked in there would leak
+// into all of them). Gives each expanded day's item rows some actual color
+// variety instead of every single row sharing one flat pale-green fill.
+const ITINERARY_ITEM_TYPE_CHIP = {
+  hotel: 'bg-sky-50 text-sky-600',
+  tour: 'bg-amber-50 text-amber-600',
+  transfer: 'bg-violet-50 text-violet-600',
+  activity: 'bg-rose-50 text-rose-600',
+};
+
 // Each day is its own collapsible row (default collapsed) rather than an
 // always-expanded vertical timeline — matches the reference layout: a "Day
 // N" pill + bold title, a +/× toggle on the right, and the day's full item
@@ -557,9 +573,9 @@ function ItineraryDayRow({ day }) {
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-agent-panel/60"
+        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50"
       >
-        <span className="flex-none rounded-full border border-agent-line bg-agent-panel px-3 py-1 text-xs font-bold text-agent-ink-dark">
+        <span className="flex-none rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-bold text-agent-ink-dark">
           Day {day.dayNumber}
         </span>
         <span className="flex-1 text-sm font-bold text-agent-ink">{dayTitle(day)}</span>
@@ -582,22 +598,27 @@ function ItineraryDayRow({ day }) {
                 <div className="space-y-1">
                   {day.items.map((item, itemIdx) => {
                     const meta = ITINERARY_ITEM_TYPE_META[item.type];
+                    const chip = ITINERARY_ITEM_TYPE_CHIP[item.type] || 'bg-slate-100 text-agent-ink-dark';
                     return (
                       <div
                         key={`${item.type}:${item.id}:${itemIdx}`}
-                        className="rounded-md border border-agent-line-light bg-agent-panel px-2.5 py-1.5"
+                        className="flex items-start gap-2.5 rounded-md border border-agent-line-light bg-white px-2.5 py-2"
                       >
-                        <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-agent-ink">
-                          <span>{meta?.icon}</span>
-                          {item.name || meta?.label || 'Item'}
-                          {item.city ? ` · ${item.city}` : ''}
+                        <span className={`flex h-6 w-6 flex-none items-center justify-center rounded-md text-xs ${chip}`}>
+                          {meta?.icon}
                         </span>
-                        {item.type === 'hotel' && item.adults != null && (
-                          <p className="mt-0.5 pl-[1.375rem] text-[11px] text-agent-muted">
-                            {item.adults} {item.adults === 1 ? 'adult' : 'adults'} · {item.rooms} {item.rooms === 1 ? 'room' : 'rooms'}
-                          </p>
-                        )}
-                        {item.note && <p className="mt-0.5 pl-[1.375rem] text-[11px] text-agent-muted">{item.note}</p>}
+                        <div className="min-w-0 flex-1">
+                          <span className="text-[11px] font-semibold text-agent-ink">
+                            {item.name || meta?.label || 'Item'}
+                            {item.city ? ` · ${item.city}` : ''}
+                          </span>
+                          {item.type === 'hotel' && item.adults != null && (
+                            <p className="mt-0.5 text-[11px] text-agent-muted">
+                              {item.adults} {item.adults === 1 ? 'adult' : 'adults'} · {item.rooms} {item.rooms === 1 ? 'room' : 'rooms'}
+                            </p>
+                          )}
+                          {item.note && <p className="mt-0.5 text-[11px] text-agent-muted">{item.note}</p>}
+                        </div>
                       </div>
                     );
                   })}
@@ -731,7 +752,7 @@ function AddonCategorySection({ type, addons, selectedAddonIds, onToggle }) {
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-agent-panel/60"
+        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50"
       >
         <span className="flex h-8 w-8 flex-none items-center justify-center rounded-lg bg-agent-accent-soft text-agent-accent-dark">
           <Icon size={16} />
@@ -740,7 +761,7 @@ function AddonCategorySection({ type, addons, selectedAddonIds, onToggle }) {
           {meta.label} <span className="font-normal text-agent-muted">({addons.length})</span>
         </span>
         {selectedCount > 0 && (
-          <span className="flex-none rounded-full bg-agent-panel px-2 py-0.5 text-[10px] font-semibold text-agent-ink-dark">
+          <span className="flex-none rounded-full bg-agent-accent-soft px-2 py-0.5 text-[10px] font-semibold text-agent-accent-dark">
             {selectedCount} selected
           </span>
         )}
@@ -765,7 +786,7 @@ function AddonCategorySection({ type, addons, selectedAddonIds, onToggle }) {
                   className={`rounded-xl border px-3.5 py-2.5 transition-colors ${
                     selectedAddonIds.includes(addon.id)
                       ? 'border-agent-accent bg-agent-accent-soft/50'
-                      : 'border-agent-line-light hover:bg-agent-panel'
+                      : 'border-agent-line-light hover:bg-slate-50'
                   }`}
                 >
                   <Checkbox
@@ -997,7 +1018,7 @@ export default function DepartureDetail() {
                     {tickItems.map((label) => (
                       <span
                         key={label}
-                        className="inline-flex items-center gap-1.5 rounded-full bg-agent-panel px-3 py-1.5 text-xs font-semibold text-agent-ink"
+                        className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-agent-ink"
                       >
                         <LuCheck size={13} className="flex-none text-agent-ink-dark" /> {label}
                       </span>
@@ -1005,7 +1026,7 @@ export default function DepartureDetail() {
                   </div>
                 )}
               </div>
-              <div className="flex-none rounded-xl bg-agent-panel px-5 py-4 text-right">
+              <div className="flex-none rounded-xl bg-agent-accent-soft px-5 py-4 text-right">
                 <div className="text-[11px] font-semibold uppercase tracking-wide text-agent-muted">Starting at</div>
                 <div className="text-2xl font-bold text-agent-ink">{formatCurrency(departure.ratePerPax)}</div>
                 <div className="text-xs text-agent-muted">per person</div>
@@ -1027,7 +1048,7 @@ export default function DepartureDetail() {
                     className={`rounded-full border px-3.5 py-2 text-xs font-semibold ${
                       d.seatsLeft > 0
                         ? 'border-agent-accent/30 bg-agent-accent-soft text-agent-ink'
-                        : 'border-agent-line-light bg-agent-panel text-agent-muted'
+                        : 'border-agent-line-light bg-slate-100 text-agent-muted'
                     }`}
                   >
                     {formatShortDate(d.date)}
@@ -1096,17 +1117,13 @@ export default function DepartureDetail() {
                   </p>
                 )}
                 {bookingResult.status === 'waitlisted' ? (
-                  <Button
-                    variant="accent"
-                    className={`w-full ${PRIMARY_CTA_CLASS}`}
-                    onClick={() => navigate('/agent/dashboard')}
-                  >
+                  <Button variant="accent" className="w-full" onClick={() => navigate('/agent/dashboard')}>
                     Back to dashboard
                   </Button>
                 ) : (
                   <Button
                     variant="accent"
-                    className={`w-full ${PRIMARY_CTA_CLASS}`}
+                    className="w-full"
                     onClick={() => navigate(`/agent/payments/${bookingResult.id}`)}
                   >
                     Continue to Payment
@@ -1162,7 +1179,7 @@ export default function DepartureDetail() {
                   ))}
                 </div>
 
-                <div className="my-3 space-y-1.5 rounded-xl bg-agent-panel px-3.5 py-3 text-sm">
+                <div className="my-3 space-y-1.5 rounded-xl bg-slate-50 px-3.5 py-3 text-sm">
                   <div className="flex justify-between">
                     <span className="text-agent-muted">Net rate ({formatCurrency(departure.ratePerPax)} × {pax} pax)</span>
                     <span className="font-medium text-agent-ink">{formatCurrency(departure.ratePerPax * pax)}</span>
@@ -1185,7 +1202,7 @@ export default function DepartureDetail() {
 
                 <Button
                   variant="accent"
-                  className={`mb-2 w-full gap-1.5 py-3 text-sm ${PRIMARY_CTA_CLASS}`}
+                  className="mb-2 w-full gap-1.5 py-3 text-sm"
                   disabled={submitting}
                   onClick={handleConfirmBooking}
                 >
@@ -1208,7 +1225,7 @@ export default function DepartureDetail() {
                   </div>
                   <span
                     className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                      seatsLeft > 0 ? 'bg-agent-accent-soft text-agent-accent-dark' : 'bg-agent-panel text-agent-muted'
+                      seatsLeft > 0 ? 'bg-agent-accent-soft text-agent-accent-dark' : 'bg-slate-100 text-agent-muted'
                     }`}
                   >
                     {seatsLeft > 0 ? `${seatsLeft} seats left` : 'Sold out'}
@@ -1237,7 +1254,7 @@ export default function DepartureDetail() {
                   />
                 </div>
 
-                <div className="my-3 space-y-1.5 rounded-xl bg-agent-panel px-3.5 py-3 text-sm">
+                <div className="my-3 space-y-1.5 rounded-xl bg-slate-50 px-3.5 py-3 text-sm">
                   <div className="flex justify-between">
                     <span className="text-agent-muted">Net rate ({formatCurrency(departure.ratePerPax)} × {pax} pax)</span>
                     <span className="font-medium text-agent-ink">{formatCurrency(departure.ratePerPax * pax)}</span>
@@ -1260,7 +1277,7 @@ export default function DepartureDetail() {
 
                 <Button
                   variant="accent"
-                  className={`mb-2 w-full gap-1.5 py-3 text-sm ${PRIMARY_CTA_CLASS}`}
+                  className="mb-2 w-full gap-1.5 py-3 text-sm"
                   disabled={!departureDateId}
                   onClick={handleBookNowClick}
                 >
