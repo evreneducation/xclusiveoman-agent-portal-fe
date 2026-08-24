@@ -127,17 +127,30 @@ export function Checkbox({ checked, onChange, label, hint }) {
   );
 }
 
+// Each column is either a plain string (left-aligned, every existing
+// caller's usage) or `{ label, align: 'right' }` for a column — typically
+// a trailing "Actions" column — whose header should line up with
+// right-aligned cell content instead.
 export function Table({ columns, rows, renderRow }) {
   return (
     <div className="overflow-x-auto rounded-lg border border-[#E4E9FB] shadow-[0_4px_16px_rgba(15,23,42,0.05)]">
       <table className="w-full text-left text-xs">
         <thead>
           <tr className="bg-[#F3F4FF]">
-            {columns.map((c) => (
-              <th key={c} className="border-b border-[#E4E9FB] px-3 py-2 font-semibold uppercase text-[#4F46E5]">
-                {c}
-              </th>
-            ))}
+            {columns.map((c) => {
+              const label = typeof c === 'string' ? c : c.label;
+              const align = typeof c === 'string' ? 'left' : c.align || 'left';
+              return (
+                <th
+                  key={label}
+                  className={`whitespace-nowrap border-b border-[#E4E9FB] px-3 py-2 font-semibold uppercase text-[#4F46E5] ${
+                    align === 'right' ? 'text-right' : 'text-left'
+                  }`}
+                >
+                  {label}
+                </th>
+              );
+            })}
           </tr>
         </thead>
         <tbody>{rows.map(renderRow)}</tbody>
