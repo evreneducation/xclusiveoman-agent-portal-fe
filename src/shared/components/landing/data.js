@@ -53,49 +53,33 @@ export const SIGNATURE_TOURS = [
   },
 ];
 
+// Same reference-matching approach as SIGNATURE_TOURS above: the reference
+// screenshot for ActivitiesSection repeats the same Nizwa/Muscat/Nizwa
+// pattern across both its rows (6 cards from 2 distinct tours, not 6
+// distinct ones) — reproduced as-is rather than diversified.
+const NIZWA_ACTIVITY = {
+  title: 'Nizwa Heritage Trail',
+  description:
+    "The 17th-century Nizwa Fort, the Friday goat souq, and the terraced date plantations of Oman's former capital.",
+  duration: 'Full Day Tour',
+  nights: '4N | 5D',
+  image: '/oman_pic.jpg',
+};
+const MUSCAT_ACTIVITY = {
+  title: 'Muscat City & Grand Mosque',
+  description:
+    'Sultan Qaboos Grand Mosque, Al Alam Palace, Mutrah Souq and the corniche — the essential half-day introduction to the capital.',
+  duration: 'Full Day Tour',
+  nights: '4N | 5D',
+  image: '/We_Operate_Section.png',
+};
 export const ACTIVITIES = [
-  {
-    title: 'Nizwa Heritage Trail',
-    description: "The 17th-century fort, Friday goat souq and Oman's former capital, in one guided morning.",
-    duration: 'Full Day Tour',
-    price: 'AED 145',
-    gradient: 'from-[#C98A24] to-[#8A5A20]',
-  },
-  {
-    title: 'Muscat City & Grand Mosque',
-    description: 'Grand Mosque, Al Alam Palace and Mutrah Souq — the capital in a single half-day loop.',
-    duration: 'Half Day Tour',
-    price: 'AED 95',
-    gradient: 'from-[#2E5F63] to-[#16343A]',
-  },
-  {
-    title: 'Jebel Akhdar Green Mountain',
-    description: 'Rose gardens and terraced orchards 2,000m up, with a 4x4 transfer included.',
-    duration: 'Full Day Tour',
-    price: 'AED 180',
-    gradient: 'from-[#3D6B3F] to-[#1F3B21]',
-  },
-  {
-    title: 'Wadi Shab Adventure',
-    description: 'A trek and swim through turquoise pools to the hidden cave waterfall.',
-    duration: 'Full Day Tour',
-    price: 'AED 165',
-    gradient: 'from-[#1F6F8B] to-[#0F3C4C]',
-  },
-  {
-    title: 'Bimmah Sinkhole Visit',
-    description: "A short stop for photos and a swim in one of Oman's most photographed landmarks.",
-    duration: 'Half Day Tour',
-    price: 'AED 85',
-    gradient: 'from-[#2E7D6B] to-[#154238]',
-  },
-  {
-    title: 'Mutrah Souq Walking Tour',
-    description: 'Frankincense, silver and spice stalls along the old harbour corniche at golden hour.',
-    duration: 'Half Day Tour',
-    price: 'AED 70',
-    gradient: 'from-[#8A4A9C] to-[#4A2653]',
-  },
+  NIZWA_ACTIVITY,
+  MUSCAT_ACTIVITY,
+  NIZWA_ACTIVITY,
+  NIZWA_ACTIVITY,
+  MUSCAT_ACTIVITY,
+  NIZWA_ACTIVITY,
 ];
 
 export const TRANSFERS = [

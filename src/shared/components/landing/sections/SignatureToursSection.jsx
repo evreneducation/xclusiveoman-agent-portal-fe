@@ -3,10 +3,11 @@
 // (same technique as WeOperateSection's "We Operate" heading — not the
 // shared SectionHeading component, which doesn't have flanking rules), a
 // 3-card photo grid (SignatureTourCard), and an outline pill button whose
-// arrow sits in its own circle overlapping the pill's right edge.
-import { FiArrowRight } from 'react-icons/fi';
+// arrow sits in its own circle overlapping the pill's right edge
+// (ArrowPillButton — also used by ActivitiesSection, same reference style).
 import { SIGNATURE_TOURS } from '../data.js';
 import { SignatureTourCard } from '../components/SignatureTourCard.jsx';
+import { ArrowPillButton } from '../components/ArrowPillButton.jsx';
 
 export function SignatureToursSection() {
   return (
@@ -37,15 +38,7 @@ export function SignatureToursSection() {
         </div>
 
         <div className="mt-12 flex justify-center">
-          <a
-            href="/login"
-            className="group relative inline-flex items-center rounded-full border border-[#E8B84B] py-3.5 pl-8 pr-16 text-base font-semibold text-[#1B1B1B] transition-colors hover:bg-[#FBF3E1]"
-          >
-            See More Packages
-            <span className="absolute -right-1 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-[#E8B84B] bg-white text-[#1B1B1B] transition-transform group-hover:translate-x-0.5">
-              <FiArrowRight />
-            </span>
-          </a>
+          <ArrowPillButton>See More Packages</ArrowPillButton>
         </div>
       </div>
     </section>
