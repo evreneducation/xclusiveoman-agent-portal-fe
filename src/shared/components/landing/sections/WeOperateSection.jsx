@@ -1,34 +1,43 @@
-// "We Operate Oman, You sell it." — heading, a full-width photo banner with
-// a wavy top edge (SVG mask, cream-on-photo), then a two-column strip: intro
-// copy + stats on the left, a stacked photo collage on the right.
+// "We Operate Oman, You sell it." — heading with gold rules flanking the
+// second line, then a full-width photo banner (We_Operate_Section.png) with
+// a wavy cream-colored top edge cut into it, followed by a two-column strip:
+// intro copy + stats on the left, a stacked photo collage on the right.
 import { HERO_STATS } from '../data.js';
 
 export function WeOperateSection() {
   return (
     <section className="bg-[#F7F3EA]">
-      <div className="mx-auto max-w-6xl px-6 pt-16 text-center sm:px-10">
-        <h2 className="text-3xl font-bold leading-tight text-[#1B2333] sm:text-4xl">
-          We Operate
-          <br />
-          <span className="font-serif italic text-[#C9A24A]">Oman,</span> You sell it.
-        </h2>
+      <div className="mx-auto max-w-4xl px-6 pt-16 text-center sm:px-10">
+        <h2 className="text-3xl font-normal text-[#1B1B1B] sm:text-4xl">We Operate</h2>
+
+        <div className="mt-4 flex items-center justify-center gap-5 sm:gap-8">
+          <span className="h-px flex-1 bg-[#E8B84B]" />
+          <p className="whitespace-nowrap text-3xl font-bold sm:text-4xl">
+            <span className="text-[#E8B84B]">Oman,</span> <span className="text-[#1B1B1B]">You sell it.</span>
+          </p>
+          <span className="h-px flex-1 bg-[#E8B84B]" />
+        </div>
       </div>
 
       {/* Wavy-topped banner photo — an SVG wave in the page's cream tone
           sits over the top edge of the image to fake the curved cut-in from
-          the reference design without a bespoke image asset. */}
-      <div className="relative mt-10 h-64 w-full overflow-hidden sm:h-80">
+          the reference design. */}
+      <div className="relative mt-10 h-72 w-full overflow-hidden sm:h-[420px]">
         <svg
-          viewBox="0 0 1440 120"
+          viewBox="0 0 1440 160"
           preserveAspectRatio="none"
-          className="absolute inset-x-0 top-0 z-10 h-16 w-full text-[#F7F3EA] sm:h-24"
+          className="absolute inset-x-0 top-0 z-10 h-20 w-full text-[#F7F3EA] sm:h-32"
         >
           <path
             fill="currentColor"
-            d="M0,64 C240,120 480,0 720,32 C960,64 1200,120 1440,48 L1440,0 L0,0 Z"
+            d="M0,55 C120,20 260,150 460,140 C640,131 700,30 920,25 C1100,21 1280,95 1440,55 L1440,0 L0,0 Z"
           />
         </svg>
-        <img src="/oman_pic.jpg" alt="Muscat coastline and mountains" className="h-full w-full object-cover" />
+        <img
+          src="/We_Operate_Section.png"
+          alt="Sultan Qaboos Grand Mosque, Muscat"
+          className="h-full w-full object-cover"
+        />
       </div>
 
       <div className="mx-auto grid max-w-6xl gap-10 px-6 py-16 sm:px-10 md:grid-cols-2 md:items-center">
