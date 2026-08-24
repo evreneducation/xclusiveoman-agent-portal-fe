@@ -1,19 +1,21 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
 import {
   LuBriefcase,
   LuBusFront,
   LuCompass,
+  LuEye,
   LuHotel,
   LuListChecks,
+  LuPencil,
   LuPersonStanding,
   LuSend,
   LuShieldCheck,
+  LuTrash2,
   LuUtensils,
 } from 'react-icons/lu';
 import { api } from '../api/client.js';
-import { Button, Card, ErrorText, FieldLabel, Table, TextInput } from '../components/ui.jsx';
+import { Button, Card, ErrorText, FieldLabel, Pagination, Table, TextInput } from '../components/ui.jsx';
 import { formatCurrency, formatDateRange, formatTime, getFdBadges } from '../../shared/fdPackage/index.js';
 
 const TABS = [
@@ -60,122 +62,9 @@ function CardBadge({ tone, children }) {
   );
 }
 
-function FdPackageCard({ pkg, onDeleteRequest }) {
-  const seatsTotal = pkg.seatsTotal ?? 0;
-  const seatsBooked = pkg.seatsBooked ?? 0;
-  const seatsLeft = Math.max(seatsTotal - seatsBooked, 0);
-  const bookedPct = seatsTotal > 0 ? Math.min((seatsBooked / seatsTotal) * 100, 100) : 0;
-  const dateRange = formatDateRange(pkg.firstDepartureDate, pkg.lastDepartureDate);
-  const badges = getFdBadges(pkg);
-  const isFeatured = badges.some((b) => b.tone === 'amber');
-
-  return (
-    // No h-full/flex-1 here — the grid this renders into uses items-start
-    // (FdPackagesTab below), so each card is only ever as tall as its own
-    // content rather than stretched to match its tallest row-sibling.
-    //
-    // The lift-on-hover is done via whileHover (Framer's own animated y),
-    // not a Tailwind hover:-translate-y-* class — Framer Motion writes
-    // `transform` as this element's own inline style (to drive the
-    // initial/animate entrance fade) and keeps owning that property
-    // afterwards, so a CSS class also targeting transform would silently
-    // lose to that inline style and never visibly apply. Shadow/border-color
-    // aren't touched by Framer, so those two stay plain Tailwind hover:
-    // classes same as everywhere else.
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      whileHover={{ y: -6 }}
-      transition={{ duration: 0.25, ease: 'easeOut' }}
-      className={`group flex flex-col overflow-hidden rounded-2xl border bg-white shadow-md shadow-black/5 transition-[border-color,box-shadow] duration-300 hover:shadow-2xl hover:shadow-ink/15 ${
-        isFeatured ? 'border-accent/50 ring-1 ring-accent/30 hover:ring-accent/70' : 'border-line-light hover:border-accent/40'
-      }`}
-    >
-      {/* Dark navy/indigo placeholder (the console's own ink→accent-dark
-          gradient) instead of a flat pale panel fill — a missing hero photo
-          reads as a deliberate premium plate rather than an empty box. */}
-      <div className="relative h-40 flex-none overflow-hidden bg-[linear-gradient(135deg,#172554_0%,#3730A3_100%)]">
-        {pkg.heroImageUrl ? (
-          <img
-            src={pkg.heroImageUrl}
-            alt=""
-            className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-110"
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center text-[11px] font-semibold uppercase tracking-wide text-white/40">
-            No hero image
-          </div>
-        )}
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/45 to-transparent" />
-        <div className="absolute left-2.5 top-2.5 flex flex-wrap gap-1.5">
-          <span
-            className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide shadow-sm ${
-              STATUS_BADGE_SOLID[pkg.status] || 'bg-slate-700 text-white'
-            }`}
-          >
-            {pkg.status}
-          </span>
-          {badges.map((b) => (
-            <CardBadge key={b.label} tone={b.tone}>
-              {b.label}
-            </CardBadge>
-          ))}
-        </div>
-      </div>
-
-      <div className="flex flex-col p-4">
-        {pkg.hotelName && <div className="text-[11px] font-semibold uppercase text-accent">{pkg.hotelName}</div>}
-        <div className="mt-0.5 text-sm font-bold leading-snug text-ink transition-colors duration-300 group-hover:text-accent-dark">
-          {pkg.title}
-        </div>
-        <div className="mt-1 text-xs text-muted">
-          {[pkg.duration, pkg.theme].filter(Boolean).join(' · ') || '—'}
-        </div>
-
-        {dateRange && (
-          <div className="mt-2 flex items-center gap-1.5 text-[11px] text-muted">
-            <span>📅</span>
-            {dateRange}
-          </div>
-        )}
-
-        <div className="mt-3">
-          {seatsTotal > 0 ? (
-            <>
-              <div className="h-1.5 w-full overflow-hidden rounded-full bg-panel">
-                <div className="h-full rounded-full bg-[#a5162d]" style={{ width: `${bookedPct}%` }} />
-              </div>
-              <div className="mt-1 flex items-center justify-between text-[11px]">
-                <span className="font-semibold text-[#a5162d]">{seatsLeft} seats left</span>
-                <span className="text-muted">{seatsTotal} total</span>
-              </div>
-            </>
-          ) : (
-            <p className="text-[11px] text-muted">No departure dates yet</p>
-          )}
-        </div>
-
-        <div className="mt-3 flex items-end justify-between gap-2 border-t border-line-light pt-3">
-          <div>
-            <div className="text-[10px] uppercase tracking-wide text-muted">Net rate</div>
-            <div className="text-base font-bold text-ink">{formatCurrency(pkg.ratePerPax)}</div>
-          </div>
-          <div className="flex items-center gap-3">
-            <button type="button" onClick={() => onDeleteRequest(pkg)} className="text-xs text-[#a5162d] hover:underline">
-              Delete
-            </button>
-            <Link to={`/admin/catalog/fd-packages/${pkg.id}`}>
-              <Button variant="accent">Edit</Button>
-            </Link>
-          </div>
-        </div>
-      </div>
-    </motion.div>
-  );
-}
-
-// No generic modal exists anywhere in the admin console yet (see the same
-// note on Marketing.jsx's local Modal) — this is a small local one (overlay
+// No shared Modal component exists yet (see this file's own local `Modal`
+// below, and the same local-Modal convention in Marketing.jsx/
+// AgentApprovals.jsx/Employees.jsx) — this is a bespoke small one (overlay
 // + centered Card-styled panel, same tokens as everywhere else) rather than
 // the browser's native window.confirm, so the warning and any failure (e.g.
 // a 409 because real bookings still exist — see deleteFdPackage's comment)
@@ -234,40 +123,201 @@ function DeleteFdPackageModal({ pkg, onCancel, onConfirmed }) {
   );
 }
 
+const PAGE_SIZE = 10;
+
+// Small local overlay-modal shell, same convention as AgentApprovals.jsx/
+// Employees.jsx's own local Modal (and Marketing.jsx's before those) — no
+// shared Modal component exists yet, so each page that needs one defines
+// its own rather than reaching for the browser's native window.confirm.
+function Modal({ title, onClose, children, footer }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 bg-black/30" onClick={onClose} />
+      <div className="relative z-10 flex max-h-[85vh] w-full max-w-lg flex-col rounded-lg border border-line-light bg-white p-5 shadow-lg sm:p-6">
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <h3 className="text-lg font-bold text-ink">{title}</h3>
+          <button type="button" onClick={onClose} aria-label="Close" className="text-lg leading-none text-muted hover:text-ink">
+            ×
+          </button>
+        </div>
+        <div className="overflow-y-auto">{children}</div>
+        {footer && <div className="mt-5 flex flex-wrap justify-end gap-2 border-t border-line-light pt-4">{footer}</div>}
+      </div>
+    </div>
+  );
+}
+
+function FieldTile({ label, children }) {
+  return (
+    <div className="rounded-md bg-panel px-3 py-2">
+      <div className="text-[10px] font-semibold uppercase text-muted">{label}</div>
+      <div>{children}</div>
+    </div>
+  );
+}
+
+// "View" — a quick read-only glance (same View/Edit split as the Agent
+// Approvals and Employees tables): "Edit" below still opens the full
+// FdPackageEditor route, which already does far more than a modal should
+// try to replicate (itinerary builder, departure dates, addons, images).
+function FdPackagePreviewModal({ pkg, onClose }) {
+  const dateRange = formatDateRange(pkg.firstDepartureDate, pkg.lastDepartureDate);
+  const badges = getFdBadges(pkg);
+  const seatsTotal = pkg.seatsTotal ?? 0;
+  const seatsBooked = pkg.seatsBooked ?? 0;
+
+  return (
+    <Modal title={pkg.title} onClose={onClose} footer={<Button onClick={onClose}>Close</Button>}>
+      <div className="mb-4 flex flex-wrap items-center gap-1.5">
+        <span
+          className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${
+            STATUS_BADGE_SOLID[pkg.status] || 'bg-slate-700 text-white'
+          }`}
+        >
+          {pkg.status}
+        </span>
+        {badges.map((b) => (
+          <CardBadge key={b.label} tone={b.tone}>
+            {b.label}
+          </CardBadge>
+        ))}
+      </div>
+
+      {pkg.heroImageUrl && <img src={pkg.heroImageUrl} alt="" className="mb-4 h-40 w-full rounded-lg object-cover" />}
+
+      <div className="grid gap-3 text-sm sm:grid-cols-2">
+        <FieldTile label="Hotel">{pkg.hotelName || '—'}</FieldTile>
+        <FieldTile label="Theme">{pkg.theme || '—'}</FieldTile>
+        <FieldTile label="Duration">{pkg.duration || '—'}</FieldTile>
+        <FieldTile label="Departure dates">{dateRange || 'No dates yet'}</FieldTile>
+        <FieldTile label="Net rate">{formatCurrency(pkg.ratePerPax)}</FieldTile>
+        <FieldTile label="Seats">
+          {seatsTotal > 0 ? `${Math.max(seatsTotal - seatsBooked, 0)} left of ${seatsTotal}` : '—'}
+        </FieldTile>
+      </div>
+    </Modal>
+  );
+}
+
+// Table (not the FdPackageCard grid the other simple catalog tabs use) —
+// FD packages carry enough operational data per row (theme, departure
+// window, net rate, status) that a scannable table reads better here than a
+// photo grid at this list size, and the reference this was built against
+// (a dense, paginated ops list) called for one explicitly. Search and
+// pagination (10/page) are both fully server-side — see
+// fdPackagesAdmin.controller.js#list.
 function FdPackagesTab() {
   const [items, setItems] = useState([]);
+  const [pagination, setPagination] = useState({ total: 0, page: 1, pageSize: PAGE_SIZE, totalPages: 1 });
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [previewing, setPreviewing] = useState(null);
   const [pendingDelete, setPendingDelete] = useState(null);
 
-  useEffect(() => {
-    api
-      .get('/admin/fd-packages')
-      .then(({ fdPackages }) => setItems(fdPackages))
-      .finally(() => setLoading(false));
-  }, []);
+  function updateSearch(v) {
+    setSearch(v);
+    setPage(1);
+  }
 
-  const filtered = items.filter((i) => i.title.toLowerCase().includes(search.toLowerCase()));
+  useEffect(() => {
+    setLoading(true);
+    setError('');
+    const params = new URLSearchParams();
+    if (search) params.set('search', search);
+    params.set('page', String(page));
+    params.set('pageSize', String(PAGE_SIZE));
+
+    api
+      .get(`/admin/fd-packages?${params.toString()}`)
+      .then(({ fdPackages, pagination: p }) => {
+        setItems(fdPackages);
+        setPagination(p);
+      })
+      .catch((err) => setError(err.message || 'Unable to load FD packages'))
+      .finally(() => setLoading(false));
+  }, [search, page]);
 
   return (
     <div>
       <div className="mb-4 flex items-center justify-between gap-3">
-        <TextInput className="flex-1" placeholder="Search FD packages…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <TextInput className="flex-1" placeholder="Search FD packages…" value={search} onChange={(e) => updateSearch(e.target.value)} />
         <Link to="/admin/catalog/fd-packages/new">
           <Button variant="accent">+ Add New FD Package</Button>
         </Link>
       </div>
+
+      <ErrorText>{error}</ErrorText>
+
       {loading ? (
         <p className="text-xs text-muted">Loading…</p>
-      ) : filtered.length === 0 ? (
-        <p className="text-xs text-muted">No FD packages match that search.</p>
+      ) : items.length === 0 ? (
+        <p className="text-xs text-muted">{search ? 'No FD packages match that search.' : 'No FD packages yet.'}</p>
       ) : (
-        <div className="grid grid-cols-1 items-start gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((pkg) => (
-            <FdPackageCard key={pkg.id} pkg={pkg} onDeleteRequest={setPendingDelete} />
-          ))}
-        </div>
+        <>
+          <Table
+            columns={['Package Name', 'Theme', 'Departure Dates', 'Net Rate', 'Status', { label: 'Actions', align: 'right' }]}
+            rows={items}
+            renderRow={(pkg) => {
+              const dateRange = formatDateRange(pkg.firstDepartureDate, pkg.lastDepartureDate);
+              return (
+                <tr key={pkg.id} className="border-b border-line-light transition-colors last:border-0 hover:bg-panel/50">
+                  <td className="px-3 py-3 align-middle">
+                    <div className="font-semibold text-ink">{pkg.title}</div>
+                    {pkg.hotelName && <div className="text-[11px] text-muted">{pkg.hotelName}</div>}
+                  </td>
+                  <td className="px-3 py-3 align-middle whitespace-nowrap">{pkg.theme || '—'}</td>
+                  <td className="px-3 py-3 align-middle whitespace-nowrap">{dateRange || '—'}</td>
+                  <td className="px-3 py-3 align-middle whitespace-nowrap">{formatCurrency(pkg.ratePerPax)}</td>
+                  <td className="px-3 py-3 align-middle">
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${
+                        STATUS_BADGE_SOLID[pkg.status] || 'bg-slate-700 text-white'
+                      }`}
+                    >
+                      {pkg.status}
+                    </span>
+                  </td>
+                  <td className="px-3 py-3 align-middle">
+                    <div className="flex flex-nowrap items-center justify-end gap-2">
+                      <Button size="sm" className="whitespace-nowrap" onClick={() => setPreviewing(pkg)}>
+                        <LuEye className="mr-1.5 flex-shrink-0" size={14} />
+                        View
+                      </Button>
+                      <Link to={`/admin/catalog/fd-packages/${pkg.id}`}>
+                        <Button size="sm" variant="accent" className="whitespace-nowrap">
+                          <LuPencil className="mr-1.5 flex-shrink-0" size={14} />
+                          Edit
+                        </Button>
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={() => setPendingDelete(pkg)}
+                        aria-label={`Delete ${pkg.title}`}
+                        className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md border border-[#FECACA] text-[#B91C1C] hover:bg-[#FEF2F2]"
+                      >
+                        <LuTrash2 size={14} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            }}
+          />
+
+          <Pagination
+            page={pagination.page}
+            totalPages={pagination.totalPages}
+            total={pagination.total}
+            pageSize={pagination.pageSize}
+            onChange={setPage}
+            itemLabel="FD packages"
+          />
+        </>
       )}
+
+      {previewing && <FdPackagePreviewModal pkg={previewing} onClose={() => setPreviewing(null)} />}
       {pendingDelete && (
         <DeleteFdPackageModal
           pkg={pendingDelete}
@@ -275,6 +325,7 @@ function FdPackagesTab() {
           onConfirmed={(id) => {
             setItems((list) => list.filter((i) => i.id !== id));
             setPendingDelete(null);
+            setPagination((p) => ({ ...p, total: Math.max(0, p.total - 1) }));
           }}
         />
       )}
@@ -283,13 +334,16 @@ function FdPackagesTab() {
 }
 
 // Shared premium card shell for the four simple catalog entities below
-// (Hotels/Tours/Activities/Transfers) — same "dark placeholder + hover lift
-// + solid badge" treatment FdPackageCard above already established,
-// generalized here since these four only differ in which fields they show,
-// not in how the card itself should look. Replaces the plain <Table> rows
-// (a 40×40 thumbnail squeezed into a dense grid of columns) these tabs used
-// before, which read as a cramped spreadsheet rather than a catalog —
-// `meta` is a small array of already-formatted strings (city, duration,
+// (Hotels/Tours/Activities/Transfers) — the same "dark placeholder + hover
+// lift + solid badge" treatment the FD Packages tab's own cards used before
+// that tab was rebuilt as a table (FdPackagesTab below — its per-row data,
+// including operational fields like net rate and departure window, reads
+// better as a scannable list at this size than a photo grid). Generalized
+// here since these four only differ in which fields they show, not in how
+// the card itself should look; still replaces the plain <Table> rows
+// (a 40×40 thumbnail squeezed into a dense grid of columns) these four tabs
+// used even before that — read as a cramped spreadsheet rather than a
+// catalog. `meta` is a small array of already-formatted strings (city, duration,
 // etc.), rendered as one "·"-joined line; falsy entries are skipped by the
 // caller before this ever sees them.
 function CatalogCard({ imageUrl, badge, title, meta, price, priceLabel = 'Price', editHref, onDelete }) {
