@@ -4,22 +4,27 @@ import { PillButton } from '../components/PillButton.jsx';
 
 export function Navbar() {
   return (
-    <header className="sticky top-0 z-40 border-b border-[#E8E1D3] bg-[#F7F3EA]/95 backdrop-blur">
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3">
+    <header className="sticky top-0 z-40 border-y-[3px] border-[#1B1B1B] bg-[#F7F3EA] backdrop-blur">
+      <div className="flex items-center justify-between px-6 py-4 sm:px-10">
         <Link to="/" className="flex items-center gap-2">
-          <img src="/Xclusive_Oman_Logo_2.png" alt="Xclusive Oman by Traveon" className="h-9 w-auto" />
+          <img src="/Xclusive_Oman_Logo_2.png" alt="Xclusive Oman by Traveon" className="h-10 w-auto" />
         </Link>
 
-        <nav className="hidden items-center gap-8 text-sm font-medium text-[#1B2333] md:flex">
+        <nav className="hidden items-center gap-10 text-base text-[#1B1B1B] md:flex">
           {NAV_LINKS.map((link) => (
-            <a key={link.label} href={link.href} className="transition-colors hover:text-[#C9A24A]">
+            <a key={link.label} href={link.href} className="transition-colors hover:text-[#E8B84B]">
               {link.label}
             </a>
           ))}
         </nav>
 
-        <PillButton to="/login" variant="solid" withArrow={false} className="px-5 py-2 text-xs">
-          Sign Up / Login
+        <PillButton
+          to="/login"
+          variant="solid"
+          withArrow={false}
+          className="bg-[#E8B84B] px-6 py-2.5 text-sm font-semibold text-[#1B1B1B] hover:bg-[#d9a93a]"
+        >
+          Sign Up/ Login
         </PillButton>
       </div>
     </header>
