@@ -1,21 +1,64 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import {
+  LuBriefcase,
+  LuBusFront,
+  LuCompass,
+  LuHotel,
+  LuListChecks,
+  LuPersonStanding,
+  LuSend,
+  LuShieldCheck,
+  LuUtensils,
+} from 'react-icons/lu';
 import { api } from '../api/client.js';
-import { Badge, Button, Card, ErrorText, FieldLabel, Table, TextInput } from '../components/ui.jsx';
-import { FD_STATUS_TONE, formatCurrency, formatDateRange, formatTime, getFdBadges } from '../../shared/fdPackage/index.js';
+import { Button, Card, ErrorText, FieldLabel, Table, TextInput } from '../components/ui.jsx';
+import { formatCurrency, formatDateRange, formatTime, getFdBadges } from '../../shared/fdPackage/index.js';
 
 const TABS = [
-  { key: 'fdPackages', label: 'FD Packages' },
-  { key: 'hotels', label: 'Hotels' },
-  { key: 'tours', label: 'Tours' },
-  { key: 'activities', label: 'Activities' },
-  { key: 'transfers', label: 'Transfers' },
-  { key: 'meals', label: 'Meals' },
-  { key: 'visa', label: 'Visa' },
-  { key: 'flights', label: 'Flights' },
-  { key: 'inclusionsExclusions', label: 'Inclusions & Exclusions' },
+  { key: 'fdPackages', label: 'FD Packages', icon: LuBriefcase },
+  { key: 'hotels', label: 'Hotels', icon: LuHotel },
+  { key: 'tours', label: 'Tours', icon: LuCompass },
+  { key: 'activities', label: 'Activities', icon: LuPersonStanding },
+  { key: 'transfers', label: 'Transfers', icon: LuBusFront },
+  { key: 'meals', label: 'Meals', icon: LuUtensils },
+  { key: 'visa', label: 'Visa', icon: LuShieldCheck },
+  { key: 'flights', label: 'Flights', icon: LuSend },
+  { key: 'inclusionsExclusions', label: 'Inclusions & Exclusions', icon: LuListChecks },
 ];
+
+// Solid-fill premium badges for the card's image overlay — same reasoning
+// as agent/pages/Departures.jsx's own CardBadge: the shared `Badge`
+// component (../components/ui.jsx) is a soft pale-pill treatment meant for
+// sitting on a white card body, and needs real contrast to read on a dark
+// photo/placeholder instead. Deliberately kept in the admin console's own
+// indigo/purple identity (no gold/teal borrowed from the agent portal's
+// separate brand) — "Featured" reads as the console's own accent gradient
+// rather than agent's gold, consistent with every other admin premium
+// treatment (ContentManagement.jsx's gradient headings, etc.).
+const CARD_BADGE_TONE = {
+  amber: 'bg-gradient-to-r from-accent to-accent-dark text-white',
+  green: 'bg-emerald-500 text-white',
+  red: 'bg-rose-600 text-white',
+};
+const STATUS_BADGE_SOLID = {
+  draft: 'bg-slate-600 text-white',
+  published: 'bg-emerald-500 text-white',
+  closed: 'bg-rose-600 text-white',
+};
+
+function CardBadge({ tone, children }) {
+  return (
+    <span
+      className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide shadow-sm ${
+        CARD_BADGE_TONE[tone] || 'bg-slate-700 text-white'
+      }`}
+    >
+      {children}
+    </span>
+  );
+}
 
 function FdPackageCard({ pkg, onDeleteRequest }) {
   const seatsTotal = pkg.seatsTotal ?? 0;
@@ -24,33 +67,67 @@ function FdPackageCard({ pkg, onDeleteRequest }) {
   const bookedPct = seatsTotal > 0 ? Math.min((seatsBooked / seatsTotal) * 100, 100) : 0;
   const dateRange = formatDateRange(pkg.firstDepartureDate, pkg.lastDepartureDate);
   const badges = getFdBadges(pkg);
+  const isFeatured = badges.some((b) => b.tone === 'amber');
 
   return (
+    // No h-full/flex-1 here — the grid this renders into uses items-start
+    // (FdPackagesTab below), so each card is only ever as tall as its own
+    // content rather than stretched to match its tallest row-sibling.
+    //
+    // The lift-on-hover is done via whileHover (Framer's own animated y),
+    // not a Tailwind hover:-translate-y-* class — Framer Motion writes
+    // `transform` as this element's own inline style (to drive the
+    // initial/animate entrance fade) and keeps owning that property
+    // afterwards, so a CSS class also targeting transform would silently
+    // lose to that inline style and never visibly apply. Shadow/border-color
+    // aren't touched by Framer, so those two stay plain Tailwind hover:
+    // classes same as everywhere else.
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
+      whileHover={{ y: -6 }}
       transition={{ duration: 0.25, ease: 'easeOut' }}
-      className="flex h-full flex-col overflow-hidden rounded-lg border border-line-light bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+      className={`group flex flex-col overflow-hidden rounded-2xl border bg-white shadow-md shadow-black/5 transition-[border-color,box-shadow] duration-300 hover:shadow-2xl hover:shadow-ink/15 ${
+        isFeatured ? 'border-accent/50 ring-1 ring-accent/30 hover:ring-accent/70' : 'border-line-light hover:border-accent/40'
+      }`}
     >
-      <div className="relative h-40 flex-none bg-panel">
+      {/* Dark navy/indigo placeholder (the console's own ink→accent-dark
+          gradient) instead of a flat pale panel fill — a missing hero photo
+          reads as a deliberate premium plate rather than an empty box. */}
+      <div className="relative h-40 flex-none overflow-hidden bg-[linear-gradient(135deg,#172554_0%,#3730A3_100%)]">
         {pkg.heroImageUrl ? (
-          <img src={pkg.heroImageUrl} alt="" className="h-full w-full object-cover" />
+          <img
+            src={pkg.heroImageUrl}
+            alt=""
+            className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-110"
+          />
         ) : (
-          <div className="flex h-full w-full items-center justify-center font-mono text-[10px] text-muted">No hero image</div>
+          <div className="flex h-full w-full items-center justify-center text-[11px] font-semibold uppercase tracking-wide text-white/40">
+            No hero image
+          </div>
         )}
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/45 to-transparent" />
         <div className="absolute left-2.5 top-2.5 flex flex-wrap gap-1.5">
-          <Badge tone={FD_STATUS_TONE[pkg.status] || 'grey'}>{pkg.status}</Badge>
+          <span
+            className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide shadow-sm ${
+              STATUS_BADGE_SOLID[pkg.status] || 'bg-slate-700 text-white'
+            }`}
+          >
+            {pkg.status}
+          </span>
           {badges.map((b) => (
-            <Badge key={b.label} tone={b.tone}>
+            <CardBadge key={b.label} tone={b.tone}>
               {b.label}
-            </Badge>
+            </CardBadge>
           ))}
         </div>
       </div>
 
-      <div className="flex flex-1 flex-col p-4">
+      <div className="flex flex-col p-4">
         {pkg.hotelName && <div className="text-[11px] font-semibold uppercase text-accent">{pkg.hotelName}</div>}
-        <div className="mt-0.5 text-sm font-bold leading-snug">{pkg.title}</div>
+        <div className="mt-0.5 text-sm font-bold leading-snug text-ink transition-colors duration-300 group-hover:text-accent-dark">
+          {pkg.title}
+        </div>
         <div className="mt-1 text-xs text-muted">
           {[pkg.duration, pkg.theme].filter(Boolean).join(' · ') || '—'}
         </div>
@@ -78,10 +155,10 @@ function FdPackageCard({ pkg, onDeleteRequest }) {
           )}
         </div>
 
-        <div className="mt-3 flex flex-1 items-end justify-between gap-2">
+        <div className="mt-3 flex items-end justify-between gap-2 border-t border-line-light pt-3">
           <div>
-            <div className="text-[10px] text-muted">Net rate</div>
-            <div className="text-base font-bold">{formatCurrency(pkg.ratePerPax)}</div>
+            <div className="text-[10px] uppercase tracking-wide text-muted">Net rate</div>
+            <div className="text-base font-bold text-ink">{formatCurrency(pkg.ratePerPax)}</div>
           </div>
           <div className="flex items-center gap-3">
             <button type="button" onClick={() => onDeleteRequest(pkg)} className="text-xs text-[#a5162d] hover:underline">
@@ -175,7 +252,7 @@ function FdPackagesTab() {
   return (
     <div>
       <div className="mb-4 flex items-center justify-between gap-3">
-        <TextInput className="max-w-xs" placeholder="Search FD packages…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <TextInput className="flex-1" placeholder="Search FD packages…" value={search} onChange={(e) => setSearch(e.target.value)} />
         <Link to="/admin/catalog/fd-packages/new">
           <Button variant="accent">+ Add New FD Package</Button>
         </Link>
@@ -185,7 +262,7 @@ function FdPackagesTab() {
       ) : filtered.length === 0 ? (
         <p className="text-xs text-muted">No FD packages match that search.</p>
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 items-start gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((pkg) => (
             <FdPackageCard key={pkg.id} pkg={pkg} onDeleteRequest={setPendingDelete} />
           ))}
@@ -201,6 +278,63 @@ function FdPackagesTab() {
           }}
         />
       )}
+    </div>
+  );
+}
+
+// Shared premium card shell for the four simple catalog entities below
+// (Hotels/Tours/Activities/Transfers) — same "dark placeholder + hover lift
+// + solid badge" treatment FdPackageCard above already established,
+// generalized here since these four only differ in which fields they show,
+// not in how the card itself should look. Replaces the plain <Table> rows
+// (a 40×40 thumbnail squeezed into a dense grid of columns) these tabs used
+// before, which read as a cramped spreadsheet rather than a catalog —
+// `meta` is a small array of already-formatted strings (city, duration,
+// etc.), rendered as one "·"-joined line; falsy entries are skipped by the
+// caller before this ever sees them.
+function CatalogCard({ imageUrl, badge, title, meta, price, priceLabel = 'Price', editHref, onDelete }) {
+  return (
+    <div className="group flex flex-col overflow-hidden rounded-2xl border border-line-light bg-white shadow-md shadow-black/5 transition-all duration-300 hover:-translate-y-1.5 hover:border-accent/40 hover:shadow-2xl hover:shadow-ink/15">
+      <div className="relative h-36 flex-none overflow-hidden bg-[linear-gradient(135deg,#172554_0%,#3730A3_100%)]">
+        {imageUrl ? (
+          <img
+            src={imageUrl}
+            alt=""
+            className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-110"
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-[11px] font-semibold uppercase tracking-wide text-white/40">
+            No image
+          </div>
+        )}
+        {badge && (
+          <span className="absolute left-2.5 top-2.5 rounded-full bg-white/95 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-ink shadow-sm">
+            {badge}
+          </span>
+        )}
+      </div>
+
+      <div className="flex flex-col p-4">
+        <div className="text-sm font-bold leading-snug text-ink transition-colors duration-300 group-hover:text-accent-dark">
+          {title}
+        </div>
+        {meta.length > 0 && <div className="mt-1 text-xs text-muted">{meta.join(' · ')}</div>}
+
+        <div className="mt-3 flex items-end justify-between gap-2 border-t border-line-light pt-3">
+          <div>
+            <div className="text-[10px] uppercase tracking-wide text-muted">{priceLabel}</div>
+            <div className="text-base font-bold text-ink">{price}</div>
+          </div>
+          <div className="flex items-center gap-3">
+            <button type="button" onClick={onDelete} className="text-xs text-[#a5162d] hover:underline">
+              Delete
+            </button>
+            <Link to={editHref}>
+              <Button variant="accent">Edit</Button>
+            </Link>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -228,47 +362,31 @@ function HotelsTab() {
   return (
     <div>
       <div className="mb-3 flex items-center justify-between gap-3">
-        <TextInput className="max-w-xs" placeholder="Search hotels…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <TextInput className="flex-1" placeholder="Search hotels…" value={search} onChange={(e) => setSearch(e.target.value)} />
         <Link to="/admin/catalog/hotels/new">
           <Button variant="accent">+ Add New Hotel</Button>
         </Link>
       </div>
       {loading ? (
         <p className="text-xs text-muted">Loading…</p>
+      ) : items.length === 0 ? (
+        <p className="text-xs text-muted">No hotels match that search.</p>
       ) : (
-        <Table
-          columns={['', 'Hotel', 'City', 'State', 'Star', 'Email', 'Price / night', '']}
-          rows={items}
-          renderRow={(hotel) => (
-            <tr key={hotel.id} className="border-b border-line-light last:border-0">
-              <td className="px-3 py-2">
-                {hotel.images?.[0] ? (
-                  <img src={hotel.images[0]} alt="" className="h-10 w-10 rounded-md border border-line-light object-cover" />
-                ) : (
-                  <div className="flex h-10 w-10 items-center justify-center rounded-md border border-dashed border-line-light font-mono text-[8px] text-muted">
-                    No image
-                  </div>
-                )}
-              </td>
-              <td className="px-3 py-2 font-semibold">{hotel.name}</td>
-              <td className="px-3 py-2">{hotel.city || '—'}</td>
-              <td className="px-3 py-2">{hotel.state || '—'}</td>
-              <td className="px-3 py-2">{hotel.category ? <Badge tone="amber">{hotel.category}★</Badge> : '—'}</td>
-              <td className="px-3 py-2">{hotel.email || '—'}</td>
-              <td className="px-3 py-2">{hotel.price_per_night != null ? `₹${hotel.price_per_night}` : '—'}</td>
-              <td className="px-3 py-2 text-right">
-                <div className="flex justify-end gap-3">
-                  <Link to={`/admin/catalog/hotels/${hotel.id}`} className="text-accent hover:underline">
-                    Edit
-                  </Link>
-                  <button onClick={() => handleDelete(hotel.id)} className="text-[#a5162d] hover:underline">
-                    Delete
-                  </button>
-                </div>
-              </td>
-            </tr>
-          )}
-        />
+        <div className="grid grid-cols-1 items-start gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {items.map((hotel) => (
+            <CatalogCard
+              key={hotel.id}
+              imageUrl={hotel.images?.[0]}
+              badge={hotel.category ? `${hotel.category}★` : null}
+              title={hotel.name}
+              meta={[hotel.city, hotel.state].filter(Boolean)}
+              price={formatCurrency(hotel.price_per_night)}
+              priceLabel="Price / night"
+              editHref={`/admin/catalog/hotels/${hotel.id}`}
+              onDelete={() => handleDelete(hotel.id)}
+            />
+          ))}
+        </div>
       )}
     </div>
   );
@@ -297,46 +415,30 @@ function ToursTab() {
   return (
     <div>
       <div className="mb-3 flex items-center justify-between gap-3">
-        <TextInput className="max-w-xs" placeholder="Search tours…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <TextInput className="flex-1" placeholder="Search tours…" value={search} onChange={(e) => setSearch(e.target.value)} />
         <Link to="/admin/catalog/tours/new">
           <Button variant="accent">+ Add New Tour</Button>
         </Link>
       </div>
       {loading ? (
         <p className="text-xs text-muted">Loading…</p>
+      ) : items.length === 0 ? (
+        <p className="text-xs text-muted">No tours match that search.</p>
       ) : (
-        <Table
-          columns={['', 'Tour', 'City', 'Category', 'Duration', 'Price (INR)', '']}
-          rows={items}
-          renderRow={(tour) => (
-            <tr key={tour.id} className="border-b border-line-light last:border-0">
-              <td className="px-3 py-2">
-                {tour.images?.[0] ? (
-                  <img src={tour.images[0]} alt="" className="h-10 w-10 rounded-md border border-line-light object-cover" />
-                ) : (
-                  <div className="flex h-10 w-10 items-center justify-center rounded-md border border-dashed border-line-light font-mono text-[8px] text-muted">
-                    No image
-                  </div>
-                )}
-              </td>
-              <td className="px-3 py-2 font-semibold">{tour.name}</td>
-              <td className="px-3 py-2">{tour.city || '—'}</td>
-              <td className="px-3 py-2">{tour.category ? <Badge tone="amber">{tour.category}</Badge> : '—'}</td>
-              <td className="px-3 py-2">{tour.duration || '—'}</td>
-              <td className="px-3 py-2">{tour.price != null ? `₹${tour.price}` : '—'}</td>
-              <td className="px-3 py-2 text-right">
-                <div className="flex justify-end gap-3">
-                  <Link to={`/admin/catalog/tours/${tour.id}`} className="text-accent hover:underline">
-                    Edit
-                  </Link>
-                  <button onClick={() => handleDelete(tour.id)} className="text-[#a5162d] hover:underline">
-                    Delete
-                  </button>
-                </div>
-              </td>
-            </tr>
-          )}
-        />
+        <div className="grid grid-cols-1 items-start gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {items.map((tour) => (
+            <CatalogCard
+              key={tour.id}
+              imageUrl={tour.images?.[0]}
+              badge={tour.category}
+              title={tour.name}
+              meta={[tour.city, tour.duration].filter(Boolean)}
+              price={formatCurrency(tour.price)}
+              editHref={`/admin/catalog/tours/${tour.id}`}
+              onDelete={() => handleDelete(tour.id)}
+            />
+          ))}
+        </div>
       )}
     </div>
   );
@@ -369,47 +471,30 @@ function ActivitiesTab() {
   return (
     <div>
       <div className="mb-3 flex items-center justify-between gap-3">
-        <TextInput className="max-w-xs" placeholder="Search activities…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <TextInput className="flex-1" placeholder="Search activities…" value={search} onChange={(e) => setSearch(e.target.value)} />
         <Link to="/admin/catalog/activities/new">
           <Button variant="accent">+ Add New Activity</Button>
         </Link>
       </div>
       {loading ? (
         <p className="text-xs text-muted">Loading…</p>
+      ) : items.length === 0 ? (
+        <p className="text-xs text-muted">No activities match that search.</p>
       ) : (
-        <Table
-          columns={['', 'Activity', 'City', 'Duration', 'Price per pax', '']}
-          rows={items}
-          renderRow={(activity) => (
-            <tr key={activity.id} className="border-b border-line-light last:border-0">
-              <td className="px-3 py-2">
-                {activity.images?.[0] ? (
-                  <img src={activity.images[0]} alt="" className="h-10 w-10 rounded-md border border-line-light object-cover" />
-                ) : (
-                  <div className="flex h-10 w-10 items-center justify-center rounded-md border border-dashed border-line-light font-mono text-[8px] text-muted">
-                    No image
-                  </div>
-                )}
-              </td>
-              <td className="px-3 py-2 font-semibold">{activity.name}</td>
-              <td className="px-3 py-2">{activity.city || '—'}</td>
-              <td className="px-3 py-2">{activity.duration || '—'}</td>
-              <td className="px-3 py-2">
-                {(activity.pricePerPax ?? activity.price_per_pax) != null ? `₹${activity.pricePerPax ?? activity.price_per_pax}` : '—'}
-              </td>
-              <td className="px-3 py-2 text-right">
-                <div className="flex justify-end gap-3">
-                  <Link to={`/admin/catalog/activities/${activity.id}`} className="text-accent hover:underline">
-                    Edit
-                  </Link>
-                  <button onClick={() => handleDelete(activity.id)} className="text-[#a5162d] hover:underline">
-                    Delete
-                  </button>
-                </div>
-              </td>
-            </tr>
-          )}
-        />
+        <div className="grid grid-cols-1 items-start gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {items.map((activity) => (
+            <CatalogCard
+              key={activity.id}
+              imageUrl={activity.images?.[0]}
+              title={activity.name}
+              meta={[activity.city, activity.duration].filter(Boolean)}
+              price={formatCurrency(activity.pricePerPax ?? activity.price_per_pax)}
+              priceLabel="Price per pax"
+              editHref={`/admin/catalog/activities/${activity.id}`}
+              onDelete={() => handleDelete(activity.id)}
+            />
+          ))}
+        </div>
       )}
     </div>
   );
@@ -441,45 +526,30 @@ function TransfersTab() {
   return (
     <div>
       <div className="mb-3 flex items-center justify-between gap-3">
-        <TextInput className="max-w-xs" placeholder="Search transfers…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <TextInput className="flex-1" placeholder="Search transfers…" value={search} onChange={(e) => setSearch(e.target.value)} />
         <Link to="/admin/catalog/transfers/new">
           <Button variant="accent">+ Add New Transfer</Button>
         </Link>
       </div>
       {loading ? (
         <p className="text-xs text-muted">Loading…</p>
+      ) : items.length === 0 ? (
+        <p className="text-xs text-muted">No transfers match that search.</p>
       ) : (
-        <Table
-          columns={['', 'Transfer', 'Type', 'City', 'Price', '']}
-          rows={items}
-          renderRow={(transfer) => (
-            <tr key={transfer.id} className="border-b border-line-light last:border-0">
-              <td className="px-3 py-2">
-                {transfer.images?.[0] ? (
-                  <img src={transfer.images[0]} alt="" className="h-10 w-10 rounded-md border border-line-light object-cover" />
-                ) : (
-                  <div className="flex h-10 w-10 items-center justify-center rounded-md border border-dashed border-line-light font-mono text-[8px] text-muted">
-                    No image
-                  </div>
-                )}
-              </td>
-              <td className="px-3 py-2 font-semibold">{transfer.name}</td>
-              <td className="px-3 py-2">{transfer.type ? <Badge tone="amber">{transfer.type}</Badge> : '—'}</td>
-              <td className="px-3 py-2">{transfer.city || '—'}</td>
-              <td className="px-3 py-2">{transfer.price != null ? `₹${transfer.price}` : '—'}</td>
-              <td className="px-3 py-2 text-right">
-                <div className="flex justify-end gap-3">
-                  <Link to={`/admin/catalog/transfers/${transfer.id}`} className="text-accent hover:underline">
-                    Edit
-                  </Link>
-                  <button onClick={() => handleDelete(transfer.id)} className="text-[#a5162d] hover:underline">
-                    Delete
-                  </button>
-                </div>
-              </td>
-            </tr>
-          )}
-        />
+        <div className="grid grid-cols-1 items-start gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {items.map((transfer) => (
+            <CatalogCard
+              key={transfer.id}
+              imageUrl={transfer.images?.[0]}
+              badge={transfer.type}
+              title={transfer.name}
+              meta={[transfer.city].filter(Boolean)}
+              price={formatCurrency(transfer.price)}
+              editHref={`/admin/catalog/transfers/${transfer.id}`}
+              onDelete={() => handleDelete(transfer.id)}
+            />
+          ))}
+        </div>
       )}
     </div>
   );
@@ -1113,19 +1183,34 @@ export default function ProductCatalog() {
   return (
     <div className="min-h-screen bg-[#F4F7FF]">
       <div className="mx-auto max-w-6xl p-6 lg:p-10">
-        <h2 className="mb-5 text-3xl font-bold">Product Catalog</h2>
-        <div className="mb-6 flex flex-wrap gap-2">
-          {TABS.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
-              className={`rounded-full border px-4 py-2 text-xs font-semibold ${
-                tab === t.key ? 'border-ink bg-ink text-white' : 'border-line-light bg-white text-[#666]'
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
+        <h2 className="mb-6 text-3xl font-bold text-ink">Product Catalog</h2>
+
+        {/* Tab pills float directly on the page background — each one is
+            already its own small white/gradient pill, so wrapping the whole
+            row in a second bordered/shadowed white panel just stacked
+            white-on-white without adding anything. Each tab's own search +
+            "+ Add New X" row (FdPackagesTab, HotelsTab, …) renders as a
+            separate, equally unwrapped row right below, exactly the same
+            "plain page, individually-styled controls" layout. */}
+        <div className="mb-6 flex flex-wrap items-center gap-2">
+          {TABS.map((t) => {
+            const Icon = t.icon;
+            const active = tab === t.key;
+            return (
+              <button
+                key={t.key}
+                onClick={() => setTab(t.key)}
+                className={`flex items-center gap-1.5 rounded-full border px-4 py-2 text-xs font-semibold transition-colors ${
+                  active
+                    ? 'border-transparent bg-gradient-to-r from-accent to-[#7C3AED] text-white shadow-sm shadow-accent/25'
+                    : 'border-line-light bg-white text-[#666] hover:border-accent/40 hover:text-accent'
+                }`}
+              >
+                <Icon size={14} className="flex-none" />
+                {t.label}
+              </button>
+            );
+          })}
         </div>
 
         {tab === 'fdPackages' ? (
