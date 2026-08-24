@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import DOMPurify from 'dompurify';
 import {
   LuArrowLeft,
   LuArrowRight,
@@ -42,6 +43,16 @@ import { computeNightsByCity, ITINERARY_ITEM_TYPE_META, itineraryHasItemType } f
 // Button instances here — it doesn't touch ui.jsx, so every other page's
 // gold/coral "accent" buttons are unaffected.
 const PRIMARY_CTA_CLASS = 'border-transparent bg-gradient-to-r from-[#083A36] via-[#0B4F4A] to-[#0D9488] hover:opacity-90';
+
+// Booking terms card below — body_html is admin-authored (TermsAndConditions.jsx,
+// GET /site-terms) but still passes through an untrusted-input boundary
+// before ever reaching dangerouslySetInnerHTML: DOMPurify strips <script>,
+// event-handler attributes, javascript: URLs, etc. Same "small,
+// dependency-free sanitize-before-render" wrapper CmsPage.jsx already uses
+// for its own admin-authored body_html.
+function sanitizeHtml(html) {
+  return DOMPurify.sanitize(html || '', { USE_PROFILES: { html: true } });
+}
 
 // Full-screen photo viewer opened by clicking any hero/carousel image below
 // — `gallery` is the full ordered image list, `index` the one currently
@@ -803,6 +814,12 @@ export default function DepartureDetail() {
   const [submitting, setSubmitting] = useState(false);
   const [bookingResult, setBookingResult] = useState(null);
   const [bookingError, setBookingError] = useState('');
+  // Booking terms card below — the admin-authored Terms & Conditions
+  // document (TermsAndConditions.jsx / site_terms, one shared document
+  // across every departure, not per-package content), fetched separately
+  // from the departure itself since it comes off its own endpoint. null
+  // while loading/unset so the card stays hidden rather than flashing empty.
+  const [termsHtml, setTermsHtml] = useState(null);
 
   useEffect(() => {
     api
@@ -813,6 +830,13 @@ export default function DepartureDetail() {
       })
       .catch((err) => setError(err.message));
   }, [id]);
+
+  useEffect(() => {
+    api
+      .get('/site-terms')
+      .then(({ terms }) => setTermsHtml(terms?.body_html || ''))
+      .catch(() => setTermsHtml('')); // no terms saved yet, or a transient error — card just stays hidden
+  }, []);
 
   useEffect(() => {
     setTravelers((list) => {
@@ -1040,19 +1064,20 @@ export default function DepartureDetail() {
             </Card>
           )}
 
-          <Card className="border-white rounded-2xl p-5 sm:p-6">
-            <SectionHeading icon={LuClipboardList}>Booking terms</SectionHeading>
-            <ul className="space-y-2 text-sm leading-relaxed text-agent-ink">
-              <li className="flex gap-2">
-                <span className="text-agent-accent-dark">•</span>
-                Full itinerary, hotel, and add-on details are as listed above.
-              </li>
-              <li className="flex gap-2">
-                <span className="text-agent-accent-dark">•</span>
-                For amendment, cancellation, or visa terms specific to this departure, contact your Relationship Manager.
-              </li>
-            </ul>
-          </Card>
+          {termsHtml && (
+            <Card className="border-white rounded-2xl p-5 sm:p-6">
+              <SectionHeading icon={LuClipboardList}>Booking terms</SectionHeading>
+              {/* Admin-authored via TermsAndConditions.jsx's TipTap editor — no
+                  @tailwindcss/typography plugin installed (see CmsPage.jsx's own
+                  same note), so its headings/lists/etc. are hand-styled here via
+                  child-element utility selectors instead of pulling in a second
+                  new dependency alongside DOMPurify. */}
+              <div
+                className="text-sm leading-relaxed text-agent-ink [&_a]:text-agent-accent-dark [&_a]:underline [&_blockquote]:mb-2 [&_blockquote]:border-l-4 [&_blockquote]:border-agent-line-light [&_blockquote]:pl-3 [&_blockquote]:italic [&_h1]:mb-2 [&_h1]:mt-3 [&_h1]:text-xl [&_h1]:font-bold [&_h2]:mb-2 [&_h2]:mt-3 [&_h2]:text-lg [&_h2]:font-bold [&_h3]:mb-1.5 [&_h3]:mt-2 [&_h3]:text-base [&_h3]:font-bold [&_hr]:my-4 [&_hr]:border-agent-line-light [&_img]:max-w-full [&_img]:rounded-md [&_ol]:mb-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:mb-2 [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-agent-line-light [&_td]:p-2 [&_th]:border [&_th]:border-agent-line-light [&_th]:p-2 [&_th]:font-semibold [&_ul]:mb-2 [&_ul]:list-disc [&_ul]:pl-5"
+                dangerouslySetInnerHTML={{ __html: sanitizeHtml(termsHtml) }}
+              />
+            </Card>
+          )}
         </div>
 
         {/* Booking panel — sticky so it stays in view while the left column scrolls */}
