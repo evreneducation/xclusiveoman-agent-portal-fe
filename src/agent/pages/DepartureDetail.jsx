@@ -264,7 +264,7 @@ function FlightDetailsSection({ flights }) {
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center justify-between gap-2 text-left"
+        className="flex w-full items-center justify-between gap-2 text-left transition-opacity hover:opacity-75"
       >
         <div className="flex items-center gap-2.5">
           <span className="flex h-8 w-8 flex-none items-center justify-center rounded-lg bg-agent-accent-soft text-agent-accent-dark">
@@ -353,10 +353,10 @@ function ItineraryOverviewTabs({ departure }) {
               key={key}
               type="button"
               onClick={() => setActiveTab(key)}
-              className={`flex items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left transition-colors ${
+              className={`flex items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left transition-all duration-200 ${
                 active
-                  ? 'border-agent-accent bg-agent-accent-soft'
-                  : 'border-agent-line-light bg-white hover:bg-slate-50'
+                  ? 'border-agent-accent bg-agent-accent-soft shadow-sm'
+                  : 'border-agent-line-light bg-white hover:-translate-y-0.5 hover:border-agent-accent/40 hover:bg-slate-50 hover:shadow-md'
               }`}
             >
               <span
@@ -410,7 +410,7 @@ function HotelOverviewPanel({ hotel }) {
           )}
         </div>
         <div className="p-3">
-          <div className="text-sm font-bold text-agent-ink">{hotel.name}</div>
+          <div className="font-serif text-sm font-bold text-agent-ink">{hotel.name}</div>
           <div className="mt-1 flex items-center gap-1 text-xs text-agent-muted">
             <LuMapPin size={12} className="flex-none text-agent-accent-dark" /> {hotel.city || '—'}
           </div>
@@ -514,7 +514,7 @@ function HotelInformation({ hotel }) {
           />
         )}
         <div>
-          <div className="text-sm font-bold text-agent-ink">{hotel.name}</div>
+          <div className="font-serif text-sm font-bold text-agent-ink">{hotel.name}</div>
           <div className="mt-0.5 text-xs text-agent-muted">
             {[hotel.city, hotel.state].filter(Boolean).join(', ') || '—'} {hotel.category ? `· ${hotel.category}★` : ''}
           </div>
@@ -689,9 +689,15 @@ function InclusionsExclusionsSummary({ inclusions, exclusions }) {
   const inclusionLines = splitLines(inclusions);
   const exclusionLines = splitLines(exclusions);
   if (inclusionLines.length === 0 && exclusionLines.length === 0) return null;
+  // Only force the 2-column layout when both sides actually have content —
+  // a package with just Inclusions (or just Exclusions) used to still get
+  // sm:grid-cols-2, leaving the other, empty column as dead white space
+  // next to the one real card. With only one side present, that one Card
+  // now spans the full row instead.
+  const hasBoth = inclusionLines.length > 0 && exclusionLines.length > 0;
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+    <div className={`grid grid-cols-1 gap-4 ${hasBoth ? 'sm:grid-cols-2' : ''}`}>
       {inclusionLines.length > 0 && (
         <Card className="border-white rounded-2xl p-5 sm:p-6">
           <SectionHeading icon={LuCircleCheck}>Inclusions</SectionHeading>
@@ -966,6 +972,11 @@ export default function DepartureDetail() {
   // Add-ons grouped by category (Activities/Tours/Transfers/Flights) for the
   // "Included tours, transfers & add-on activities" section below.
   const addonsByType = groupAddonsByType(departure.addons);
+  // Which of those categories actually have add-ons — drives both the map()
+  // below and whether that section's grid is allowed to go 2-column (only
+  // when there's more than one to show; a lone category otherwise leaves an
+  // empty second column next to it).
+  const visibleAddonTypes = ADDON_CATEGORY_ORDER.filter((type) => addonsByType[type]?.length > 0);
   // Stay/Sightseeing stay derived straight from the itinerary (same as
   // before) — everything else in this row comes from the admin-curated
   // Inclusions list (InclusionExclusionList.jsx), minus whatever already
@@ -1001,7 +1012,9 @@ export default function DepartureDetail() {
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <div className="flex flex-wrap items-center gap-2.5">
-                  <h1 className="text-2xl font-bold leading-tight text-agent-ink sm:text-3xl">{departure.title}</h1>
+                  <h1 className="font-serif text-2xl font-bold leading-tight text-agent-ink sm:text-3xl">
+                    {departure.title}
+                  </h1>
                   {exLocation && (
                     <span className="rounded-md bg-agent-accent-soft px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-agent-accent-dark">
                       Ex-{exLocation}
@@ -1071,8 +1084,15 @@ export default function DepartureDetail() {
           {departure.addons?.length > 0 && (
             <Card className="border-white rounded-2xl p-5 sm:p-6">
               <SectionHeading icon={LuTicket}>Included tours, transfers &amp; add-on activities</SectionHeading>
-              <div className="grid grid-cols-1 items-start gap-2.5 sm:grid-cols-2">
-                {ADDON_CATEGORY_ORDER.filter((type) => addonsByType[type]?.length > 0).map((type) => (
+              {/* Same "don't force 2 columns you can't fill" fix as
+                  InclusionsExclusionsSummary below — a package with add-ons
+                  in only one category (e.g. Activities alone) used to still
+                  get sm:grid-cols-2, leaving an empty second column next to
+                  its one real category card. */}
+              <div
+                className={`grid grid-cols-1 items-start gap-2.5 ${visibleAddonTypes.length > 1 ? 'sm:grid-cols-2' : ''}`}
+              >
+                {visibleAddonTypes.map((type) => (
                   <AddonCategorySection
                     key={type}
                     type={type}
@@ -1101,9 +1121,14 @@ export default function DepartureDetail() {
           )}
         </div>
 
-        {/* Booking panel — sticky so it stays in view while the left column scrolls */}
+        {/* Booking panel — sticky so it stays in view while the left column
+            scrolls. A gold top accent (rather than a plain white top edge
+            like every other card on this page) marks it as the one primary
+            conversion surface, matching the gold-accent identity the rest of
+            the premium pass (serif headings, gold price boxes, Departures.jsx's
+            own cards) already established. */}
         <div className="lg:sticky lg:top-6">
-          <Card className="border-white shadow-lg shadow-black/5 rounded-2xl p-5 sm:p-6">
+          <Card className="border-white border-t-4 border-t-agent-accent shadow-xl shadow-black/10 rounded-2xl p-5 sm:p-6">
             {bookingResult ? (
               <div className="space-y-2 text-sm">
                 <p className="font-semibold text-agent-ink-dark">
