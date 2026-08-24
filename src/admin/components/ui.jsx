@@ -1,6 +1,7 @@
 // Small Tailwind-only building blocks mirroring the wireframe's visual language
 // (.btn, .field, .wf-box, .badge, .tag classes in Xclusive-Oman-Wireframes.html).
 import { motion } from 'framer-motion';
+import { LuChevronLeft, LuChevronRight } from 'react-icons/lu';
 
 // Button is now the shadcn/ui component (src/components/ui/button.jsx) —
 // re-exported here so every existing `import { Button } from '../components/ui.jsx'`
@@ -127,21 +128,92 @@ export function Checkbox({ checked, onChange, label, hint }) {
   );
 }
 
+// Each column is either a plain string (left-aligned, every existing
+// caller's usage) or `{ label, align: 'right' }` for a column — typically
+// a trailing "Actions" column — whose header should line up with
+// right-aligned cell content instead.
 export function Table({ columns, rows, renderRow }) {
   return (
     <div className="overflow-x-auto rounded-lg border border-[#E4E9FB] shadow-[0_4px_16px_rgba(15,23,42,0.05)]">
       <table className="w-full text-left text-xs">
         <thead>
           <tr className="bg-[#F3F4FF]">
-            {columns.map((c) => (
-              <th key={c} className="border-b border-[#E4E9FB] px-3 py-2 font-semibold uppercase text-[#4F46E5]">
-                {c}
-              </th>
-            ))}
+            {columns.map((c) => {
+              const label = typeof c === 'string' ? c : c.label;
+              const align = typeof c === 'string' ? 'left' : c.align || 'left';
+              return (
+                <th
+                  key={label}
+                  className={`whitespace-nowrap border-b border-[#E4E9FB] px-3 py-2 font-semibold uppercase text-[#4F46E5] ${
+                    align === 'right' ? 'text-right' : 'text-left'
+                  }`}
+                >
+                  {label}
+                </th>
+              );
+            })}
           </tr>
         </thead>
         <tbody>{rows.map(renderRow)}</tbody>
       </table>
+    </div>
+  );
+}
+
+// Prev/next + numbered pages, windowed to at most 5 numbers around the
+// current one, plus a "Showing X to Y of Z {itemLabel}" count — shared by
+// every backend-paginated admin list (Agent Approvals, Employees, …) rather
+// than each page re-implementing its own pager.
+export function Pagination({ page, totalPages, total, pageSize, onChange, itemLabel = 'items' }) {
+  if (total === 0) return null;
+  const start = (page - 1) * pageSize + 1;
+  const end = Math.min(page * pageSize, total);
+
+  const windowSize = 5;
+  let first = Math.max(1, page - Math.floor(windowSize / 2));
+  const last = Math.min(totalPages, first + windowSize - 1);
+  first = Math.max(1, last - windowSize + 1);
+  const pages = Array.from({ length: last - first + 1 }, (_, i) => first + i);
+
+  return (
+    <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+      <span className="text-xs text-muted">
+        Showing {start} to {end} of {total} {itemLabel}
+      </span>
+      <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          disabled={page <= 1}
+          onClick={() => onChange(page - 1)}
+          aria-label="Previous page"
+          className="flex h-8 w-8 items-center justify-center rounded-md border border-[#D7DDF0] bg-white text-[#475569] hover:border-[#6366F1] hover:text-[#4F46E5] disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <LuChevronLeft size={16} />
+        </button>
+        {pages.map((p) => (
+          <button
+            key={p}
+            type="button"
+            onClick={() => onChange(p)}
+            className={`flex h-8 w-8 items-center justify-center rounded-md text-xs font-semibold ${
+              p === page
+                ? 'bg-gradient-to-r from-[#2563EB] to-[#4F46E5] text-white shadow-sm'
+                : 'border border-[#D7DDF0] bg-white text-[#475569] hover:border-[#6366F1] hover:text-[#4F46E5]'
+            }`}
+          >
+            {p}
+          </button>
+        ))}
+        <button
+          type="button"
+          disabled={page >= totalPages}
+          onClick={() => onChange(page + 1)}
+          aria-label="Next page"
+          className="flex h-8 w-8 items-center justify-center rounded-md border border-[#D7DDF0] bg-white text-[#475569] hover:border-[#6366F1] hover:text-[#4F46E5] disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <LuChevronRight size={16} />
+        </button>
+      </div>
     </div>
   );
 }
