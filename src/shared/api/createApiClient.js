@@ -3,11 +3,22 @@
 // isolated even though they now live in the same JS bundle (see AUTH-7 in
 // context/AuthContext.jsx — /agent and /admin are fully separate auth contexts).
 export function createApiClient() {
-  // In dev, VITE_API_PROXY_TARGET is unset and the Vite proxy handles same-origin
-  // '/api' requests (see vite.config.js). In production, set VITE_API_PROXY_TARGET
-  // to the backend's absolute URL so the built app can reach a separately hosted API.
-  const API_TARGET = import.meta.env.VITE_API_PROXY_TARGET?.replace(/\/+$/, '');
-  const BASE_URL = API_TARGET ? `${API_TARGET}/api` : '/api';
+  // Always same-origin: '/api', proxied to the real backend by vite.config.js's
+  // dev-server proxy locally and by vercel.json's rewrite in production — never
+  // an absolute cross-origin URL (this used to build one from
+  // VITE_API_PROXY_TARGET when set, e.g. in .env.production). An absolute URL
+  // made every request cross-site, which made the browser treat the httpOnly
+  // refresh cookie (xo_refresh, auth.controller.js) as a third-party cookie —
+  // silently dropped by Safari always, and increasingly by Chrome/Firefox too —
+  // so /auth/refresh always came back "Missing refresh token" on the deployed
+  // site even though login itself succeeded. Same-origin makes it first-party,
+  // which no browser blocks.
+  //
+  // VITE_API_PROXY_TARGET itself is untouched and still read by
+  // createSocketClient.js, which connects directly to the backend's absolute
+  // URL on purpose — sockets authenticate with the in-memory access token, not
+  // this cookie, so being cross-origin there was never the problem.
+  const BASE_URL = '/api';
 
   let accessToken = null;
   let onUnauthorized = null;
