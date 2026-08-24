@@ -28,6 +28,22 @@ export function formatShortDate(iso) {
   return new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
+// "14:30:00" or "14:30" -> "2:30 PM" — admin-entered flight departure time
+// (flights.departure_time, 0066_flights_departure_time.sql), shown alongside
+// formatShortDate wherever a flight's departure date already appears
+// (ProductCatalog.jsx's Flights tab, FdPackageEditor.jsx's flight picker,
+// DepartureDetail.jsx's Flight Details section). Returns '' for a flight
+// that predates this column so callers can skip the "at ..." suffix cleanly.
+export function formatTime(time) {
+  if (!time) return '';
+  const [h, m] = time.split(':');
+  const hour = Number(h);
+  if (!Number.isFinite(hour)) return '';
+  const period = hour >= 12 ? 'PM' : 'AM';
+  const hour12 = hour % 12 === 0 ? 12 : hour % 12;
+  return `${hour12}:${m} ${period}`;
+}
+
 // "2026-07-15", "2026-10-02" -> "Jul 2026 – Oct 2026" (or a single "Jul 2026"
 // when every departure date falls in the same month).
 export function formatDateRange(fromIso, toIso) {
