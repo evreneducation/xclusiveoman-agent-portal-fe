@@ -3,15 +3,17 @@ import AgentApp from './agent/App.jsx';
 import AdminApp from './admin/App.jsx';
 import TeamApp from './team/App.jsx';
 import { LoginModal } from './shared/components/LoginModal.jsx';
+import LandingPage from './shared/components/landing/LandingPage.jsx';
 import CmsPage from './pages/CmsPage.jsx';
 
-// No more "choose Agent Portal or Admin Console" picker (shared/pages/
-// Landing.jsx, removed — this was its only caller) — the shared LoginModal
-// itself (shared/components/LoginModal.jsx) is now the app's one starting
-// point at "/", same as any unmatched path, rendered exactly as it renders
-// at /admin/login and /agent/login (no props here to differ by) — it
-// doesn't need to know which portal the visitor belongs to: role is read
-// from the login response itself and decides the destination.
+// "/" is now the public marketing LandingPage (shared/components/landing/) —
+// not the login screen. The shared LoginModal (shared/components/LoginModal.jsx,
+// rendered identically at /admin/login and /agent/login) moved to its own
+// "/login" route; every "Sign Up / Login" CTA on the landing page links
+// there. It still doesn't need to know which portal the visitor belongs to:
+// role is read from the login response itself and decides the destination.
+// Unmatched paths also fall back to LandingPage rather than the login screen,
+// same as a normal marketing site's 404 behaviour.
 export default function App() {
   return (
     <Routes>
@@ -23,8 +25,9 @@ export default function App() {
       {/* Public CMS Page Viewer (Task 21 — Item 34 continuation) — no auth,
           not under /admin or /agent. See src/pages/CmsPage.jsx. */}
       <Route path="/cms/:slug" element={<CmsPage />} />
-      <Route path="/" element={<LoginModal />} />
-      <Route path="*" element={<LoginModal />} />
+      <Route path="/login" element={<LoginModal />} />
+      <Route path="/" element={<LandingPage />} />
+      <Route path="*" element={<LandingPage />} />
     </Routes>
   );
 }
