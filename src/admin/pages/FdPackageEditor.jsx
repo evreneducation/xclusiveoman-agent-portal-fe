@@ -26,7 +26,7 @@ import { useToast } from '../../shared/components/ToastProvider.jsx';
 import { Button, Card, Checkbox, FieldLabel, Select, Tag, Table, TextInput } from '../components/ui.jsx';
 import { ImageUpload } from '../components/ImageUpload.jsx';
 import { InclusionExclusionList, itineraryHasItemType, linesFromText, textFromLines } from '../components/InclusionExclusionList.jsx';
-import { FD_THEMES, formatCurrency, parseDurationDays } from '../../shared/fdPackage/index.js';
+import { FD_THEMES, formatCurrency, formatTime, parseDurationDays } from '../../shared/fdPackage/index.js';
 import {
   ITINERARY_ITEM_TYPE_META,
   deserializeItinerary,
@@ -881,7 +881,11 @@ function ItineraryManager({ fdPackageId, itinerary, duration, onChange, onComput
 
 function flightOptionLabel(flight) {
   const route = [flight.source, flight.destination].filter(Boolean).join(' → ');
+  // Date + time (0066_flights_departure_time.sql) shown together as one
+  // "date, time" token rather than two separate dashed segments.
   const date = flight.departure_date ? new Date(flight.departure_date).toLocaleDateString() : null;
+  const time = formatTime(flight.departure_time) || null;
+  const dateTime = [date, time].filter(Boolean).join(', ');
   // Price (0065_flights_price.sql) — shown here for both callers of this
   // label: FlightsSection's own dropdown (where it *does* fold into the net
   // rate, see its onComputedRateChange effect below) and AddonsManager's
@@ -889,7 +893,7 @@ function flightOptionLabel(flight) {
   // same as every other add-on — never both at once, since the two are
   // mutually exclusive per flight direction).
   const price = flight.price != null ? formatCurrency(flight.price) : null;
-  return [flight.name, route, date, price].filter(Boolean).join(' — ');
+  return [flight.name, route, dateTime, price].filter(Boolean).join(' — ');
 }
 
 // Flights section, rendered directly below the day-by-day itinerary builder

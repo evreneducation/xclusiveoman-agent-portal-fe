@@ -31,7 +31,7 @@ import {
 } from 'react-icons/lu';
 import { api } from '../api/client.js';
 import { Button, Card, Checkbox, ErrorText, Select, TextInput } from '../components/ui.jsx';
-import { formatCurrency, formatShortDate, getSeatsLeft } from '../../shared/fdPackage/index.js';
+import { formatCurrency, formatShortDate, formatTime, getSeatsLeft } from '../../shared/fdPackage/index.js';
 import { computeNightsByCity, ITINERARY_ITEM_TYPE_META, itineraryHasItemType } from '../../shared/itinerary/index.js';
 
 // This page's own primary-CTA treatment — a deep-teal-to-brand-teal gradient
@@ -292,6 +292,7 @@ function FlightDetailsSection({ flights }) {
                   <div className="mt-2 flex items-center gap-1.5 text-xs font-medium text-agent-muted">
                     <LuClock size={13} className="flex-none" />
                     Departure: {formatShortDate(data.departureDate)}
+                    {formatTime(data.departureTime) && ` at ${formatTime(data.departureTime)}`}
                   </div>
                 </div>
               ))}

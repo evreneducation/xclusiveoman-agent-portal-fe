@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { api } from '../api/client.js';
 import { Badge, Button, Card, ErrorText, FieldLabel, Table, TextInput } from '../components/ui.jsx';
-import { FD_STATUS_TONE, formatCurrency, formatDateRange, getFdBadges } from '../../shared/fdPackage/index.js';
+import { FD_STATUS_TONE, formatCurrency, formatDateRange, formatTime, getFdBadges } from '../../shared/fdPackage/index.js';
 
 const TABS = [
   { key: 'fdPackages', label: 'FD Packages' },
@@ -748,7 +748,7 @@ const FLIGHT_DIRECTIONS = [
   { key: 'return', label: 'Return', isFlightOnward: false },
 ];
 
-const EMPTY_FLIGHT_FORM = { name: '', source: '', destination: '', departureDate: '', price: '' };
+const EMPTY_FLIGHT_FORM = { name: '', source: '', destination: '', departureDate: '', departureTime: '', price: '' };
 
 // Today, as a "YYYY-MM-DD" string in the browser's local timezone — matches
 // what <input type="date"> reads/writes, so it can be used directly as a
@@ -762,11 +762,31 @@ function todayDateString() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-// Re-mounted (key={direction} in FlightsTab below) on every sub-tab switch,
+// flights list row (snake_case, straight off the API) -> this form's
+// camelCase field shape. departure_date/departure_time both come back as
+// plain strings (see PackageBuilder.jsx's/MiceBuilder.jsx's own
+// `.slice(0, 10)` prefill convention) — sliced down to what their
+// `<input type="date">`/`<input type="time">` counterparts expect
+// ("YYYY-MM-DD" and "HH:MM"; departure_time carries a trailing ":SS" from
+// Postgres' TIME column that the time input doesn't want).
+function flightToForm(flight) {
+  return {
+    name: flight.name || '',
+    source: flight.source || '',
+    destination: flight.destination || '',
+    departureDate: flight.departure_date ? flight.departure_date.slice(0, 10) : '',
+    departureTime: flight.departure_time ? flight.departure_time.slice(0, 5) : '',
+    price: flight.price != null ? String(flight.price) : '',
+  };
+}
+
+// Re-mounted (key={direction} in FlightsTab below) on every sub-tab switch —
 // so a half-typed Onward flight never ends up submitted as a Return one (or
-// vice versa) just because the admin switched tabs mid-entry.
-function FlightForm({ isFlightOnward, directionLabel, onAdded }) {
-  const [form, setForm] = useState(EMPTY_FLIGHT_FORM);
+// vice versa) just because the admin switched tabs mid-entry — and again on
+// every edit/cancel-edit so the field values below always reset to match
+// whichever flight (or none) is currently being edited.
+function FlightForm({ isFlightOnward, directionLabel, editingFlight, onAdded, onSaved, onCancelEdit }) {
+  const [form, setForm] = useState(() => (editingFlight ? flightToForm(editingFlight) : EMPTY_FLIGHT_FORM));
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -777,7 +797,13 @@ function FlightForm({ isFlightOnward, directionLabel, onAdded }) {
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
-    if (!form.name.trim() || !form.source.trim() || !form.destination.trim() || !form.departureDate) {
+    if (
+      !form.name.trim() ||
+      !form.source.trim() ||
+      !form.destination.trim() ||
+      !form.departureDate ||
+      !form.departureTime
+    ) {
       setError('Please fill in all fields.');
       return;
     }
@@ -789,26 +815,34 @@ function FlightForm({ isFlightOnward, directionLabel, onAdded }) {
     try {
       // Optional, same as Tours/Transfers' own price fields — omitted
       // entirely (rather than sent as an empty string) when left blank, so
-      // it can still be added and priced in later.
+      // it can still be added/saved without a price and priced in later.
       const payload = { ...form, isFlightOnward };
       if (form.price !== '') {
         payload.price = Number(form.price);
       } else {
         delete payload.price;
       }
-      const { flight } = await api.post('/admin/flights', payload);
-      onAdded(flight);
-      setForm(EMPTY_FLIGHT_FORM);
+      if (editingFlight) {
+        const { flight } = await api.patch(`/admin/flights/${editingFlight.id}`, payload);
+        onSaved(flight);
+      } else {
+        const { flight } = await api.post('/admin/flights', payload);
+        onAdded(flight);
+        setForm(EMPTY_FLIGHT_FORM);
+      }
     } catch (err) {
-      setError(err.message || 'Unable to add flight');
+      setError(err.message || `Unable to ${editingFlight ? 'save' : 'add'} flight`);
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <Card label={`Add ${directionLabel.toLowerCase()} flight`} className="mb-4 border-white">
-      <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-3 sm:grid-cols-5">
+    <Card
+      label={editingFlight ? `Edit ${directionLabel.toLowerCase()} flight` : `Add ${directionLabel.toLowerCase()} flight`}
+      className="mb-4 border-white"
+    >
+      <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-3 sm:grid-cols-6">
         <div>
           <FieldLabel>Flight name</FieldLabel>
           <TextInput value={form.name} onChange={(e) => update('name', e.target.value)} />
@@ -831,15 +865,28 @@ function FlightForm({ isFlightOnward, directionLabel, onAdded }) {
           />
         </div>
         <div>
+          <FieldLabel>Departure time</FieldLabel>
+          <TextInput
+            type="time"
+            value={form.departureTime}
+            onChange={(e) => update('departureTime', e.target.value)}
+          />
+        </div>
+        <div>
           <FieldLabel>Price (₹)</FieldLabel>
           <TextInput type="number" min="0" value={form.price} onChange={(e) => update('price', e.target.value)} />
         </div>
-        <div className="flex items-center gap-3 sm:col-span-5">
+        <div className="flex items-center gap-3 sm:col-span-6">
           <Button variant="accent" type="submit" disabled={submitting}>
-            {submitting ? 'Adding…' : `+ Add ${directionLabel.toLowerCase()} flight`}
+            {submitting ? 'Saving…' : editingFlight ? 'Save changes' : `+ Add ${directionLabel.toLowerCase()} flight`}
           </Button>
+          {editingFlight && (
+            <button type="button" onClick={onCancelEdit} className="text-xs font-semibold text-[#666] hover:underline">
+              Cancel
+            </button>
+          )}
         </div>
-        <div className="sm:col-span-5">
+        <div className="sm:col-span-6">
           <ErrorText>{error}</ErrorText>
         </div>
       </form>
@@ -851,6 +898,10 @@ function FlightsTab() {
   const [direction, setDirection] = useState('onward');
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  // The flight row currently being edited (or null for the plain "add"
+  // form above) — cleared on every direction switch below, same as the
+  // half-typed-entry guard that already reset the add form on tab switch.
+  const [editingFlight, setEditingFlight] = useState(null);
   const active = FLIGHT_DIRECTIONS.find((d) => d.key === direction);
 
   function load() {
@@ -863,9 +914,20 @@ function FlightsTab() {
 
   useEffect(load, [direction]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  function handleDirectionChange(key) {
+    setDirection(key);
+    setEditingFlight(null);
+  }
+
   async function handleDelete(id) {
     await api.del(`/admin/flights/${id}`);
     setItems((list) => list.filter((i) => i.id !== id));
+    if (editingFlight?.id === id) setEditingFlight(null);
+  }
+
+  function handleSaved(saved) {
+    setItems((list) => list.map((i) => (i.id === saved.id ? saved : i)));
+    setEditingFlight(null);
   }
 
   return (
@@ -874,7 +936,7 @@ function FlightsTab() {
         {FLIGHT_DIRECTIONS.map((d) => (
           <button
             key={d.key}
-            onClick={() => setDirection(d.key)}
+            onClick={() => handleDirectionChange(d.key)}
             className={`rounded-full border px-4 py-2 text-xs font-semibold ${
               direction === d.key ? 'border-ink bg-ink text-white' : 'border-line-light bg-white text-[#666]'
             }`}
@@ -885,10 +947,13 @@ function FlightsTab() {
       </div>
 
       <FlightForm
-        key={direction}
+        key={`${direction}:${editingFlight?.id || 'new'}`}
         isFlightOnward={active.isFlightOnward}
         directionLabel={active.label}
+        editingFlight={editingFlight}
         onAdded={(flight) => setItems((list) => [flight, ...list])}
+        onSaved={handleSaved}
+        onCancelEdit={() => setEditingFlight(null)}
       />
 
       {loading ? (
@@ -897,7 +962,7 @@ function FlightsTab() {
         <p className="text-xs text-muted">No {active.label.toLowerCase()} flights added yet.</p>
       ) : (
         <Table
-          columns={['Flight', 'Source', 'Destination', 'Departure date', 'Price', '']}
+          columns={['Flight', 'Source', 'Destination', 'Departure date', 'Departure time', 'Price', '']}
           rows={items}
           renderRow={(flight) => (
             <tr key={flight.id} className="border-b border-line-light last:border-0">
@@ -905,8 +970,15 @@ function FlightsTab() {
               <td className="px-3 py-2">{flight.source}</td>
               <td className="px-3 py-2">{flight.destination}</td>
               <td className="px-3 py-2">{new Date(flight.departure_date).toLocaleDateString()}</td>
+              <td className="px-3 py-2">{formatTime(flight.departure_time) || '—'}</td>
               <td className="px-3 py-2">{flight.price != null ? `₹${flight.price}` : '—'}</td>
               <td className="px-3 py-2 text-right">
+                <button
+                  onClick={() => setEditingFlight(flight)}
+                  className="mr-3 text-xs text-[#4F46E5] hover:underline"
+                >
+                  Edit
+                </button>
                 <button onClick={() => handleDelete(flight.id)} className="text-xs text-[#a5162d] hover:underline">
                   Delete
                 </button>
