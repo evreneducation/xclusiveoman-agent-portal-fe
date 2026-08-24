@@ -33,8 +33,20 @@ export default {
         // hex values were enriched — so no agent markup needed to change
         // for this to take effect anywhere they're already used. Used only
         // by src/agent/** components.
-        'agent-ink': '#0B4F4A',
-        'agent-ink-dark': '#083A36',
+        //
+        // agent-ink/agent-ink-dark were later lightened from a near-black
+        // teal (#0B4F4A/#083A36) to Tailwind's own teal-700/teal-800 — same
+        // hue family (this was already a teal, not a true forest green), just
+        // materially brighter, since the original read as "very dark" across
+        // every heading/body-text/icon on the portal. Still comfortably
+        // AA-compliant for body text on white (teal-700 ≈ 5.4:1, teal-800 ≈
+        // 7.1:1 — both above the 4.5:1 minimum), and the two still keep their
+        // original darker/lighter relationship to each other. Every other
+        // token below (borders, panels, background, gold accent, muted text)
+        // was already light/neutral enough that it wasn't part of the "too
+        // dark" complaint, so those are untouched.
+        'agent-ink': '#0F766E',
+        'agent-ink-dark': '#115E59',
         'agent-line': '#8FB5AE',
         'agent-line-light': '#D7EAE5',
         'agent-panel': '#EAF6F2',

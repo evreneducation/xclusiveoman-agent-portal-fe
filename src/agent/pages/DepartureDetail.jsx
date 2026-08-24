@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import DOMPurify from 'dompurify';
 import {
   LuArrowLeft,
   LuArrowRight,
@@ -31,17 +32,18 @@ import {
 } from 'react-icons/lu';
 import { api } from '../api/client.js';
 import { Button, Card, Checkbox, ErrorText, Select, TextInput } from '../components/ui.jsx';
-import { formatCurrency, formatShortDate, getSeatsLeft } from '../../shared/fdPackage/index.js';
+import { formatCurrency, formatShortDate, formatTime, getSeatsLeft } from '../../shared/fdPackage/index.js';
 import { computeNightsByCity, ITINERARY_ITEM_TYPE_META, itineraryHasItemType } from '../../shared/itinerary/index.js';
 
-// This page's own primary-CTA treatment — a deep-teal-to-brand-teal gradient
-// (the exact same stops AgentLayout.jsx's sidebar already uses, just
-// left-to-right instead of top-to-bottom) laid over Button's shared "accent"
-// variant via className, the same override pattern already used everywhere
-// on this page (e.g. Card's default border/rounding). This only restyles
-// Button instances here — it doesn't touch ui.jsx, so every other page's
-// gold/coral "accent" buttons are unaffected.
-const PRIMARY_CTA_CLASS = 'border-transparent bg-gradient-to-r from-[#083A36] via-[#0B4F4A] to-[#0D9488] hover:opacity-90';
+// Booking terms card below — body_html is admin-authored (TermsAndConditions.jsx,
+// GET /site-terms) but still passes through an untrusted-input boundary
+// before ever reaching dangerouslySetInnerHTML: DOMPurify strips <script>,
+// event-handler attributes, javascript: URLs, etc. Same "small,
+// dependency-free sanitize-before-render" wrapper CmsPage.jsx already uses
+// for its own admin-authored body_html.
+function sanitizeHtml(html) {
+  return DOMPurify.sanitize(html || '', { USE_PROFILES: { html: true } });
+}
 
 // Full-screen photo viewer opened by clicking any hero/carousel image below
 // — `gallery` is the full ordered image list, `index` the one currently
@@ -128,7 +130,7 @@ function Lightbox({ gallery, index, onClose, onNavigate }) {
 // min-h-0/min-w-0 on every grid item below is load-bearing, not decoration:
 // grid (and flex) items default to `min-height: auto`/`min-width: auto`,
 // which lets an <img>'s own intrinsic aspect ratio force its cell (and the
-// row/column track itself) to grow past the fixed h-72/h-96 the container
+// row/column track itself) to grow past the fixed h-48/h-64 the container
 // asks for. overflow-hidden alone doesn't stop that growth — it only clips
 // what's already an inflated box — so object-cover ends up scaling the
 // image up to cover that bigger box, which is exactly what reads as
@@ -149,8 +151,14 @@ function HeroGallery({ heroImageUrl, images, onBack }) {
 
   return (
     <>
-      <div className="relative mb-6 grid h-72 grid-cols-2 grid-rows-1 gap-1.5 overflow-hidden rounded-2xl shadow-lg shadow-black/10 sm:h-96">
-        <div className="relative h-full min-h-0 w-full min-w-0 overflow-hidden">
+      {/* Each tile owns its own rounding/clipping/shadow now (rather than the
+          whole block sharing one outer rounded-2xl/overflow-hidden) so the
+          hero photo and every grid photo read as separate rounded cards with
+          real daylight between them, not one mosaic shape cut apart by thin
+          gap lines. gap-3 (vs. the previous gap-1.5) gives that daylight
+          enough room to actually register at a glance. */}
+      <div className="mb-6 grid h-48 grid-cols-2 grid-rows-1 gap-3 sm:h-64">
+        <div className="relative h-full min-h-0 w-full min-w-0 overflow-hidden rounded-2xl shadow-md shadow-black/10">
           <button
             type="button"
             onClick={() => setLightboxIndex(0)}
@@ -167,19 +175,19 @@ function HeroGallery({ heroImageUrl, images, onBack }) {
             type="button"
             onClick={onBack}
             aria-label="Back to departures"
-            className="absolute left-4 top-4 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-white text-agent-ink shadow-lg transition hover:scale-105 hover:bg-agent-panel"
+            className="absolute left-4 top-4 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-white text-agent-ink shadow-lg transition hover:scale-105 hover:bg-slate-100"
           >
             <LuArrowLeft size={18} />
           </button>
         </div>
-        <div className="grid h-full min-h-0 w-full min-w-0 grid-flow-col grid-rows-2 auto-cols-[46%] gap-1.5 overflow-x-auto scroll-smooth sm:auto-cols-[47%]">
+        <div className="grid h-full min-h-0 w-full min-w-0 grid-flow-col grid-rows-2 auto-cols-[46%] gap-3 overflow-x-auto scroll-smooth sm:auto-cols-[47%]">
           {gridImages.map((url, i) => (
             <button
               key={url + i}
               type="button"
               onClick={() => setLightboxIndex(i + 1)}
               aria-label="View photo"
-              className="group h-full min-h-0 w-full min-w-0 cursor-zoom-in overflow-hidden bg-agent-panel"
+              className="group h-full min-h-0 w-full min-w-0 cursor-zoom-in overflow-hidden rounded-2xl bg-slate-100 shadow-md shadow-black/10"
             >
               <img
                 src={url}
@@ -234,8 +242,12 @@ function FlightDetailsSection({ flights }) {
       label: 'Onward',
       Icon: LuPlaneTakeoff,
       data: flights.onward,
-      iconBg: 'bg-agent-panel',
-      iconColor: 'text-agent-ink-dark',
+      // Blue rather than the site's gold accent — Return already uses gold
+      // below, and the two legs read better with two distinct colors than
+      // one leg colored and the other left in the (now-removed) pale-green
+      // neutral fill.
+      iconBg: 'bg-sky-100',
+      iconColor: 'text-sky-700',
     },
     {
       key: 'return',
@@ -252,7 +264,7 @@ function FlightDetailsSection({ flights }) {
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center justify-between gap-2 text-left"
+        className="flex w-full items-center justify-between gap-2 text-left transition-opacity hover:opacity-75"
       >
         <div className="flex items-center gap-2.5">
           <span className="flex h-8 w-8 flex-none items-center justify-center rounded-lg bg-agent-accent-soft text-agent-accent-dark">
@@ -276,7 +288,7 @@ function FlightDetailsSection({ flights }) {
           >
             <div className="mt-4 grid grid-cols-1 gap-3 border-t border-agent-line-light pt-4 sm:grid-cols-2">
               {legs.map(({ key, label, Icon, data, iconBg, iconColor }) => (
-                <div key={key} className="rounded-xl bg-agent-bg px-4 py-4">
+                <div key={key} className="rounded-xl bg-slate-50 px-4 py-4">
                   <div className="mb-3 flex items-center gap-2">
                     <span
                       className={`flex h-8 w-8 flex-none items-center justify-center rounded-full ${iconBg} ${iconColor}`}
@@ -292,6 +304,7 @@ function FlightDetailsSection({ flights }) {
                   <div className="mt-2 flex items-center gap-1.5 text-xs font-medium text-agent-muted">
                     <LuClock size={13} className="flex-none" />
                     Departure: {formatShortDate(data.departureDate)}
+                    {formatTime(data.departureTime) && ` at ${formatTime(data.departureTime)}`}
                   </div>
                 </div>
               ))}
@@ -340,15 +353,17 @@ function ItineraryOverviewTabs({ departure }) {
               key={key}
               type="button"
               onClick={() => setActiveTab(key)}
-              className={`flex items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left transition-colors ${
-                active ? 'border-agent-accent bg-agent-panel' : 'border-agent-line-light bg-white hover:bg-agent-panel/60'
+              className={`flex items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left transition-all duration-200 ${
+                active
+                  ? 'border-agent-accent bg-agent-accent-soft shadow-sm'
+                  : 'border-agent-line-light bg-white hover:-translate-y-0.5 hover:border-agent-accent/40 hover:bg-slate-50 hover:shadow-md'
               }`}
             >
               <span
                 className={`flex h-9 w-9 flex-none items-center justify-center rounded-full border ${
                   active
                     ? 'border-agent-accent bg-white text-agent-ink-dark'
-                    : 'border-agent-line-light bg-agent-bg text-agent-muted'
+                    : 'border-agent-line-light bg-slate-50 text-agent-muted'
                 }`}
               >
                 <Icon size={16} />
@@ -362,7 +377,7 @@ function ItineraryOverviewTabs({ departure }) {
         })}
       </div>
 
-      <div className="mt-4 rounded-xl bg-agent-bg p-4">
+      <div className="mt-4 rounded-xl bg-slate-50 p-4">
         {activeTab === 'hotel' && <HotelOverviewPanel hotel={departure.hotel} />}
         {activeTab === 'sightseeing' && <SightseeingOverviewPanel items={sightseeingItems} />}
         {activeTab === 'meals' && <MealsOverviewPanel hasMeals={hasMeals} />}
@@ -380,7 +395,7 @@ function HotelOverviewPanel({ hotel }) {
     <div>
       <div className="mb-3 text-sm font-bold text-agent-ink">Hotel Overview</div>
       <div className="max-w-xs overflow-hidden rounded-xl border border-agent-line-light bg-white shadow-sm">
-        <div className="relative h-40 w-full bg-agent-panel">
+        <div className="relative h-40 w-full bg-slate-100">
           {hotel.images?.[0] ? (
             <img src={hotel.images[0]} alt="" className="h-full w-full object-cover" />
           ) : (
@@ -395,13 +410,13 @@ function HotelOverviewPanel({ hotel }) {
           )}
         </div>
         <div className="p-3">
-          <div className="text-sm font-bold text-agent-ink">{hotel.name}</div>
+          <div className="font-serif text-sm font-bold text-agent-ink">{hotel.name}</div>
           <div className="mt-1 flex items-center gap-1 text-xs text-agent-muted">
             <LuMapPin size={12} className="flex-none text-agent-accent-dark" /> {hotel.city || '—'}
           </div>
           {hotel.boardBasisOptions?.[0] && (
             <div className="mt-2 flex flex-wrap gap-1.5">
-              <span className="rounded-full bg-agent-panel px-2.5 py-1 text-[11px] font-medium text-agent-ink">
+              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-agent-ink">
                 Meal: {hotel.boardBasisOptions[0]}
               </span>
             </div>
@@ -425,7 +440,7 @@ function SightseeingOverviewPanel({ items }) {
             key={`${item.type}:${item.id}:${idx}`}
             className="overflow-hidden rounded-xl border border-agent-line-light bg-white shadow-sm"
           >
-            <div className="h-24 w-full bg-agent-panel">
+            <div className="h-24 w-full bg-slate-100">
               {item.images?.[0] ? (
                 <img src={item.images[0]} alt="" className="h-full w-full object-cover" />
               ) : (
@@ -490,23 +505,23 @@ function HotelInformation({ hotel }) {
   return (
     <Card className="border-white rounded-2xl p-5 sm:p-6">
       <SectionHeading icon={LuHotel}>Hotel information</SectionHeading>
-      <div className="flex gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row">
         {hotel.images?.[0] && (
           <img
             src={hotel.images[0]}
             alt=""
-            className="h-20 w-20 flex-none rounded-xl border border-agent-line-light object-cover shadow-sm"
+            className="h-40 w-full flex-none rounded-xl border border-agent-line-light object-cover object-center shadow-sm sm:h-28 sm:w-44"
           />
         )}
         <div>
-          <div className="text-sm font-bold text-agent-ink">{hotel.name}</div>
+          <div className="font-serif text-sm font-bold text-agent-ink">{hotel.name}</div>
           <div className="mt-0.5 text-xs text-agent-muted">
             {[hotel.city, hotel.state].filter(Boolean).join(', ') || '—'} {hotel.category ? `· ${hotel.category}★` : ''}
           </div>
           {hotel.boardBasisOptions?.length > 0 && (
             <div className="mt-1.5 flex flex-wrap gap-1.5">
               {hotel.boardBasisOptions.map((b) => (
-                <span key={b} className="rounded-full bg-agent-panel px-2.5 py-0.5 text-[11px] font-medium text-agent-ink">
+                <span key={b} className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-medium text-agent-ink">
                   {b}
                 </span>
               ))}
@@ -533,6 +548,19 @@ function dayTitle(day) {
   return firstNamed?.name || 'Itinerary details';
 }
 
+// Per-item-type icon chip color, local to this file only — deliberately not
+// added to shared/itinerary/index.js's ITINERARY_ITEM_TYPE_META (that meta
+// is reused by admin/team/agent pages that each have their own unrelated
+// theme, e.g. admin's indigo/purple — a color baked in there would leak
+// into all of them). Gives each expanded day's item rows some actual color
+// variety instead of every single row sharing one flat pale-green fill.
+const ITINERARY_ITEM_TYPE_CHIP = {
+  hotel: 'bg-sky-50 text-sky-600',
+  tour: 'bg-amber-50 text-amber-600',
+  transfer: 'bg-violet-50 text-violet-600',
+  activity: 'bg-rose-50 text-rose-600',
+};
+
 // Each day is its own collapsible row (default collapsed) rather than an
 // always-expanded vertical timeline — matches the reference layout: a "Day
 // N" pill + bold title, a +/× toggle on the right, and the day's full item
@@ -545,9 +573,9 @@ function ItineraryDayRow({ day }) {
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-agent-panel/60"
+        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50"
       >
-        <span className="flex-none rounded-full border border-agent-line bg-agent-panel px-3 py-1 text-xs font-bold text-agent-ink-dark">
+        <span className="flex-none rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-bold text-agent-ink-dark">
           Day {day.dayNumber}
         </span>
         <span className="flex-1 text-sm font-bold text-agent-ink">{dayTitle(day)}</span>
@@ -570,22 +598,27 @@ function ItineraryDayRow({ day }) {
                 <div className="space-y-1">
                   {day.items.map((item, itemIdx) => {
                     const meta = ITINERARY_ITEM_TYPE_META[item.type];
+                    const chip = ITINERARY_ITEM_TYPE_CHIP[item.type] || 'bg-slate-100 text-agent-ink-dark';
                     return (
                       <div
                         key={`${item.type}:${item.id}:${itemIdx}`}
-                        className="rounded-md border border-agent-line-light bg-agent-panel px-2.5 py-1.5"
+                        className="flex items-start gap-2.5 rounded-md border border-agent-line-light bg-white px-2.5 py-2"
                       >
-                        <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-agent-ink">
-                          <span>{meta?.icon}</span>
-                          {item.name || meta?.label || 'Item'}
-                          {item.city ? ` · ${item.city}` : ''}
+                        <span className={`flex h-6 w-6 flex-none items-center justify-center rounded-md text-xs ${chip}`}>
+                          {meta?.icon}
                         </span>
-                        {item.type === 'hotel' && item.adults != null && (
-                          <p className="mt-0.5 pl-[1.375rem] text-[11px] text-agent-muted">
-                            {item.adults} {item.adults === 1 ? 'adult' : 'adults'} · {item.rooms} {item.rooms === 1 ? 'room' : 'rooms'}
-                          </p>
-                        )}
-                        {item.note && <p className="mt-0.5 pl-[1.375rem] text-[11px] text-agent-muted">{item.note}</p>}
+                        <div className="min-w-0 flex-1">
+                          <span className="text-[11px] font-semibold text-agent-ink">
+                            {item.name || meta?.label || 'Item'}
+                            {item.city ? ` · ${item.city}` : ''}
+                          </span>
+                          {item.type === 'hotel' && item.adults != null && (
+                            <p className="mt-0.5 text-[11px] text-agent-muted">
+                              {item.adults} {item.adults === 1 ? 'adult' : 'adults'} · {item.rooms} {item.rooms === 1 ? 'room' : 'rooms'}
+                            </p>
+                          )}
+                          {item.note && <p className="mt-0.5 text-[11px] text-agent-muted">{item.note}</p>}
+                        </div>
                       </div>
                     );
                   })}
@@ -656,9 +689,15 @@ function InclusionsExclusionsSummary({ inclusions, exclusions }) {
   const inclusionLines = splitLines(inclusions);
   const exclusionLines = splitLines(exclusions);
   if (inclusionLines.length === 0 && exclusionLines.length === 0) return null;
+  // Only force the 2-column layout when both sides actually have content —
+  // a package with just Inclusions (or just Exclusions) used to still get
+  // sm:grid-cols-2, leaving the other, empty column as dead white space
+  // next to the one real card. With only one side present, that one Card
+  // now spans the full row instead.
+  const hasBoth = inclusionLines.length > 0 && exclusionLines.length > 0;
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+    <div className={`grid grid-cols-1 gap-4 ${hasBoth ? 'sm:grid-cols-2' : ''}`}>
       {inclusionLines.length > 0 && (
         <Card className="border-white rounded-2xl p-5 sm:p-6">
           <SectionHeading icon={LuCircleCheck}>Inclusions</SectionHeading>
@@ -719,7 +758,7 @@ function AddonCategorySection({ type, addons, selectedAddonIds, onToggle }) {
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-agent-panel/60"
+        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50"
       >
         <span className="flex h-8 w-8 flex-none items-center justify-center rounded-lg bg-agent-accent-soft text-agent-accent-dark">
           <Icon size={16} />
@@ -728,7 +767,7 @@ function AddonCategorySection({ type, addons, selectedAddonIds, onToggle }) {
           {meta.label} <span className="font-normal text-agent-muted">({addons.length})</span>
         </span>
         {selectedCount > 0 && (
-          <span className="flex-none rounded-full bg-agent-panel px-2 py-0.5 text-[10px] font-semibold text-agent-ink-dark">
+          <span className="flex-none rounded-full bg-agent-accent-soft px-2 py-0.5 text-[10px] font-semibold text-agent-accent-dark">
             {selectedCount} selected
           </span>
         )}
@@ -753,7 +792,7 @@ function AddonCategorySection({ type, addons, selectedAddonIds, onToggle }) {
                   className={`rounded-xl border px-3.5 py-2.5 transition-colors ${
                     selectedAddonIds.includes(addon.id)
                       ? 'border-agent-accent bg-agent-accent-soft/50'
-                      : 'border-agent-line-light hover:bg-agent-panel'
+                      : 'border-agent-line-light hover:bg-slate-50'
                   }`}
                 >
                   <Checkbox
@@ -802,6 +841,12 @@ export default function DepartureDetail() {
   const [submitting, setSubmitting] = useState(false);
   const [bookingResult, setBookingResult] = useState(null);
   const [bookingError, setBookingError] = useState('');
+  // Booking terms card below — the admin-authored Terms & Conditions
+  // document (TermsAndConditions.jsx / site_terms, one shared document
+  // across every departure, not per-package content), fetched separately
+  // from the departure itself since it comes off its own endpoint. null
+  // while loading/unset so the card stays hidden rather than flashing empty.
+  const [termsHtml, setTermsHtml] = useState(null);
 
   useEffect(() => {
     api
@@ -812,6 +857,13 @@ export default function DepartureDetail() {
       })
       .catch((err) => setError(err.message));
   }, [id]);
+
+  useEffect(() => {
+    api
+      .get('/site-terms')
+      .then(({ terms }) => setTermsHtml(terms?.body_html || ''))
+      .catch(() => setTermsHtml('')); // no terms saved yet, or a transient error — card just stays hidden
+  }, []);
 
   useEffect(() => {
     setTravelers((list) => {
@@ -920,6 +972,11 @@ export default function DepartureDetail() {
   // Add-ons grouped by category (Activities/Tours/Transfers/Flights) for the
   // "Included tours, transfers & add-on activities" section below.
   const addonsByType = groupAddonsByType(departure.addons);
+  // Which of those categories actually have add-ons — drives both the map()
+  // below and whether that section's grid is allowed to go 2-column (only
+  // when there's more than one to show; a lone category otherwise leaves an
+  // empty second column next to it).
+  const visibleAddonTypes = ADDON_CATEGORY_ORDER.filter((type) => addonsByType[type]?.length > 0);
   // Stay/Sightseeing stay derived straight from the itinerary (same as
   // before) — everything else in this row comes from the admin-curated
   // Inclusions list (InclusionExclusionList.jsx), minus whatever already
@@ -955,7 +1012,9 @@ export default function DepartureDetail() {
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <div className="flex flex-wrap items-center gap-2.5">
-                  <h1 className="text-2xl font-bold leading-tight text-agent-ink sm:text-3xl">{departure.title}</h1>
+                  <h1 className="font-serif text-2xl font-bold leading-tight text-agent-ink sm:text-3xl">
+                    {departure.title}
+                  </h1>
                   {exLocation && (
                     <span className="rounded-md bg-agent-accent-soft px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-agent-accent-dark">
                       Ex-{exLocation}
@@ -972,7 +1031,7 @@ export default function DepartureDetail() {
                     {tickItems.map((label) => (
                       <span
                         key={label}
-                        className="inline-flex items-center gap-1.5 rounded-full bg-agent-panel px-3 py-1.5 text-xs font-semibold text-agent-ink"
+                        className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-agent-ink"
                       >
                         <LuCheck size={13} className="flex-none text-agent-ink-dark" /> {label}
                       </span>
@@ -980,7 +1039,7 @@ export default function DepartureDetail() {
                   </div>
                 )}
               </div>
-              <div className="flex-none rounded-xl bg-agent-panel px-5 py-4 text-right">
+              <div className="flex-none rounded-xl bg-agent-accent-soft px-5 py-4 text-right">
                 <div className="text-[11px] font-semibold uppercase tracking-wide text-agent-muted">Starting at</div>
                 <div className="text-2xl font-bold text-agent-ink">{formatCurrency(departure.ratePerPax)}</div>
                 <div className="text-xs text-agent-muted">per person</div>
@@ -1002,7 +1061,7 @@ export default function DepartureDetail() {
                     className={`rounded-full border px-3.5 py-2 text-xs font-semibold ${
                       d.seatsLeft > 0
                         ? 'border-agent-accent/30 bg-agent-accent-soft text-agent-ink'
-                        : 'border-agent-line-light bg-agent-panel text-agent-muted'
+                        : 'border-agent-line-light bg-slate-100 text-agent-muted'
                     }`}
                   >
                     {formatShortDate(d.date)}
@@ -1025,8 +1084,15 @@ export default function DepartureDetail() {
           {departure.addons?.length > 0 && (
             <Card className="border-white rounded-2xl p-5 sm:p-6">
               <SectionHeading icon={LuTicket}>Included tours, transfers &amp; add-on activities</SectionHeading>
-              <div className="grid grid-cols-1 items-start gap-2.5 sm:grid-cols-2">
-                {ADDON_CATEGORY_ORDER.filter((type) => addonsByType[type]?.length > 0).map((type) => (
+              {/* Same "don't force 2 columns you can't fill" fix as
+                  InclusionsExclusionsSummary below — a package with add-ons
+                  in only one category (e.g. Activities alone) used to still
+                  get sm:grid-cols-2, leaving an empty second column next to
+                  its one real category card. */}
+              <div
+                className={`grid grid-cols-1 items-start gap-2.5 ${visibleAddonTypes.length > 1 ? 'sm:grid-cols-2' : ''}`}
+              >
+                {visibleAddonTypes.map((type) => (
                   <AddonCategorySection
                     key={type}
                     type={type}
@@ -1039,24 +1105,30 @@ export default function DepartureDetail() {
             </Card>
           )}
 
-          <Card className="border-white rounded-2xl p-5 sm:p-6">
-            <SectionHeading icon={LuClipboardList}>Booking terms</SectionHeading>
-            <ul className="space-y-2 text-sm leading-relaxed text-agent-ink">
-              <li className="flex gap-2">
-                <span className="text-agent-accent-dark">•</span>
-                Full itinerary, hotel, and add-on details are as listed above.
-              </li>
-              <li className="flex gap-2">
-                <span className="text-agent-accent-dark">•</span>
-                For amendment, cancellation, or visa terms specific to this departure, contact your Relationship Manager.
-              </li>
-            </ul>
-          </Card>
+          {termsHtml && (
+            <Card className="border-white rounded-2xl p-5 sm:p-6">
+              <SectionHeading icon={LuClipboardList}>Booking terms</SectionHeading>
+              {/* Admin-authored via TermsAndConditions.jsx's TipTap editor — no
+                  @tailwindcss/typography plugin installed (see CmsPage.jsx's own
+                  same note), so its headings/lists/etc. are hand-styled here via
+                  child-element utility selectors instead of pulling in a second
+                  new dependency alongside DOMPurify. */}
+              <div
+                className="text-sm leading-relaxed text-agent-ink [&_a]:text-agent-accent-dark [&_a]:underline [&_blockquote]:mb-2 [&_blockquote]:border-l-4 [&_blockquote]:border-agent-line-light [&_blockquote]:pl-3 [&_blockquote]:italic [&_h1]:mb-2 [&_h1]:mt-3 [&_h1]:text-xl [&_h1]:font-bold [&_h2]:mb-2 [&_h2]:mt-3 [&_h2]:text-lg [&_h2]:font-bold [&_h3]:mb-1.5 [&_h3]:mt-2 [&_h3]:text-base [&_h3]:font-bold [&_hr]:my-4 [&_hr]:border-agent-line-light [&_img]:max-w-full [&_img]:rounded-md [&_ol]:mb-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:mb-2 [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-agent-line-light [&_td]:p-2 [&_th]:border [&_th]:border-agent-line-light [&_th]:p-2 [&_th]:font-semibold [&_ul]:mb-2 [&_ul]:list-disc [&_ul]:pl-5"
+                dangerouslySetInnerHTML={{ __html: sanitizeHtml(termsHtml) }}
+              />
+            </Card>
+          )}
         </div>
 
-        {/* Booking panel — sticky so it stays in view while the left column scrolls */}
+        {/* Booking panel — sticky so it stays in view while the left column
+            scrolls. A gold top accent (rather than a plain white top edge
+            like every other card on this page) marks it as the one primary
+            conversion surface, matching the gold-accent identity the rest of
+            the premium pass (serif headings, gold price boxes, Departures.jsx's
+            own cards) already established. */}
         <div className="lg:sticky lg:top-6">
-          <Card className="border-white shadow-lg shadow-black/5 rounded-2xl p-5 sm:p-6">
+          <Card className="border-white border-t-4 border-t-agent-accent shadow-xl shadow-black/10 rounded-2xl p-5 sm:p-6">
             {bookingResult ? (
               <div className="space-y-2 text-sm">
                 <p className="font-semibold text-agent-ink-dark">
@@ -1070,17 +1142,13 @@ export default function DepartureDetail() {
                   </p>
                 )}
                 {bookingResult.status === 'waitlisted' ? (
-                  <Button
-                    variant="accent"
-                    className={`w-full ${PRIMARY_CTA_CLASS}`}
-                    onClick={() => navigate('/agent/dashboard')}
-                  >
+                  <Button variant="accent" className="w-full" onClick={() => navigate('/agent/dashboard')}>
                     Back to dashboard
                   </Button>
                 ) : (
                   <Button
                     variant="accent"
-                    className={`w-full ${PRIMARY_CTA_CLASS}`}
+                    className="w-full"
                     onClick={() => navigate(`/agent/payments/${bookingResult.id}`)}
                   >
                     Continue to Payment
@@ -1136,7 +1204,7 @@ export default function DepartureDetail() {
                   ))}
                 </div>
 
-                <div className="my-3 space-y-1.5 rounded-xl bg-agent-panel px-3.5 py-3 text-sm">
+                <div className="my-3 space-y-1.5 rounded-xl bg-slate-50 px-3.5 py-3 text-sm">
                   <div className="flex justify-between">
                     <span className="text-agent-muted">Net rate ({formatCurrency(departure.ratePerPax)} × {pax} pax)</span>
                     <span className="font-medium text-agent-ink">{formatCurrency(departure.ratePerPax * pax)}</span>
@@ -1159,7 +1227,7 @@ export default function DepartureDetail() {
 
                 <Button
                   variant="accent"
-                  className={`mb-2 w-full gap-1.5 py-3 text-sm ${PRIMARY_CTA_CLASS}`}
+                  className="mb-2 w-full gap-1.5 py-3 text-sm"
                   disabled={submitting}
                   onClick={handleConfirmBooking}
                 >
@@ -1182,7 +1250,7 @@ export default function DepartureDetail() {
                   </div>
                   <span
                     className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                      seatsLeft > 0 ? 'bg-agent-accent-soft text-agent-accent-dark' : 'bg-agent-panel text-agent-muted'
+                      seatsLeft > 0 ? 'bg-agent-accent-soft text-agent-accent-dark' : 'bg-slate-100 text-agent-muted'
                     }`}
                   >
                     {seatsLeft > 0 ? `${seatsLeft} seats left` : 'Sold out'}
@@ -1211,7 +1279,7 @@ export default function DepartureDetail() {
                   />
                 </div>
 
-                <div className="my-3 space-y-1.5 rounded-xl bg-agent-panel px-3.5 py-3 text-sm">
+                <div className="my-3 space-y-1.5 rounded-xl bg-slate-50 px-3.5 py-3 text-sm">
                   <div className="flex justify-between">
                     <span className="text-agent-muted">Net rate ({formatCurrency(departure.ratePerPax)} × {pax} pax)</span>
                     <span className="font-medium text-agent-ink">{formatCurrency(departure.ratePerPax * pax)}</span>
@@ -1234,7 +1302,7 @@ export default function DepartureDetail() {
 
                 <Button
                   variant="accent"
-                  className={`mb-2 w-full gap-1.5 py-3 text-sm ${PRIMARY_CTA_CLASS}`}
+                  className="mb-2 w-full gap-1.5 py-3 text-sm"
                   disabled={!departureDateId}
                   onClick={handleBookNowClick}
                 >

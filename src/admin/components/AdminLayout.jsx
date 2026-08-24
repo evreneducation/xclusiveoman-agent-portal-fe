@@ -19,6 +19,7 @@ import {
   LuStar,
   LuPresentation,
   LuReceipt,
+  LuScale,
   LuTruck,
   LuUserCheck,
   LuWallet,
@@ -115,6 +116,11 @@ const NAV_ITEMS = [
     ],
   },
   { key: 'support', to: '/admin/support', label: 'Support & Helpdesk', Icon: LuHeadset },
+  // Terms & Conditions — a single rich-text policy document (site_terms,
+  // 0067_site_terms.sql), same requireFeature('catalog') gate Product/MICE
+  // Catalog use (its nearest sibling above); no super_admin-only override
+  // like CMS below, so every staff role sees it same as Catalog itself.
+  { key: 'terms', to: '/admin/terms', label: 'Terms & Conditions', Icon: LuScale },
   // Admin Reviews Management (Task 21 — Item 33) — ops_admin/super_admin
   // gated on the backend only; not filtered out of NAV_ITEMS for other
   // roles, matching the existing convention for other ops_admin+-only pages
