@@ -1,6 +1,7 @@
 // Small Tailwind-only building blocks mirroring the wireframe's visual language
 // (.btn, .field, .wf-box, .badge, .tag classes in Xclusive-Oman-Wireframes.html).
 import { motion } from 'framer-motion';
+import { LuChevronLeft, LuChevronRight } from 'react-icons/lu';
 
 // Button is now the shadcn/ui component (src/components/ui/button.jsx) —
 // re-exported here so every existing `import { Button } from '../components/ui.jsx'`
@@ -155,6 +156,64 @@ export function Table({ columns, rows, renderRow }) {
         </thead>
         <tbody>{rows.map(renderRow)}</tbody>
       </table>
+    </div>
+  );
+}
+
+// Prev/next + numbered pages, windowed to at most 5 numbers around the
+// current one, plus a "Showing X to Y of Z {itemLabel}" count — shared by
+// every backend-paginated admin list (Agent Approvals, Employees, …) rather
+// than each page re-implementing its own pager.
+export function Pagination({ page, totalPages, total, pageSize, onChange, itemLabel = 'items' }) {
+  if (total === 0) return null;
+  const start = (page - 1) * pageSize + 1;
+  const end = Math.min(page * pageSize, total);
+
+  const windowSize = 5;
+  let first = Math.max(1, page - Math.floor(windowSize / 2));
+  const last = Math.min(totalPages, first + windowSize - 1);
+  first = Math.max(1, last - windowSize + 1);
+  const pages = Array.from({ length: last - first + 1 }, (_, i) => first + i);
+
+  return (
+    <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+      <span className="text-xs text-muted">
+        Showing {start} to {end} of {total} {itemLabel}
+      </span>
+      <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          disabled={page <= 1}
+          onClick={() => onChange(page - 1)}
+          aria-label="Previous page"
+          className="flex h-8 w-8 items-center justify-center rounded-md border border-[#D7DDF0] bg-white text-[#475569] hover:border-[#6366F1] hover:text-[#4F46E5] disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <LuChevronLeft size={16} />
+        </button>
+        {pages.map((p) => (
+          <button
+            key={p}
+            type="button"
+            onClick={() => onChange(p)}
+            className={`flex h-8 w-8 items-center justify-center rounded-md text-xs font-semibold ${
+              p === page
+                ? 'bg-gradient-to-r from-[#2563EB] to-[#4F46E5] text-white shadow-sm'
+                : 'border border-[#D7DDF0] bg-white text-[#475569] hover:border-[#6366F1] hover:text-[#4F46E5]'
+            }`}
+          >
+            {p}
+          </button>
+        ))}
+        <button
+          type="button"
+          disabled={page >= totalPages}
+          onClick={() => onChange(page + 1)}
+          aria-label="Next page"
+          className="flex h-8 w-8 items-center justify-center rounded-md border border-[#D7DDF0] bg-white text-[#475569] hover:border-[#6366F1] hover:text-[#4F46E5] disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <LuChevronRight size={16} />
+        </button>
+      </div>
     </div>
   );
 }

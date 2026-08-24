@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { LuChevronLeft, LuChevronRight, LuFileText, LuUserRound } from 'react-icons/lu';
+import { LuFileText, LuUserRound } from 'react-icons/lu';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api/client.js';
-import { Badge, Button, Card, ErrorText, FieldLabel, Table, Tag, TextInput } from '../components/ui.jsx';
+import { Badge, Button, Card, ErrorText, FieldLabel, Pagination, Table, Tag, TextInput } from '../components/ui.jsx';
 
 const STATUS_TABS = [
   { value: '', label: 'All' },
@@ -241,63 +241,6 @@ function AgencyDetailsModal({ agency, isSuperAdmin, onClose, onDecided }) {
   );
 }
 
-// Prev/next + numbered pages, windowed to at most 5 numbers around the
-// current one — the reference's simple "< 1 >" pager, extended with the
-// numbers/window (and a "Showing X–Y of Z" count) rather than copied as-is.
-function Pagination({ page, totalPages, total, pageSize, onChange }) {
-  if (total === 0) return null;
-  const start = (page - 1) * pageSize + 1;
-  const end = Math.min(page * pageSize, total);
-
-  const windowSize = 5;
-  let first = Math.max(1, page - Math.floor(windowSize / 2));
-  const last = Math.min(totalPages, first + windowSize - 1);
-  first = Math.max(1, last - windowSize + 1);
-  const pages = Array.from({ length: last - first + 1 }, (_, i) => first + i);
-
-  return (
-    <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-      <span className="text-xs text-muted">
-        Showing {start} to {end} of {total} agencies
-      </span>
-      <div className="flex items-center gap-1.5">
-        <button
-          type="button"
-          disabled={page <= 1}
-          onClick={() => onChange(page - 1)}
-          aria-label="Previous page"
-          className="flex h-8 w-8 items-center justify-center rounded-md border border-[#D7DDF0] bg-white text-[#475569] hover:border-[#6366F1] hover:text-[#4F46E5] disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          <LuChevronLeft size={16} />
-        </button>
-        {pages.map((p) => (
-          <button
-            key={p}
-            type="button"
-            onClick={() => onChange(p)}
-            className={`flex h-8 w-8 items-center justify-center rounded-md text-xs font-semibold ${
-              p === page
-                ? 'bg-gradient-to-r from-[#2563EB] to-[#4F46E5] text-white shadow-sm'
-                : 'border border-[#D7DDF0] bg-white text-[#475569] hover:border-[#6366F1] hover:text-[#4F46E5]'
-            }`}
-          >
-            {p}
-          </button>
-        ))}
-        <button
-          type="button"
-          disabled={page >= totalPages}
-          onClick={() => onChange(page + 1)}
-          aria-label="Next page"
-          className="flex h-8 w-8 items-center justify-center rounded-md border border-[#D7DDF0] bg-white text-[#475569] hover:border-[#6366F1] hover:text-[#4F46E5] disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          <LuChevronRight size={16} />
-        </button>
-      </div>
-    </div>
-  );
-}
-
 export default function AgentApprovals() {
   const { isSuperAdmin } = useAuth();
   const [statusFilter, setStatusFilter] = useState('pending');
@@ -456,6 +399,7 @@ export default function AgentApprovals() {
               total={pagination.total}
               pageSize={pagination.pageSize}
               onChange={setPage}
+              itemLabel="agencies"
             />
           </>
         )}
