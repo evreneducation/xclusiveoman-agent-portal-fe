@@ -5,11 +5,21 @@ import { connectSocket, disconnectSocket } from '../lib/socket.js';
 const AuthContext = createContext(null);
 
 // AUTH-7: /agent and /admin are fully separate auth contexts. The backend's
-// /auth/login endpoint is shared across both frontends, so this app enforces
-// the boundary itself — only users with no agency_id (internal staff) may use
-// this console.
-function isStaffUser(user) {
-  return !user.agencyId;
+// /auth/login endpoint is shared across all portals, so this app enforces
+// the boundary itself — historically just "no agency_id = internal staff",
+// but that alone now also matches a custom-role employee (Employees.jsx's
+// Add modal "Other" branch, customRoleEmployees.controller.js) who was
+// never meant to see the Admin Console — there's no dashboard built for
+// that role yet, and no Access Features/permissions to scope what they
+// could do here even if there were. ADMIN_ROLES is the actual allow-list:
+// only these roles (mirroring the backend's own requireRole(...) gates
+// across admin.routes.js and friends) may authenticate into this app: an
+// agency_id-less user whose role isn't one of these gets logged straight
+// back out below, same as one who does have an agency_id.
+const ADMIN_ROLES = ['ops_admin', 'super_admin', 'sales_marketing', 'support', 'finance'];
+
+function isAdminUser(user) {
+  return !user.agencyId && ADMIN_ROLES.includes(user.role);
 }
 
 export function AuthProvider({ children }) {
@@ -49,7 +59,7 @@ export function AuthProvider({ children }) {
       }
       try {
         const { user: me } = await api.get('/auth/me');
-        if (!isStaffUser(me)) {
+        if (!isAdminUser(me)) {
           await api.post('/auth/logout').catch(() => {});
           clearSession();
           return;

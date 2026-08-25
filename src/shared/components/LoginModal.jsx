@@ -125,11 +125,16 @@ function formatCountdown(totalSeconds) {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-// Reads the same signal admin/context/AuthContext.jsx#isStaffUser already
-// uses server-side of this decision (agency_id null = internal staff) —
-// not a second, possibly-diverging definition of "who counts as admin".
-function isStaffUser(user) {
-  return !user.agencyId;
+// Mirrors admin/context/AuthContext.jsx#ADMIN_ROLES/isAdminUser exactly —
+// that file is the real gate (it re-checks this on every bootstrap/refresh,
+// not just here), but redirecting a non-admin-role user to /admin/dashboard
+// anyway would just have them immediately bounced back out by that check —
+// a confusing flash-then-logout instead of a clear message. Keeping this
+// list in sync with that one avoids exactly that.
+const ADMIN_ROLES = ['ops_admin', 'super_admin', 'sales_marketing', 'support', 'finance'];
+
+function isAdminUser(user) {
+  return !user.agencyId && ADMIN_ROLES.includes(user.role);
 }
 
 // Lead Managers (sales_manager) and Relationship Managers
@@ -232,7 +237,19 @@ export function LoginModal({
         setStep('otp');
       } else {
         const { user } = await loginApi.post('/auth/verify-otp', { email, otp }, { skipAuth: true });
-        const destination = isTeamUser(user) ? teamDestination : isStaffUser(user) ? adminDestination : agentDestination;
+        const destination = isTeamUser(user)
+          ? teamDestination
+          : isAdminUser(user)
+            ? adminDestination
+            : user.agencyId
+              ? agentDestination
+              : null; // agency_id-less but not a recognized admin/team role — a custom role with no portal built for it yet (Employees.jsx's Add modal "Other" branch)
+
+        if (!destination) {
+          // finally below still runs on this early return and clears submitting.
+          setError("This account isn't set up for portal access yet. Contact your administrator.");
+          return;
+        }
         // Hard navigation — see this file's own top comment for why a plain
         // React Router navigate() isn't safe here.
         window.location.replace(destination);
