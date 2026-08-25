@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
+import { LuArrowLeft } from 'react-icons/lu';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api/client.js';
 import { getSocket } from '../lib/socket.js';
@@ -75,7 +76,7 @@ function SidebarContent({ onNavigate, collapsed = false }) {
   return (
     <>
       <div
-        className={`flex items-center border-b border-white/10 ${collapsed ? 'justify-center px-2 py-4' : 'justify-between px-6 py-6'}`}
+        className={`flex items-center border-b border-black/10 ${collapsed ? 'justify-center px-2 py-4' : 'justify-between px-6 py-6'}`}
       >
         <img
           src={collapsed ? '/logo_scroll_closed.png' : '/Xclusive_Oman_Logo_2.png'}
@@ -83,7 +84,7 @@ function SidebarContent({ onNavigate, collapsed = false }) {
           className={`w-auto flex-none object-contain ${collapsed ? 'h-10' : 'h-12'}`}
         />
         {!collapsed && (
-          <span className="flex-none rounded-full border border-transparent bg-gradient-to-r from-[#E2A33B] to-[#F97316] px-2.5 py-1 text-xs font-semibold uppercase text-white shadow-sm shadow-black/20">
+          <span className="flex-none rounded-full border border-black/10 bg-[#241804] px-2.5 py-1 text-xs font-semibold uppercase text-[#F4C765] shadow-sm shadow-black/20">
             Agent
           </span>
         )}
@@ -101,16 +102,25 @@ function SidebarContent({ onNavigate, collapsed = false }) {
               title={collapsed ? label : undefined}
             >
               {active && (
+                // Pure white read as a stark cutout against the gold
+                // gradient (screenshot feedback) — agent-accent-soft is
+                // already this palette's own pale cream tint (used
+                // elsewhere for badges/notification chips), so the active
+                // pill now reads as "a lighter shade of the same gold
+                // family" instead of an unrelated white block. A hairline
+                // dark ring (barely visible on white, does real work here)
+                // keeps its edge defined against the lighter parts of the
+                // gradient where the cream/gold contrast is otherwise soft.
                 <motion.div
                   layoutId="agent-active-nav-pill"
-                  className="absolute inset-0 rounded-xl bg-gradient-to-r from-[#E2A33B] to-[#F97316] shadow-md shadow-black/20"
+                  className="absolute inset-0 rounded-xl bg-agent-accent-soft shadow-md shadow-black/15 ring-1 ring-black/5"
                   transition={{ type: 'spring', stiffness: 380, damping: 32 }}
                 />
               )}
               <span
                 className={`relative z-10 flex items-center gap-3 rounded-xl py-3 text-sm font-semibold transition-colors ${
                   collapsed ? 'justify-center px-0' : 'px-4'
-                } ${active ? 'text-white' : 'text-white/75 hover:bg-white/10 hover:text-white'}`}
+                } ${active ? 'text-[#241804]' : 'text-[#241804]/70 hover:bg-black/10 hover:text-[#241804]'}`}
               >
                 <Icon className="flex-none" />
                 {!collapsed && label}
@@ -120,23 +130,25 @@ function SidebarContent({ onNavigate, collapsed = false }) {
         })}
       </nav>
 
-      <div className={`space-y-3 border-t border-white/10 py-5 ${collapsed ? 'px-2' : 'px-4'}`}>
+      <div className={`space-y-3 border-t border-black/10 py-5 ${collapsed ? 'px-2' : 'px-4'}`}>
         <div
-          className={`flex items-center gap-2.5 rounded-xl bg-white/10 py-2.5 text-xs ${
+          className={`flex items-center gap-2.5 rounded-xl bg-black/10 py-2.5 text-xs ${
             collapsed ? 'justify-center px-0' : 'px-3.5'
           }`}
         >
           <span
             className={`h-2.5 w-2.5 flex-none rounded-full ${
-              socketConnected ? 'bg-[#4fd97a] shadow-[0_0_0_4px_rgba(79,217,122,0.25)]' : 'bg-white/30'
+              socketConnected ? 'bg-[#227647] shadow-[0_0_0_4px_rgba(34,118,71,0.25)]' : 'bg-black/20'
             }`}
           />
-          {!collapsed && <span className="text-white/70">{socketConnected ? 'Live connection active' : 'Connecting…'}</span>}
+          {!collapsed && (
+            <span className="text-[#241804]/70">{socketConnected ? 'Live connection active' : 'Connecting…'}</span>
+          )}
         </div>
         {!collapsed && (
           <div className="px-1 text-xs">
-            <div className="font-semibold text-white">{user?.fullName}</div>
-            <div className="text-white/60">{user?.role}</div>
+            <div className="font-semibold text-[#241804]">{user?.fullName}</div>
+            <div className="text-[#241804]/60">{user?.role}</div>
           </div>
         )}
         <Button
@@ -172,7 +184,7 @@ export default function AgentLayout() {
         transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
         onMouseEnter={() => setCollapsed(false)}
         onMouseLeave={() => setCollapsed(true)}
-        className="sticky top-0 hidden h-screen flex-none flex-col bg-[linear-gradient(180deg,#083A36_0%,#0B4F4A_55%,#0D9488_100%)] shadow-xl shadow-black/10 lg:flex"
+        className="sticky top-0 hidden h-screen flex-none flex-col bg-[linear-gradient(180deg,#E6B94D_0%,#D9A62A_55%,#BD8A1E_100%)] shadow-xl shadow-black/10 lg:flex"
       >
         <SidebarContent collapsed={collapsed} />
       </motion.aside>
@@ -193,11 +205,11 @@ export default function AgentLayout() {
               animate={{ x: 0 }}
               exit={{ x: -288 }}
               transition={{ type: 'spring', stiffness: 320, damping: 34 }}
-              className="fixed inset-y-0 left-0 z-50 flex h-screen w-72 flex-none flex-col bg-[linear-gradient(180deg,#083A36_0%,#0B4F4A_55%,#0D9488_100%)] shadow-2xl lg:hidden"
+              className="fixed inset-y-0 left-0 z-50 flex h-screen w-72 flex-none flex-col bg-[linear-gradient(180deg,#E6B94D_0%,#D9A62A_55%,#BD8A1E_100%)] shadow-2xl lg:hidden"
             >
               <button
                 onClick={() => setMobileOpen(false)}
-                className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full border border-white/20 text-white"
+                className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full border border-black/20 text-[#241804]"
                 aria-label="Close menu"
               >
                 <CloseIcon width={16} height={16} />
@@ -209,11 +221,11 @@ export default function AgentLayout() {
       </AnimatePresence>
 
       <div className="min-w-0 flex-1">
-        {/* Top bar — mobile menu toggle + current section label, sticky across pages */}
-        <div
-          style={{ background: 'linear-gradient(90deg, #EAFBF6, #FFF8E7, #FFF0E5)' }}
-          className="sticky top-0 z-30 flex items-center gap-3 border-b-2 border-[#E2A33B]/30 px-4 py-3 shadow-sm backdrop-blur lg:px-8"
-        >
+        {/* Top bar — back nav + current section label, sticky across pages.
+            Plain white with a solid gold underline (re-themed off the
+            previous tri-tone gradient) to match the reference design's
+            "white bar, gold accents" shell. */}
+        <div className="sticky top-0 z-30 flex items-center gap-3 border-b-2 border-[#D9A62A] bg-white px-4 py-3 shadow-sm lg:px-8">
           <button
             onClick={() => setMobileOpen(true)}
             className="flex h-9 w-9 flex-none items-center justify-center rounded-lg bg-agent-panel text-agent-ink lg:hidden"
@@ -221,10 +233,14 @@ export default function AgentLayout() {
           >
             <MenuIcon width={18} height={18} />
           </button>
-          <div className="flex items-center gap-2 text-sm font-bold text-agent-ink">
-            <span className="h-1.5 w-1.5 rounded-full bg-agent-accent" />
-            {activeItem?.label || 'Agent Portal'}
-          </div>
+          <button
+            onClick={() => navigate(-1)}
+            className="flex h-9 w-9 flex-none items-center justify-center rounded-full border border-agent-line-light text-[#241804] transition-colors hover:border-agent-accent hover:text-agent-accent-dark"
+            aria-label="Go back"
+          >
+            <LuArrowLeft size={17} />
+          </button>
+          <div className="text-sm font-bold text-[#241804]">{activeItem?.label || 'Agent Portal'}</div>
           <div className="ml-auto">
             <NotificationBell
               api={api}
@@ -233,7 +249,7 @@ export default function AgentLayout() {
               resolvePath={resolveNotificationPath}
               onNavigate={navigate}
               icon={NotificationsIcon}
-              buttonClassName="h-9 w-9 rounded-full bg-agent-accent-soft text-agent-accent-dark hover:bg-agent-accent hover:text-white"
+              buttonClassName="h-9 w-9 rounded-full border-2 border-agent-accent/50 bg-agent-accent-soft text-agent-accent-dark hover:bg-agent-accent hover:text-white"
             />
           </div>
         </div>
