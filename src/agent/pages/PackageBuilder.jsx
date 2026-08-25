@@ -1412,7 +1412,7 @@ export default function PackageBuilder() {
 
   return (
     <div className="mx-auto max-w-5xl p-5 lg:p-8">
-      <h2 className="mb-1 text-2xl font-bold text-agent-ink print:hidden">Custom FIT Package Builder</h2>
+      <h2 className="mb-1 text-2xl font-bold text-agent-ink print:hidden">Package Builder</h2>
       <p className="mb-5 text-sm text-agent-muted print:hidden">
         Build a personalised package for your client. Pricing is handled by Xclusive Oman once you submit
         — no cost or price is shown anywhere in this builder.
@@ -1427,7 +1427,7 @@ export default function PackageBuilder() {
           <p className="mt-2 font-mono text-xs text-agent-muted">Reference: {submittedId}</p>
           <div className="mt-4 flex flex-wrap gap-2">
             <Button variant="accent" onClick={() => navigate('/agent/fit-requests')}>
-              View My FIT Requests
+              View My Requests
             </Button>
             <Button onClick={() => navigate('/agent/dashboard')}>Back to Dashboard</Button>
           </div>

@@ -169,7 +169,7 @@ export default function FitRequests() {
     <div className="mx-auto max-w-6xl space-y-6 p-5 lg:p-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="mb-1 text-2xl font-bold text-agent-ink">My FIT Requests / Quotes</h2>
+          <h2 className="mb-1 text-2xl font-bold text-agent-ink">My Requests / Quotes</h2>
           <p className="text-sm text-agent-muted">Track every Custom FIT request from draft through to a published quote.</p>
         </div>
         <Link to="/agent/package-builder">
