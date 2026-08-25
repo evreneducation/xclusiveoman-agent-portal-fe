@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { FiBriefcase, FiMail, FiPhone, FiUser } from 'react-icons/fi';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api/client.js';
-import { Button, ErrorText, FieldLabel, Select, TextInput } from '../components/ui.jsx';
-import AuthShell from '../components/AuthShell.jsx';
+import { ErrorText } from '../components/ui.jsx';
+import AuthShell, { AUTH_ACCENT, AuthButton, AuthFieldLabel, AuthSelect, AuthTextInput } from '../components/AuthShell.jsx';
 
 const COUNTRIES = ['Oman', 'India', 'UAE', 'Saudi Arabia', 'Qatar', 'Kuwait', 'Bahrain', 'Other'];
 
@@ -14,6 +15,8 @@ const COUNTRIES = ['Oman', 'India', 'UAE', 'Saudi Arabia', 'Qatar', 'Kuwait', 'B
 // file wouldn't be rejected server-side if someone renamed one past this
 // accept filter.
 const LICENSE_ACCEPT = 'image/jpeg,image/png,application/pdf';
+
+const FOOTER_NOTE = "By creating an account, you agree to Xclusive Oman's current Terms of Service and Privacy Policy.";
 
 // No password field — nothing in this app ever collects one anymore. Once
 // approved, the new owner signs in the same way everyone else does: email
@@ -29,7 +32,6 @@ export default function Register() {
   const { register } = useAuth();
   const [form, setForm] = useState({
     agencyName: '',
-    licenseNumber: '',
     country: 'Oman',
     ownerFullName: '',
     email: '',
@@ -39,11 +41,12 @@ export default function Register() {
   const [success, setSuccess] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // IATA/License document — mandatory upload (jpg/png/jpeg/pdf), replacing
-  // the old plain-text-only license number field. Uploaded immediately on
-  // selection (same upload-then-submit-the-URL pattern as every other file
-  // upload in this app, e.g. Payment.jsx's NEFT slip) rather than deferred
-  // to form submit, so the Sign Up form itself stays a plain JSON POST.
+  // IATA/License — now an upload only (jpg/png/jpeg/pdf), mandatory; the
+  // free-text license number field is gone entirely, not just supplemented.
+  // Uploaded immediately on selection (same upload-then-submit-the-URL
+  // pattern as every other file upload in this app, e.g. Payment.jsx's NEFT
+  // slip) rather than deferred to form submit, so the Sign Up form itself
+  // stays a plain JSON POST.
   const [licenseFile, setLicenseFile] = useState(null);
   const [licenseDocumentUrl, setLicenseDocumentUrl] = useState('');
   const [licenseUploading, setLicenseUploading] = useState(false);
@@ -94,19 +97,18 @@ export default function Register() {
 
   if (success) {
     return (
-      <AuthShell>
-        <div className="mx-auto w-full max-w-sm text-center">
-          <img src="/Xclusive_Oman_Logo_2.png" alt="Xclusive Oman" className="mx-auto h-11 w-auto object-contain" />
-          <div className="mx-auto mt-6 flex h-11 w-11 items-center justify-center rounded-full bg-[#e9f7ef] text-lg text-[#227647]">✓</div>
-          <h2 className="mt-3 text-xl font-bold text-agent-ink">Registration submitted</h2>
-          <p className="mt-2 text-sm leading-relaxed text-agent-muted">
-            Thanks — your registration is now <span className="font-semibold text-agent-ink">Pending Approval</span>. A
+      <AuthShell title="Registration submitted" tagline="Your trade gateway to exclusive Oman experiences">
+        <div className="text-center">
+          <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-[#e9f7ef] text-lg text-[#227647]">
+            ✓
+          </div>
+          <h2 className="mt-3 text-xl font-bold text-slate-900">Registration submitted</h2>
+          <p className="mt-2 text-sm leading-relaxed text-slate-500">
+            Thanks — your registration is now <span className="font-semibold text-slate-900">Pending Approval</span>. A
             Super Admin will review it, assign your tier, and you'll be able to sign in once approved.
           </p>
           <Link to="/agent/login" className="mt-6 block">
-            <Button variant="solid" className="w-full justify-center rounded-full py-2.5 text-sm">
-              Back to Sign In
-            </Button>
+            <AuthButton type="button">Back to Sign In</AuthButton>
           </Link>
         </div>
       </AuthShell>
@@ -114,94 +116,94 @@ export default function Register() {
   }
 
   return (
-    <AuthShell>
-      <div className="mx-auto w-full max-w-xl">
-        <div className="flex flex-col items-center text-center">
-          <img src="/Xclusive_Oman_Logo_2.png" alt="Xclusive Oman" className="h-11 w-auto object-contain" />
-          <p className="mt-2 text-sm text-agent-muted">Register your agency for trade access — takes about two minutes.</p>
-        </div>
-
-        <form onSubmit={handleSubmit} className="mt-8 space-y-4 text-left">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="sm:col-span-2">
-              <FieldLabel>Company name*</FieldLabel>
-              <TextInput required autoFocus value={form.agencyName} onChange={(e) => update('agencyName', e.target.value)} />
-            </div>
-
-            <div>
-              <FieldLabel>IATA / License No. (optional)</FieldLabel>
-              <TextInput value={form.licenseNumber} onChange={(e) => update('licenseNumber', e.target.value)} />
-            </div>
-            <div>
-              <FieldLabel>Country*</FieldLabel>
-              <Select value={form.country} onChange={(e) => update('country', e.target.value)}>
-                {COUNTRIES.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </Select>
-            </div>
-
-            <div className="sm:col-span-2">
-              <FieldLabel>Upload IATA / License Document*</FieldLabel>
-              <input
-                type="file"
-                required
-                accept={LICENSE_ACCEPT}
-                onChange={handleLicenseFileChange}
-                className="w-full rounded-md border border-agent-line-light bg-white px-3 py-2.5 text-sm text-agent-ink shadow-sm file:mr-3 file:rounded-md file:border-0 file:bg-agent-panel file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-agent-ink-dark"
-              />
-              <p className="mt-1.5 text-xs text-agent-muted">
-                {licenseUploading
-                  ? 'Uploading…'
-                  : licenseDocumentUrl
-                    ? `✓ ${licenseFile?.name || 'Document'} uploaded`
-                    : 'Accepted formats: JPG, PNG, PDF.'}
-              </p>
-              <ErrorText>{licenseError}</ErrorText>
-            </div>
-
-            <div>
-              <FieldLabel>Owner full name*</FieldLabel>
-              <TextInput required value={form.ownerFullName} onChange={(e) => update('ownerFullName', e.target.value)} />
-            </div>
-            <div>
-              <FieldLabel>Phone*</FieldLabel>
-              <TextInput required value={form.phone} onChange={(e) => update('phone', e.target.value)} />
-            </div>
-
-            <div className="sm:col-span-2">
-              <FieldLabel>Email*</FieldLabel>
-              <TextInput type="email" required value={form.email} onChange={(e) => update('email', e.target.value)} placeholder="Enter your email" />
-              <p className="mt-1.5 text-xs text-agent-muted">
-                No password to set — once approved, you'll sign in with a code emailed to this address.
-              </p>
-            </div>
+    <AuthShell
+      eyebrow="Agent Sign Up"
+      title="Create your account"
+      subtitle="Register your agency for trade access — takes about two minutes."
+      tagline="Register your agency for trade access — takes about two minutes."
+      footerNote={FOOTER_NOTE}
+      maxWidthClassName="max-w-xl"
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="sm:col-span-2">
+            <AuthFieldLabel>Company name*</AuthFieldLabel>
+            <AuthTextInput
+              icon={FiBriefcase}
+              required
+              autoFocus
+              value={form.agencyName}
+              onChange={(e) => update('agencyName', e.target.value)}
+            />
           </div>
 
-          <ErrorText>{error}</ErrorText>
-          <Button
-            variant="accent"
-            type="submit"
-            className="w-full justify-center rounded-full py-2.5 text-sm"
-            disabled={submitting || licenseUploading}
-          >
-            {submitting ? 'Submitting…' : 'Submit for Approval'}
-          </Button>
-        </form>
+          <div className="sm:col-span-2">
+            <AuthFieldLabel>Country*</AuthFieldLabel>
+            <AuthSelect value={form.country} onChange={(e) => update('country', e.target.value)}>
+              {COUNTRIES.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </AuthSelect>
+          </div>
 
-        <p className="mt-5 text-center text-sm text-agent-muted">
-          Already registered?{' '}
-          <Link to="/agent/login" className="font-semibold text-agent-accent-dark hover:underline">
-            Sign in
-          </Link>
-        </p>
+          <div className="sm:col-span-2">
+            <AuthFieldLabel>IATA / License No.*</AuthFieldLabel>
+            <input
+              type="file"
+              required
+              accept={LICENSE_ACCEPT}
+              onChange={handleLicenseFileChange}
+              className="w-full rounded-md border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm file:mr-3 file:rounded-md file:border-0 file:bg-[#fdece2] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-[#d1642f]"
+            />
+            <p className="mt-1.5 text-xs text-slate-500">
+              {licenseUploading
+                ? 'Uploading…'
+                : licenseDocumentUrl
+                  ? `✓ ${licenseFile?.name || 'Document'} uploaded`
+                  : 'Accepted formats: JPG, PNG, PDF.'}
+            </p>
+            <ErrorText>{licenseError}</ErrorText>
+          </div>
 
-        <p className="mt-6 text-center text-[11px] leading-relaxed text-agent-muted">
-          By creating an account, you agree to Xclusive Oman's current Terms of Service and Privacy Policy.
-        </p>
-      </div>
+          <div>
+            <AuthFieldLabel>Owner full name*</AuthFieldLabel>
+            <AuthTextInput icon={FiUser} required value={form.ownerFullName} onChange={(e) => update('ownerFullName', e.target.value)} />
+          </div>
+          <div>
+            <AuthFieldLabel>Phone*</AuthFieldLabel>
+            <AuthTextInput icon={FiPhone} required value={form.phone} onChange={(e) => update('phone', e.target.value)} />
+          </div>
+
+          <div className="sm:col-span-2">
+            <AuthFieldLabel>Email*</AuthFieldLabel>
+            <AuthTextInput
+              icon={FiMail}
+              type="email"
+              required
+              value={form.email}
+              onChange={(e) => update('email', e.target.value)}
+              placeholder="Enter your email"
+            />
+            <p className="mt-1.5 text-xs text-slate-500">
+              No password to set — once approved, you'll sign in with a code emailed to this address.
+            </p>
+          </div>
+        </div>
+
+        <ErrorText>{error}</ErrorText>
+        <AuthButton type="submit" disabled={submitting || licenseUploading}>
+          {submitting ? 'Submitting…' : 'Submit for Approval'}
+        </AuthButton>
+      </form>
+
+      <p className="mt-5 text-center text-sm text-slate-500">
+        Already registered?{' '}
+        <Link to="/agent/login" className="font-semibold hover:underline" style={{ color: AUTH_ACCENT }}>
+          Sign in
+        </Link>
+      </p>
     </AuthShell>
   );
 }
