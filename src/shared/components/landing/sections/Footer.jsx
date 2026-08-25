@@ -8,7 +8,7 @@ export function Footer() {
         <div>
           <img src="/Xclusive_Oman_Logo_2.png" alt="Xclusive Oman by Traveon" className="h-9 w-auto" />
           <p className="mt-4 max-w-xs text-sm leading-relaxed text-white/60">
-            A licensed Inbound DMC and MICE travel service across the Sultanate of Oman for trade partners
+            The best B2B partner for MICE and travel services across the Sultanate of Oman for trade partners
             worldwide.
           </p>
           <form className="mt-5 flex max-w-xs overflow-hidden rounded-full border border-white/20" onSubmit={(e) => e.preventDefault()}>
