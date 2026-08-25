@@ -105,7 +105,7 @@ export const FOOTER_LINKS = {
 };
 
 export const CONTACT = {
-  address: 'CBD, Muscat, Sultanate of Oman',
-  phone: '+968 2456 7890',
-  email: 'trade@xclusiveoman.com',
+  address: '128-A, D-Mall, NSP, Delhi, India (110034)',
+  phone: '+91 9540111307',
+  email: 'xclusiveoman@gmail.com',
 };
