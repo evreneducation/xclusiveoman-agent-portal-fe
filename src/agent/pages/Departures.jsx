@@ -1,9 +1,23 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { LuArrowRight, LuPlaneTakeoff } from 'react-icons/lu';
+import { LuBuilding2, LuCalendarDays, LuPlaneTakeoff, LuSparkles, LuStar } from 'react-icons/lu';
 import { api } from '../api/client.js';
-import { Card, Checkbox, ErrorText, Select, StarRating, TextInput } from '../components/ui.jsx';
-import { formatCurrency, formatShortDate, getFdBadges, getSeatsLeft } from '../../shared/fdPackage/index.js';
+import { Card, Checkbox, ErrorText, Select, TextInput } from '../components/ui.jsx';
+import { getFdBadges } from '../../shared/fdPackage/index.js';
+
+// "October 2026 - November 2026" — full month names (unlike the shared
+// formatDateRange in ../../shared/fdPackage/index.js, which abbreviates to
+// "Oct 2026" for DepartureDetail.jsx's tighter layout). Kept local to this
+// card rather than changing that shared helper's output for every existing
+// caller.
+function formatMonthRange(dates) {
+  if (!dates || dates.length === 0) return null;
+  const sorted = [...dates].sort();
+  const fmt = (iso) => new Date(iso).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+  const from = fmt(sorted[0]);
+  const to = fmt(sorted[sorted.length - 1]);
+  return from === to ? from : `${from} - ${to}`;
+}
 
 const PRICE_BANDS = [
   { label: 'Any price', min: 0, max: Infinity },
@@ -41,127 +55,163 @@ function CardBadge({ tone, children }) {
 
 function DepartureCard({ d }) {
   const nextDate = d.nextDepartures?.[0];
-  const seatsLeft = getSeatsLeft(d.nextDepartures);
-  const badges = getFdBadges(d);
-  const isFeatured = badges.some((b) => b.tone === 'amber');
+  const seatsLeft = nextDate?.seatsLeft ?? 0;
+  const seatsTotal = nextDate?.seatsTotal ?? 0;
+  const isSoldOut = Boolean(nextDate) && seatsLeft <= 0;
+  const seatsPct = seatsTotal > 0 ? Math.min(100, Math.max(0, (seatsLeft / seatsTotal) * 100)) : 0;
+
+  // Sold Out is its own large centered ribbon over the image (below), not a
+  // corner pill — Featured/Bestseller keep the small corner-badge treatment,
+  // only shown when the package isn't sold out (matches the reference: the
+  // sold-out card shows nothing but the ribbon).
+  const badges = isSoldOut ? [] : getFdBadges(d);
+
+  const monthRange = formatMonthRange((d.nextDepartures || []).map((nd) => nd.date));
+  // "4N Thailand Getaway" — duration + destination, the reference card's
+  // subtitle line under the title. Falls back to whichever piece the
+  // package/listing actually has rather than needing a second fetch — the
+  // listing endpoint (departures.controller.js#listDepartures) already
+  // resolves destination (from the primary hotel's city) and flights/
+  // hotelCategory alongside it, so every field this card needs comes back
+  // in the one /departures request.
+  const subtitle = [d.duration, d.destination].filter(Boolean).join(' ') + (d.destination ? ' Getaway' : '');
 
   return (
-    // `group` on the Link itself (rather than the div below) so every
-    // hover-driven child transition — image zoom, gradient overlay, title
-    // color, border/shadow, the arrow's forward nudge — reads as one
-    // coordinated "the whole card is reacting" gesture instead of separate
-    // pieces animating on their own.
-    // No h-full/flex-1/mt-auto height-stretching below — the grid this
-    // renders into uses items-start (see the grid className further down),
-    // so each card is only ever as tall as its own content. A card without
-    // flight details (mt-auto's job used to be "reach down to match the
-    // tallest sibling in the row") no longer needs to reach anywhere; it's
-    // simply a shorter card, rather than a same-height card with a big dead
-    // gap between its date line and its footer.
+    // `group` on the Link itself so hover transitions read as one
+    // coordinated gesture. Still fully clickable when sold out — an agent
+    // may still want the detail page to check other departure dates.
     <Link to={`/agent/departures/${d.id}`} className="group block">
       <div
-        className={`flex flex-col overflow-hidden rounded-2xl border bg-white shadow-md shadow-black/5 transition-all duration-300 group-hover:-translate-y-1.5 group-hover:shadow-2xl group-hover:shadow-agent-ink/15 ${
-          isFeatured
-            ? 'border-agent-accent/50 ring-1 ring-agent-accent/30 group-hover:ring-agent-accent/70'
-            : 'border-agent-line-light group-hover:border-agent-accent/40'
+        className={`flex flex-col overflow-hidden rounded-2xl border bg-white shadow-sm shadow-black/5 transition-all duration-300 ${
+          isSoldOut
+            ? 'border-agent-muted/30'
+            : 'border-agent-line-light group-hover:-translate-y-1 group-hover:border-agent-accent/40 group-hover:shadow-xl group-hover:shadow-black/10'
         }`}
       >
-        {/* Dark navy placeholder (matching the hero's own gradient) rather
-            than a pale panel fill — a missing cover photo reads as a deliberate
-            premium "coming soon" plate instead of an empty pastel box. */}
-        <div className="relative h-40 flex-none overflow-hidden bg-[linear-gradient(135deg,#0B1130_0%,#181f45_100%)]">
+        <div className="relative aspect-[4/3] flex-none overflow-hidden bg-[linear-gradient(135deg,#0B1130_0%,#181f45_100%)]">
           {d.heroImageUrl ? (
             <img
               src={d.heroImageUrl}
               alt=""
-              className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-110"
+              className={`h-full w-full object-cover transition-transform duration-500 ease-out ${
+                isSoldOut ? 'grayscale' : 'group-hover:scale-110'
+              }`}
             />
           ) : (
             <div className="flex h-full w-full items-center justify-center text-[11px] font-semibold uppercase tracking-wide text-white/40">
               No cover image
             </div>
           )}
-          {/* Permanent, subtle bottom-up scrim — gives the seats-left pill
-              real contrast against any photo and adds a touch of depth to
-              the placeholder gradient too, not just a hover effect. */}
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/45 to-transparent" />
-          <div className="absolute left-3 top-3 flex flex-wrap gap-1.5">
-            {badges.map((b) => (
-              <CardBadge key={b.label} tone={b.tone}>
-                {b.label}
-              </CardBadge>
-            ))}
-          </div>
-          {nextDate && seatsLeft > 0 && (
-            <span className="absolute bottom-3 right-3 rounded-full bg-black/55 px-2.5 py-1 text-[11px] font-semibold text-white backdrop-blur-sm">
-              {seatsLeft} seats left
-            </span>
+          {/* Sold-out packages get a permanent dark wash instead of the
+              usual hover-only scrim, so the "unavailable" read holds even
+              before the pointer arrives. */}
+          <div
+            className={`pointer-events-none absolute inset-0 ${
+              isSoldOut ? 'bg-black/40' : 'bg-gradient-to-t from-black/30 via-transparent to-transparent'
+            }`}
+          />
+          {isSoldOut ? (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <span className="rounded-lg bg-[#EF4A3D] px-8 py-2.5 text-lg font-extrabold text-white shadow-lg">
+                Sold Out
+              </span>
+            </div>
+          ) : (
+            badges.length > 0 && (
+              <div className="absolute left-3 top-3 flex flex-wrap gap-1.5">
+                {badges.map((b) => (
+                  <CardBadge key={b.label} tone={b.tone}>
+                    {b.label}
+                  </CardBadge>
+                ))}
+              </div>
+            )
           )}
         </div>
 
         <div className="flex flex-col p-4">
-          {/* Flight summary sits beside the title, on its own row, instead
-              of a separate block further down — that way a flight-less
-              card and a flight-having card stay exactly the same height
-              (nothing added below), and there's no dead space to fill when
-              a package has no flights (nothing rendered here at all, same
-              as before flights existed on this card). Onward's own route
-              stands in for "this package flies" — the reverse Return leg
-              isn't worth a second badge's width in a spot this tight;
-              full Onward+Return detail is still one tap away on the
-              departure detail page's own Flight Details section. */}
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0 font-serif text-base font-bold leading-snug text-agent-ink transition-colors duration-300 group-hover:text-agent-accent-dark">
-              {d.title}
-            </div>
-            {d.flights && (
-              <span className="flex flex-none items-center gap-1 rounded-full bg-sky-50 px-2 py-1 text-[10px] font-semibold text-sky-700">
-                <LuPlaneTakeoff size={11} className="flex-none" />
-                <span className="max-w-[100px] truncate">
-                  {d.flights.onward.source} → {d.flights.onward.destination}
+          {/* Neutral warm-gray divider/subtitle instead of agent-line-light /
+              agent-muted — both tokens still carry the portal's old teal
+              tint (#D7EAE5 / #5F7D79), which read as an odd blue-green cast
+              on the package name's own divider and the subtitle right under
+              it. Scoped to just these two spots rather than swapping the
+              tokens everywhere in the card. */}
+          <div
+            className={`border-b pb-2.5 font-serif text-xl font-bold leading-snug ${isSoldOut ? 'border-[#E6E1D2] text-agent-muted' : 'border-[#E6E1D2] text-[#1B1B1B]'}`}
+          >
+            {d.title}
+          </div>
+          <div className={`mt-2.5 text-sm ${isSoldOut ? 'text-[#6B6B65]/70' : 'text-[#6B6B65]'}`}>{subtitle}</div>
+
+          <div className={`mt-2.5 space-y-1.5 text-xs ${isSoldOut ? 'text-agent-muted/60' : 'text-[#4B4844]'}`}>
+            {monthRange && (
+              <div className="flex items-center gap-2">
+                <LuCalendarDays size={13} className="flex-none" />
+                {monthRange}
+              </div>
+            )}
+            {d.flights ? (
+              <div className="flex items-center gap-2">
+                <LuPlaneTakeoff size={13} className="flex-none" />
+                From {d.flights.onward.source}
+                {d.flights.onward.name && ` | ${d.flights.onward.name} Flight`}
+              </div>
+            ) : d.theme ? (
+              // No flights on this package — show the theme instead of
+              // dropping the row (keeps every card in the grid the same row
+              // count/height), a real package attribute rather than a
+              // placeholder "not included" message.
+              <div className="flex items-center gap-2">
+                <LuSparkles size={13} className="flex-none" />
+                {d.theme} Theme
+              </div>
+            ) : d.rating ? (
+              <div className="flex items-center gap-2">
+                <LuStar size={13} className="flex-none" />
+                {Number(d.rating).toFixed(1)} Rating{d.reviewCount != null && ` (${d.reviewCount} reviews)`}
+              </div>
+            ) : null}
+            {d.hotelCategory && (
+              <div className="flex items-center gap-2">
+                <LuBuilding2 size={13} className="flex-none" />
+                {d.hotelCategory} Star Hotel
+              </div>
+            )}
+          </div>
+
+          {nextDate && (
+            <div className="mt-3">
+              <div className="mb-1.5 flex items-center justify-between text-[11px] font-semibold">
+                <span className={`flex items-center gap-1.5 ${isSoldOut ? 'text-agent-muted' : 'text-[#1B1B1B]'}`}>
+                  <span className={`h-2 w-2 rounded-full ${isSoldOut ? 'bg-agent-muted' : 'bg-[#EF4A3D]'}`} />
+                  {isSoldOut ? '0 Seats Left' : `${seatsLeft} Seats Left`}
                 </span>
-              </span>
-            )}
-          </div>
-          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-agent-muted">
-            <span>{d.destination || 'Destination TBA'}</span>
-            {d.duration && <span>· {d.duration}</span>}
-            {d.theme && (
-              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-agent-ink">
-                {d.theme}
-              </span>
-            )}
-          </div>
-          <div className="mt-1.5">
-            <StarRating rating={Number(d.rating) || 0} reviewCount={d.reviewCount} />
-          </div>
+                <span className="text-agent-muted">{seatsTotal} Total</span>
+              </div>
+              <div className="h-2 w-full overflow-hidden rounded-full bg-agent-panel">
+                <div
+                  className={`h-full rounded-full ${isSoldOut ? '' : 'bg-[#EF4A3D]'}`}
+                  style={{ width: `${isSoldOut ? 0 : seatsPct}%` }}
+                />
+              </div>
+            </div>
+          )}
 
-          <div className="mt-2 text-[11px] text-agent-muted">
-            {nextDate ? (
-              <>
-                📅 {formatShortDate(nextDate.date)}
-                {nextDate.location && ` · Ex-${nextDate.location}`}
-                {d.nextDepartures.length > 1 && ` · +${d.nextDepartures.length - 1} more date${d.nextDepartures.length > 2 ? 's' : ''}`}
-              </>
-            ) : (
-              'No departure dates scheduled'
-            )}
-          </div>
-
-          <div className="mt-3 flex items-center justify-between">
-            {nextDate ? (
-              <span className="text-[11px] font-semibold text-agent-accent-dark">
-                {seatsLeft > 0 ? `${seatsLeft} seats left` : 'Sold out'}
-              </span>
-            ) : (
-              <span className="text-[11px] text-agent-muted">On request</span>
-            )}
-            <span className="flex items-center gap-1 text-sm font-bold text-agent-ink">
-              {formatCurrency(d.ratePerPax)} <span className="font-normal text-agent-muted">pp</span>
-              <LuArrowRight
-                size={14}
-                className="text-agent-accent-dark transition-transform duration-300 group-hover:translate-x-1"
-              />
+          <div className="mt-4 flex items-end justify-between">
+            <div>
+              <div className="text-[11px] font-medium text-agent-muted">Starting at</div>
+              <div className={`text-xl font-extrabold ${isSoldOut ? 'text-agent-muted' : 'text-[#1B1B1B]'}`}>
+                {d.ratePerPax != null ? `${Number(d.ratePerPax).toLocaleString('en-IN')}/-` : 'On request'}
+              </div>
+            </div>
+            <span
+              className={`flex-none rounded-full px-5 py-2.5 text-xs font-bold transition-colors ${
+                isSoldOut
+                  ? 'bg-gray-400 text-white'
+                  : 'bg-agent-accent text-white shadow-sm shadow-agent-accent/30 group-hover:bg-agent-accent-dark'
+              }`}
+            >
+              View Details
             </span>
           </div>
         </div>
@@ -223,30 +273,23 @@ export default function Departures() {
 
   return (
     <div className="min-h-screen bg-agent-bg">
-      {/* Full-bleed dark hero — a deliberate one-off outside the shared
-          agent-* light palette (same "premium banner" treatment as the
-          admin/agent sidebars' own dark gradients), so this listing's own
-          filter panel below can "float" over its lower edge instead of
-          everything sitting flat on one plain white page. */}
-      <div className="relative overflow-hidden bg-[linear-gradient(135deg,#0B1130_0%,#141B3D_55%,#1B1440_100%)] text-white">
-        <div className="mx-auto max-w-6xl px-5 pb-20 pt-14 lg:px-8">
-          <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-agent-accent">
-            <span className="h-px w-6 bg-agent-accent" /> Curated Departures
-          </div>
-          <h2 className="font-serif text-4xl font-bold leading-tight sm:text-5xl">Fixed Group Departures</h2>
-          <p className="mt-3 max-w-xl text-sm text-white/70">
-            Net rate is calculated from each package's day-by-day itinerary. Featured and Bestseller packages are
-            set by Xclusive Oman.
-          </p>
+      {/* Flat cream canvas, no dark banner — the reference design's heading
+          sits directly on the page background rather than a floating card
+          pulled up over a separate hero block. */}
+      <div className="mx-auto max-w-6xl px-5 pb-10 pt-8 lg:px-8">
+        <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-agent-accent-dark">
+          <span className="h-px w-6 bg-agent-accent-dark" /> Curated Departures
         </div>
-      </div>
+        <h2 className="font-serif text-4xl font-bold leading-tight text-[#1B1B1B] sm:text-5xl">
+          Fixed Group <span className="italic text-agent-accent-dark">Departure</span>
+        </h2>
+        <p className="mt-3 max-w-xl text-sm text-agent-muted">
+          Net rate is calculated from each package's day-by-day itinerary. Featured and Bestseller packages are set
+          by Xclusive Oman.
+        </p>
 
-      <div className="mx-auto max-w-6xl px-5 pb-10 lg:px-8">
-        {/* Negative margin pulls this panel up over the hero's bottom
-            padding — the "floating card" effect — without needing the hero
-            and the rest of the page to share one flat background. */}
-        <div className="relative z-10 -mt-14">
-          <Card className="border-white shadow-xl shadow-black/10">
+        <div className="mt-6">
+          <Card className="border-agent-line-light shadow-md shadow-black/5">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div className="lg:col-span-2">
                 <TextInput
@@ -300,7 +343,14 @@ export default function Departures() {
             <p className="text-sm text-agent-muted">No departures match those filters.</p>
           )}
 
-          <div className="grid grid-cols-1 items-start gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {/* auto-fill/minmax instead of a fixed 3-column breakpoint split —
+              a fixed lg:grid-cols-3 stretches each card to fill 1/3 of the
+              (wide) content column, squashing the card's height:width ratio
+              into something noticeably wider/shorter than the reference.
+              Capping each column at 270px keeps cards the reference's own
+              tall, narrow proportions no matter how wide the viewport is;
+              more columns simply appear instead of wider ones. */}
+          <div className="grid items-start gap-5 [grid-template-columns:repeat(auto-fill,minmax(270px,1fr))]">
             {filtered.map((d) => (
               <DepartureCard key={d.id} d={d} />
             ))}

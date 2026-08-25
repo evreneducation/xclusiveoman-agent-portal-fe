@@ -17,7 +17,7 @@ export function Hero() {
           forced to fill a fixed box. */}
       <div className="relative w-full">
         <div className="max-w-2xl">
-          <p className="text-sm font-medium text-white/80 sm:text-base">Licensed Inbound DMC · Sultanate of Oman</p>
+          <p className="text-sm font-medium text-white/80 sm:text-base">Best B2B Partner · Sultanate of Oman</p>
 
           <h1 className="mt-24 leading-[0.95] sm:mt-36">
             <span className="block text-4xl font-semibold text-white sm:text-5xl">Your ground</span>

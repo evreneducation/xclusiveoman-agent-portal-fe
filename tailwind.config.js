@@ -50,7 +50,14 @@ export default {
         'agent-line': '#8FB5AE',
         'agent-line-light': '#D7EAE5',
         'agent-panel': '#EAF6F2',
-        'agent-bg': '#F5FBF8',
+        // Cream page canvas — re-themed off the pale ocean-mist tint to match
+        // the "Fixed Group Departures" reference design's warm cream
+        // background. Only this base canvas token changed; agent-panel/
+        // agent-ink/agent-accent (the teal/gold system every other agent
+        // page's cards, borders and buttons already use) are untouched, so
+        // existing pages keep their current look sitting on a warmer canvas
+        // rather than needing a full per-page re-theme.
+        'agent-bg': '#FDF8ED',
         'agent-accent': '#E2A33B',
         'agent-accent-dark': '#C98A24',
         'agent-accent-soft': '#FAF0DA',

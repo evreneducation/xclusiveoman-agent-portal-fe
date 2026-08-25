@@ -33,7 +33,7 @@ export default function Bookings() {
 
   return (
     <div className="mx-auto max-w-5xl p-5 lg:p-8">
-      <h2 className="mb-1 text-2xl font-bold text-agent-ink">My Bookings</h2>
+      <h2 className="mb-1 text-2xl font-bold text-agent-ink">Bookings</h2>
       <p className="mb-5 text-sm text-agent-muted">Every booking your agency has made across Fixed Departures, Custom FIT, and MICE.</p>
 
       <ErrorText>{error}</ErrorText>

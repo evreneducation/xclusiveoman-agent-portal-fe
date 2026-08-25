@@ -45,11 +45,11 @@ export default function App() {
               <Route path="dashboard" element={<Dashboard />} />
               <Route path="approvals" element={<AgentApprovals />} />
               <Route path="employees" element={<Employees />} />
-              {/* Replaced by the single Employees page's tabs — kept as
-                  redirects so any old bookmarks/links still land somewhere
-                  useful instead of 404ing. */}
-              <Route path="relationship-managers" element={<Navigate to="/admin/employees?tab=rm" replace />} />
-              <Route path="sales-managers" element={<Navigate to="/admin/employees?tab=salesManager" replace />} />
+              {/* Replaced by the single Employees page's role dropdown —
+                  kept as redirects so any old bookmarks/links still land
+                  somewhere useful instead of 404ing. */}
+              <Route path="relationship-managers" element={<Navigate to="/admin/employees?role=relationship_manager" replace />} />
+              <Route path="sales-managers" element={<Navigate to="/admin/employees?role=sales_manager" replace />} />
               <Route path="catalog" element={<ProductCatalog />} />
               <Route path="catalog/fd-packages/:id" element={<FdPackageEditor />} />
               <Route path="catalog/hotels/:id" element={<HotelEditor />} />
