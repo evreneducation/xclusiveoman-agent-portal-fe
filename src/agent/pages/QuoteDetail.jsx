@@ -233,7 +233,7 @@ export default function QuoteDetail() {
   return (
     <div className="mx-auto max-w-4xl space-y-4 p-5 lg:p-8">
       <button onClick={() => navigate('/agent/fit-requests')} className="text-xs text-agent-muted hover:text-agent-ink">
-        ← Back to My FIT Requests
+        ← Back to My Requests
       </button>
 
       {loading && <p className="text-sm text-agent-muted">Loading…</p>}

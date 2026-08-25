@@ -965,7 +965,7 @@ export default function MiceBuilder() {
 
   return (
     <div className="mx-auto max-w-5xl p-5 lg:p-8">
-      <h2 className="mb-1 text-2xl font-bold text-agent-ink">MICE Engine</h2>
+      <h2 className="mb-1 text-2xl font-bold text-agent-ink">Corporate Enquiry</h2>
       <p className="mb-5 text-sm text-agent-muted">
         Curate a MICE proposal for your client. Pricing is handled by Xclusive Oman once you submit — no
         cost or price is shown anywhere in this builder.
