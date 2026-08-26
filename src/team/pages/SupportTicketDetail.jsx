@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { Badge, Button, Card, ErrorText, Textarea } from '../components/ui.jsx';
+import { RichTextDisplay } from '../../shared/components/RichTextEditor.jsx';
 
 export default function SupportTicketDetail() {
   const { id } = useParams();
@@ -56,7 +57,7 @@ export default function SupportTicketDetail() {
       </div>
 
       <Card label="Description">
-        <p className="whitespace-pre-wrap text-sm text-team-ink">{ticket.description}</p>
+        <RichTextDisplay html={ticket.description} className="text-sm text-team-ink" />
       </Card>
 
       <Card label="Conversation">
