@@ -16,6 +16,17 @@ export const FD_THEMES = ['Culture', 'Adventure', 'Nature'];
 
 export const FD_STATUS_TONE = { published: 'green', draft: 'grey', closed: 'red' };
 
+// Client-facing Inclusions/Exclusions text (admin-authored in
+// FdPackageEditor.jsx, one newline-delimited string each) -> bullet lines.
+// Shared by DepartureDetail.jsx and FdItineraryDocument.jsx so both render
+// the exact same bullets from the exact same source text.
+export function splitLines(text) {
+  return (text || '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
 // 45999 -> "₹45,999" — Indian digit grouping, whole-rupee rates.
 export function formatCurrency(amount) {
   if (amount == null || Number.isNaN(Number(amount))) return '—';

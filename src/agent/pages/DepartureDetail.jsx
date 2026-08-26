@@ -31,8 +31,14 @@ import {
 import { FaCircleCheck, FaCircleXmark } from 'react-icons/fa6';
 import { api } from '../api/client.js';
 import { Button, Card, ErrorText, TextInput } from '../components/ui.jsx';
-import { formatCurrency, formatShortDate, formatTime, getSeatsLeft } from '../../shared/fdPackage/index.js';
-import { computeNightsByCity, ITINERARY_ITEM_TYPE_META, itineraryHasItemType } from '../../shared/itinerary/index.js';
+import { formatCurrency, formatShortDate, formatTime, getSeatsLeft, splitLines } from '../../shared/fdPackage/index.js';
+import {
+  computeNightsByCity,
+  dayTitle,
+  itemBulletText,
+  ITINERARY_ITEM_TYPE_META,
+  itineraryHasItemType,
+} from '../../shared/itinerary/index.js';
 import { RichTextDisplay, isEmptyHtml } from '../../shared/components/RichTextEditor.jsx';
 
 // Colour/type pass — matches Departures.jsx's own "Fixed Group Departures"
@@ -559,36 +565,6 @@ function FlightOverviewPanel({ flights }) {
   );
 }
 
-// Each day's one-line title, shown collapsed next to its "Day N" pill —
-// the admin's own day note when there is one (e.g. "Arrival In Phu Quoc"),
-// else the first named itinerary item on that day (e.g. a tour called
-// "North Island Tour"), else a plain fallback. `itinerary` is the wire shape
-// composed server-side (fdPackages.model.js's composeItinerary):
-// [{ dayNumber, notes, items: [{ type, id, name, city, note }] }] — the same
-// shape the admin's Day-by-day itinerary builder saves (see
-// admin/pages/FdPackageEditor.jsx).
-function dayTitle(day) {
-  if (day.notes?.trim()) return day.notes.trim();
-  const firstNamed = (day.items || []).find((item) => item.name);
-  return firstNamed?.name || 'Itinerary details';
-}
-
-// One plain bullet line per item — "<name> · <city> (<note>)", or the
-// hotel-only adults/rooms line when there's no note to fold it into instead.
-// Deliberately just text, no per-type icon/chip anymore (that's the whole
-// point of this restyle — a plain dotted list, not a card grid).
-function itemBulletText(item, meta) {
-  const parts = [item.name || meta?.label || 'Item'];
-  if (item.city) parts.push(item.city);
-  let text = parts.join(' · ');
-  if (item.type === 'hotel' && item.adults != null) {
-    text += ` (${item.adults} ${item.adults === 1 ? 'adult' : 'adults'} · ${item.rooms} ${item.rooms === 1 ? 'room' : 'rooms'})`;
-  } else if (item.note) {
-    text += ` (${item.note})`;
-  }
-  return text;
-}
-
 function ItineraryDayRow({ day }) {
   const [open, setOpen] = useState(false);
   return (
@@ -713,13 +689,6 @@ function PackageDescription({ html }) {
 // InclusionExclusionList.jsx) — persisted as one newline-delimited string
 // each, so this just splits it back into bullets for display. Read-only,
 // same as MealsSummary above.
-function splitLines(text) {
-  return (text || '')
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean);
-}
-
 function InclusionsExclusionsSummary({ inclusions, exclusions }) {
   const inclusionLines = splitLines(inclusions);
   const exclusionLines = splitLines(exclusions);
@@ -1296,6 +1265,9 @@ export default function DepartureDetail() {
   // from the departure itself since it comes off its own endpoint. null
   // while loading/unset so the card stays hidden rather than flashing empty.
   const [termsHtml, setTermsHtml] = useState(null);
+  // "Download Itinerary" button state — see handleDownloadItinerary below.
+  const [downloadingItinerary, setDownloadingItinerary] = useState(false);
+  const [itineraryError, setItineraryError] = useState('');
 
   useEffect(() => {
     api
@@ -1424,14 +1396,35 @@ export default function DepartureDetail() {
     }
   }
 
-  // No server-side itinerary PDF exists for FD departures (unlike Custom
-  // FIT's package_requests, see ItineraryPrint.jsx/itineraryPdf.service.js)
-  // — this uses the browser's own print/save-as-PDF instead, real and
-  // working without a new backend pipeline. print:hidden throughout this
-  // file hides the interactive-only chrome (gallery, tabs, booking panel,
-  // buttons) so what prints is just the itinerary content.
-  function handleDownloadItinerary() {
-    window.print();
+  // Server-side day-by-day itinerary PDF export — same pipeline Custom FIT's
+  // package_requests already used (itineraryPdf.service.js's
+  // generateItineraryPdf), now also generateFdItineraryPdf for FD
+  // departures: a real headless Chromium renders agent/pages/
+  // DepartureItineraryPrint.jsx (which wraps agent/components/
+  // FdItineraryDocument.jsx, styled to match this page's own cream/gold
+  // redesign) and exports that render to PDF, replacing the old
+  // window.print()-in-the-agent's-own-browser flow whose output depended on
+  // whatever print stylesheet/margins/backgrounds-off-by-default the
+  // agent's own browser happened to apply. Same fetch-blob-download pattern
+  // PackageBuilder.jsx's own handleDownloadPdf already uses.
+  async function handleDownloadItinerary() {
+    setItineraryError('');
+    setDownloadingItinerary(true);
+    try {
+      const blob = await api.getBlob(`/departures/${id}/itinerary.pdf`);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `itinerary-${id}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setItineraryError(err.message || 'Unable to generate the itinerary PDF right now. Please try again.');
+    } finally {
+      setDownloadingItinerary(false);
+    }
   }
 
   if (error) {
@@ -1846,9 +1839,14 @@ export default function DepartureDetail() {
                   <Button className="mb-2 w-full gap-1.5 !rounded-full !text-[#1B1B1B]" onClick={handleEnquireNow}>
                     <LuMessageCircle size={15} /> Enquire Now
                   </Button>
-                  <Button className="w-full gap-1.5 !rounded-full !text-[#1B1B1B]" onClick={handleDownloadItinerary}>
-                    <LuDownload size={15} /> Download Itinerary
+                  <Button
+                    className="w-full gap-1.5 !rounded-full !text-[#1B1B1B]"
+                    onClick={handleDownloadItinerary}
+                    disabled={downloadingItinerary}
+                  >
+                    <LuDownload size={15} /> {downloadingItinerary ? 'Preparing…' : 'Download Itinerary'}
                   </Button>
+                  {itineraryError && <ErrorText>{itineraryError}</ErrorText>}
                 </>
               )}
             </Card>

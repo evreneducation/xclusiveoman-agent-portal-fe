@@ -258,6 +258,38 @@ export function itineraryHasItemType(itinerary, type) {
 // tallies how many days land on each city, in first-seen order. A day with
 // no hotel item (and so no resolvable city) is simply not counted — it
 // doesn't break the running city or introduce an "unknown" entry.
+// Each day's one-line title — the admin's own day note when there is one
+// (e.g. "Arrival In Phu Quoc"), else the first named itinerary item on that
+// day (e.g. a tour called "North Island Tour"), else a plain fallback.
+// `day` is one entry of the composed wire shape (fdPackages.model.js's
+// composeItinerary): { dayNumber, notes, items: [{ type, id, name, city,
+// note }] } — same shape the admin's Day-by-day itinerary builder saves
+// (admin/pages/FdPackageEditor.jsx). Shared by DepartureDetail.jsx's own
+// day rows and FdItineraryDocument.jsx's PDF rendering of the same data, so
+// the two never drift on how a day's title is derived.
+export function dayTitle(day) {
+  if (day.notes?.trim()) return day.notes.trim();
+  const firstNamed = (day.items || []).find((item) => item.name);
+  return firstNamed?.name || 'Itinerary details';
+}
+
+// One plain bullet line per itinerary item — "<name> · <city> (<note>)", or
+// the hotel-only adults/rooms line when there's no note to fold it into
+// instead. `meta` is ITINERARY_ITEM_TYPE_META[item.type] above. Shared by
+// DepartureDetail.jsx and FdItineraryDocument.jsx for the same reason as
+// dayTitle just above.
+export function itemBulletText(item, meta) {
+  const parts = [item.name || meta?.label || 'Item'];
+  if (item.city) parts.push(item.city);
+  let text = parts.join(' · ');
+  if (item.type === 'hotel' && item.adults != null) {
+    text += ` (${item.adults} ${item.adults === 1 ? 'adult' : 'adults'} · ${item.rooms} ${item.rooms === 1 ? 'room' : 'rooms'})`;
+  } else if (item.note) {
+    text += ` (${item.note})`;
+  }
+  return text;
+}
+
 export function computeNightsByCity(itinerary) {
   const order = [];
   const nightsByCity = new Map();

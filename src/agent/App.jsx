@@ -5,6 +5,7 @@ import AgentLayout from './components/AgentLayout.jsx';
 import Login from './pages/Login.jsx';
 import Register from './pages/Register.jsx';
 import ItineraryPrint from './pages/ItineraryPrint.jsx';
+import DepartureItineraryPrint from './pages/DepartureItineraryPrint.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import Departures from './pages/Departures.jsx';
 import DepartureDetail from './pages/DepartureDetail.jsx';
@@ -36,6 +37,9 @@ export default function App() {
             pdfToken query param, not a login session, so it can't sit behind
             the normal auth gate. */}
         <Route path="itinerary/:id/print" element={<ItineraryPrint />} />
+        {/* Same reasoning as above, for FD departure itineraries — see the
+            backend's itineraryPdf.service.js#generateFdItineraryPdf. */}
+        <Route path="departures/:id/print" element={<DepartureItineraryPrint />} />
         <Route element={<ProtectedRoute />}>
           <Route element={<AgentLayout />}>
             <Route path="dashboard" element={<Dashboard />} />
