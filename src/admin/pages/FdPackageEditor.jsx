@@ -743,10 +743,16 @@ function ItineraryManager({ fdPackageId, itinerary, duration, onChange, onComput
   }, [dayCount, activeDay]);
 
   useEffect(() => {
-    // 0070_hotels_status.sql — only published hotels are offered for the
-    // day-by-day itinerary; draft hotels stay editable in ProductCatalog.jsx
-    // but can't be placed into a package yet.
-    Promise.all([api.get('/hotels?status=published'), api.get('/tours'), api.get('/transfers'), api.get('/activities')])
+    // 0070_hotels_status.sql / 0072_tours_activities_transfers_status.sql —
+    // only published catalog rows are offered for the day-by-day itinerary;
+    // drafts stay editable in ProductCatalog.jsx but can't be placed into a
+    // package yet.
+    Promise.all([
+      api.get('/hotels?status=published'),
+      api.get('/tours?status=published'),
+      api.get('/transfers?status=published'),
+      api.get('/activities?status=published'),
+    ])
       .then(([h, t, tr, a]) => {
         setHotels(h.hotels || []);
         setTours(t.tours || []);

@@ -350,6 +350,9 @@ function MiceTourForm({ onCreated }) {
         price: Number(form.price),
         images,
         isMiceEnabled: !!form.isMiceEnabled,
+        // 0072_tours_activities_transfers_status.sql — same "fully validated
+        // above, so saved means published" reasoning as MiceHotelForm's own.
+        status: 'published',
       };
       const { tour } = await api.post('/admin/tours', payload);
       onCreated(tour);
@@ -510,6 +513,7 @@ function MiceActivityForm({ onCreated }) {
         ...(form.pricePerPax !== '' && form.pricePerPax !== undefined
           ? { pricePerPax: Number(form.pricePerPax) }
           : {}),
+        status: 'published',
       };
       const { activity } = await api.post('/admin/activities', payload);
       onCreated(activity);
@@ -664,6 +668,7 @@ function MiceTransferForm({ onCreated }) {
         images,
         isMiceEnabled: !!form.isMiceEnabled,
         ...(form.price !== '' && form.price !== undefined ? { price: Number(form.price) } : {}),
+        status: 'published',
       };
       const { transfer } = await api.post('/admin/transfers', payload);
       onCreated(transfer);

@@ -705,12 +705,13 @@ export default function MiceBuilder() {
     // Only items curated into the MICE Catalog by Admin (is_mice_enabled)
     // may appear here — never the full Product Catalog. Same `?mice=true`
     // filter the Admin MICE Catalog Manager itself uses (MiceCatalog.jsx).
-    // 0070_hotels_status.sql — additionally, only published hotels.
+    // 0070_hotels_status.sql / 0072_tours_activities_transfers_status.sql —
+    // additionally, only published rows.
     Promise.all([
       api.get('/hotels?mice=true&status=published'),
-      api.get('/tours?mice=true'),
-      api.get('/transfers?mice=true'),
-      api.get('/activities?mice=true'),
+      api.get('/tours?mice=true&status=published'),
+      api.get('/transfers?mice=true&status=published'),
+      api.get('/activities?mice=true&status=published'),
     ])
       .then(([h, t, tr, a]) => {
         setHotels(h.hotels || []);
