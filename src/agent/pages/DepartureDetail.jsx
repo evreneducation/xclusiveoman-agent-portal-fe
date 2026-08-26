@@ -33,7 +33,7 @@ import { api } from '../api/client.js';
 import { Button, Card, ErrorText, TextInput } from '../components/ui.jsx';
 import { formatCurrency, formatShortDate, formatTime, getSeatsLeft } from '../../shared/fdPackage/index.js';
 import { computeNightsByCity, ITINERARY_ITEM_TYPE_META, itineraryHasItemType } from '../../shared/itinerary/index.js';
-import { RichTextDisplay } from '../../shared/components/RichTextEditor.jsx';
+import { RichTextDisplay, isEmptyHtml } from '../../shared/components/RichTextEditor.jsx';
 
 // Colour/type pass — matches Departures.jsx's own "Fixed Group Departures"
 // reference restyle exactly (same hex literals, not the agent-ink/agent-muted
@@ -218,67 +218,40 @@ function HeroGallery({ heroImageUrl, images, onBack }) {
   );
 }
 
-// One continuous rounded pill of tick badges (Stay Included, Sightseeing
-// Included, …) that wraps onto a second line once there are enough of them
-// (the admin's own Inclusions list drives how many extra ticks show up, see
-// extraInclusionTicks below) — with a thin divider between adjacent badges
-// on the *same* line only, none at the start of a wrapped line. That last
-// part needs actual measurement: CSS's divide-x/border-left tools have no
-// way to select "the first item on this flex-wrap line" (browsers don't
-// expose line membership to selectors at all), so a border-based divider
-// there always leaks a stray line onto the start of every wrapped row too.
-// Measuring each badge's own offsetTop after render/resize and only
-// dividing pairs that share one is the one approach that's actually
-// correct regardless of viewport width or how many ticks there are.
+// One rounded pill *per row* of tick badges (Stay Included, Sightseeing
+// Included, …) — each row its own standalone capsule stacked with a gap
+// between them, rather than one shape stretched across every row (which
+// reads as an odd half-pill hybrid the moment it wraps). Figuring out which
+// items land on which row still needs real measurement first: an invisible
+// copy of the same badges is laid out in a plain flex-wrap pass (measureRef
+// below) purely to read each one's offsetTop — browsers expose no "which
+// line did this flex item wrap onto" CSS selector, so there's no way to
+// group them into rows without actually watching where they land. Once a
+// row's items are known, that row's own capsule never wraps internally (it
+// is, by construction, exactly the items that already fit on one line), so
+// divide-x works on it directly with no leak/clamp workarounds needed —
+// those were only ever necessary for a *single* box spanning multiple lines.
 function TickBadges({ items }) {
-  const containerRef = useRef(null);
-  // Which visual row (0, 1, 2, …) each item landed in — null until the
-  // first measurement. Row 0's own items never get a top divider; every
-  // item that isn't first in its row gets a left one instead — together
-  // these reproduce a full-width horizontal rule between wrapped rows
-  // (every item in a row shares the same offsetTop, so giving all of them
-  // border-t draws one continuous line, not just under the row's first
-  // item) without ever leaking a stray left divider onto a row's start.
+  const measureRef = useRef(null);
+  // Which row (0, 1, 2, …) each item landed in, from the hidden measuring
+  // pass — null until the first measurement lands, in which case everything
+  // renders as one row so there's no flash before that first measurement.
   const [rowOf, setRowOf] = useState(null);
 
   useLayoutEffect(() => {
     function measure() {
-      const el = containerRef.current;
+      const el = measureRef.current;
       if (!el || el.children.length === 0) return;
-      // Reset first so this always measures against the full width the
-      // browser naturally gives a wrapping flex box, not whatever narrower
-      // width the *previous* measurement pass already clamped it to below
-      // (see the width clamp at the end of this function) — otherwise a
-      // later resize back up would never be able to reclaim the extra
-      // space, since the stale explicit width itself becomes the ceiling
-      // for every measurement after the first.
-      el.style.width = '';
       const rows = [];
       let lastTop = null;
       let row = -1;
-      const rowRight = [];
       Array.from(el.children).forEach((child) => {
         if (child.offsetTop !== lastTop) {
           row += 1;
           lastTop = child.offsetTop;
         }
         rows.push(row);
-        rowRight[row] = Math.max(rowRight[row] || 0, child.offsetLeft + child.offsetWidth);
       });
-      // A wrapping flex box's automatic width resolves to the *full*
-      // available width the instant its content needs more than one line
-      // — CSS's shrink-to-fit formula (`min(max-content, max(min-content,
-      // available))`) simplifies to `available` whenever available width
-      // exceeds the widest single unbreakable child, which is true here in
-      // practice — width: fit-content doesn't help either, since it's
-      // defined by that exact same formula. Left alone, that's a pill that
-      // balloons out to the full card width the moment there's a second
-      // row, with a large dead gap after every row shorter than the
-      // widest one (most visibly the last row, e.g. just "VISA" alone).
-      // The only fix is measuring the widest row's real content width
-      // (rowRight above) and clamping the box down to it directly.
-      const borders = el.offsetWidth - el.clientWidth; // both side borders, no padding on this element itself
-      el.style.width = `${Math.max(...rowRight) + borders}px`;
       setRowOf(rows);
     }
     measure();
@@ -286,24 +259,45 @@ function TickBadges({ items }) {
     return () => window.removeEventListener('resize', measure);
   }, [items]);
 
+  const rows = rowOf
+    ? items.reduce((acc, label, i) => {
+        (acc[rowOf[i]] ||= []).push(label);
+        return acc;
+      }, [])
+    : [items];
+
   return (
-    <div ref={containerRef} className="flex max-w-full flex-wrap overflow-hidden rounded-full border border-agent-accent/50 bg-white">
-      {items.map((label, i) => {
-        const isLineStart = !rowOf || i === 0 || rowOf[i] !== rowOf[i - 1];
-        return (
-          <span
-            key={label}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold ${INK} ${!isLineStart ? 'border-l border-agent-accent/40' : ''} ${
-              rowOf && rowOf[i] > 0 ? 'border-t border-agent-accent/40' : ''
-            }`}
-          >
-            <span className="flex h-5 w-5 flex-none items-center justify-center rounded-full border border-agent-accent/50 bg-agent-accent-soft">
-              <LuCheck size={11} className={INK} />
-            </span>
+    <div className="relative">
+      {/* Invisible — same badges, laid out flat so their natural wrap points
+          can be read, but never painted or interactive. Absolutely
+          positioned out of flow so it doesn't add empty space above the
+          real rows below, while still measuring against that same width. */}
+      <div ref={measureRef} aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 -z-10 flex flex-wrap opacity-0">
+        {items.map((label) => (
+          <span key={label} className="flex items-center gap-2 px-4 py-2 text-xs font-semibold">
+            <span className="h-5 w-5 flex-none" />
             {label}
           </span>
-        );
-      })}
+        ))}
+      </div>
+
+      <div className="flex flex-col items-start gap-2">
+        {rows.map((rowItems, rowIdx) => (
+          <div
+            key={rowIdx}
+            className="inline-flex max-w-full flex-none divide-x divide-agent-accent/40 overflow-hidden rounded-full border border-agent-accent/50 bg-white"
+          >
+            {rowItems.map((label) => (
+              <span key={label} className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold ${INK}`}>
+                <span className="flex h-5 w-5 flex-none items-center justify-center rounded-full border border-agent-accent/50 bg-agent-accent-soft">
+                  <LuCheck size={11} className={INK} />
+                </span>
+                {label}
+              </span>
+            ))}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -353,7 +347,27 @@ function ItineraryOverviewTabs({ departure }) {
       {/* Outer capsule around the whole tab row, on top of each tab's own
           individual capsule — two nested rounded-full shapes, not one. */}
       <div className="rounded-full border border-agent-accent/50 bg-white p-2">
-        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-5">
+        {/* flex, not a 2/5-col grid — a grid forces every tab into an equal
+            share of the row regardless of its own label length, which is
+            exactly what was truncating "Sightseeing"/"Transfers" down to
+            "Sigh…"/"Tran…" while "Hotel"/"Meals"/"Flight" sat in the same-
+            width column with room to spare. Each tab now sizes to its own
+            content (flex-none, no truncate) and wraps to a new line only if
+            it genuinely doesn't fit, matching the reference's full labels. */}
+        {/* Compact enough that all 5 fit on one row within this card's
+            actual (narrower-than-full-page) width — this card shares the
+            page with the booking sidebar, not the full viewport, so the
+            more generous padding/icon size that fit in isolation was
+            pushing "Flight" onto its own second row, stretching the outer
+            rounded-full capsule into an odd tall stadium shape sized for
+            one row's worth of height. */}
+        {/* justify-between spreads the tabs across the capsule's full width
+            (using leftover space as gaps, not stretching each tab's own
+            content-hugging size) instead of the row sitting left-aligned
+            with dead space on the right — gap-2 still applies as the
+            minimum/only gap if this ever wraps to a second row, where
+            justify-between has nothing left to distribute within a row. */}
+        <div className="flex flex-wrap justify-between gap-2">
           {OVERVIEW_TABS.map(({ key, label, icon: Icon }) => {
             const active = activeTab === key;
             return (
@@ -361,7 +375,7 @@ function ItineraryOverviewTabs({ departure }) {
                 key={key}
                 type="button"
                 onClick={() => setActiveTab(key)}
-                className={`flex items-center gap-3 rounded-full border px-4 py-2.5 text-left transition-all duration-200 ${
+                className={`flex flex-none items-center gap-2 rounded-full border px-3 py-2 text-left transition-all duration-200 ${
                   active
                     ? 'border-agent-accent-dark bg-agent-accent shadow-sm shadow-agent-accent/30'
                     : 'border-agent-accent/50 bg-white hover:-translate-y-0.5 hover:border-agent-accent hover:shadow-md'
@@ -371,10 +385,10 @@ function ItineraryOverviewTabs({ departure }) {
                     only the tab's own background (and the label's color)
                     switch for active — matching the reference exactly rather
                     than the previous white-silhouette-on-gold treatment. */}
-                <span className="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-agent-accent-soft">
-                  <Icon size={19} className={INK} />
+                <span className="flex h-7 w-7 flex-none items-center justify-center rounded-full bg-agent-accent-soft">
+                  <Icon size={15} className={INK} />
                 </span>
-                <span className={`min-w-0 truncate text-sm font-bold ${active ? 'text-white' : INK}`}>{label}</span>
+                <span className={`whitespace-nowrap text-sm font-bold ${active ? 'text-white' : INK}`}>{label}</span>
               </button>
             );
           })}
@@ -672,6 +686,24 @@ function MealsSummary({ meals }) {
           </div>
         ))}
       </div>
+    </Card>
+  );
+}
+
+// The FD package's own short description — admin-authored rich text in
+// FdPackageEditor.jsx (fd_packages.short_description), already flowing
+// through to this page via departure.shortDescription (departures.
+// controller.js's toPublicPackage) but never actually rendered here until
+// now. Same plain-bold-header treatment as Inclusions/Exclusions and
+// Booking terms below, not the icon-chip SectionHeading — self-guards via
+// isEmptyHtml the same way RichTextDisplay itself does, so a package with
+// no description written yet just skips this card entirely.
+function PackageDescription({ html }) {
+  if (isEmptyHtml(html)) return null;
+  return (
+    <Card className="border-white rounded-2xl p-5 sm:p-6">
+      <h3 className={`mb-3 text-base font-bold ${INK}`}>About this package</h3>
+      <RichTextDisplay html={html} className={`text-sm leading-relaxed ${BODY}`} />
     </Card>
   );
 }
@@ -1507,6 +1539,8 @@ export default function DepartureDetail() {
             </div>
 
             <ItineraryOverviewTabs departure={departure} />
+
+            <PackageDescription html={departure.shortDescription} />
 
             {departure.departureDates?.length > 0 && (
               <Card className="border-white rounded-2xl p-5 sm:p-6">
