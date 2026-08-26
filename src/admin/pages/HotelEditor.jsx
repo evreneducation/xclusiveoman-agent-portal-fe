@@ -4,6 +4,7 @@ import { api, getAccessToken } from '../api/client.js';
 import { Button, Card, Checkbox, ErrorText, FieldLabel, Select, TextInput } from '../components/ui.jsx';
 import { HotelImagesUpload } from '../components/HotelImagesUpload.jsx';
 import { STAR_OPTIONS, validateHotelForm } from '../lib/hotelForm.js';
+import { RichTextEditor, isEmptyHtml } from '../../shared/components/RichTextEditor.jsx';
 
 // Occupancy-tiered pricing (0061_hotel_occupancy_pricing.sql) — admin checks
 // which of these a hotel offers and prices each independently, replacing
@@ -28,7 +29,7 @@ function buildDraftPayload(form, images) {
   if (form.address) payload.address = form.address;
   if (form.email) payload.email = form.email;
   if (form.category) payload.category = Number(form.category);
-  if (form.description) payload.description = form.description;
+  if (!isEmptyHtml(form.description)) payload.description = form.description;
   if (form.singlePrice) payload.singlePrice = Number(form.singlePrice);
   if (form.doublePrice) payload.doublePrice = Number(form.doublePrice);
   if (form.triplePrice) payload.triplePrice = Number(form.triplePrice);
@@ -344,7 +345,7 @@ export default function HotelEditor() {
                 </div>
                 <div className="sm:col-span-2">
                   <FieldLabel>Description *</FieldLabel>
-                  <TextInput required value={form.description || ''} onChange={(e) => update('description', e.target.value)} />
+                  <RichTextEditor size="md" value={form.description || ''} onChange={(html) => update('description', html)} />
                 </div>
                 <HotelImagesUpload hotelId={hotelId} images={images} onChange={updateImages} />
                 <div className="sm:col-span-2">

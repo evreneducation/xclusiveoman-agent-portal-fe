@@ -25,6 +25,7 @@ import { api, getAccessToken } from '../api/client.js';
 import { useToast } from '../../shared/components/ToastProvider.jsx';
 import { Button, Card, Checkbox, FieldLabel, Select, Tag, Table, TextInput } from '../components/ui.jsx';
 import { ImageUpload } from '../../shared/components/ImageUpload.jsx';
+import { RichTextEditor } from '../../shared/components/RichTextEditor.jsx';
 import { InclusionExclusionList, itineraryHasItemType, linesFromText, textFromLines } from '../components/InclusionExclusionList.jsx';
 import { FD_THEMES, formatCurrency, formatTime, parseDurationDays } from '../../shared/fdPackage/index.js';
 import {
@@ -153,7 +154,7 @@ function BasicsForm({ form, update, packageId }) {
         </div>
         <div className="sm:col-span-2">
           <FieldLabel>Short description</FieldLabel>
-          <TextInput value={form.shortDescription || ''} onChange={(e) => update('shortDescription', e.target.value)} />
+          <RichTextEditor size="sm" value={form.shortDescription || ''} onChange={(html) => update('shortDescription', html)} />
         </div>
       </div>
       {/* Each its own full-width row (was a 2-col grid) — matches the

@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api/client.js';
-import { Badge, Card, ErrorText, FieldLabel, Select, Button, Tag, TextInput, Textarea } from '../components/ui.jsx';
+import { Badge, Card, ErrorText, FieldLabel, Select, Button, Tag, TextInput } from '../components/ui.jsx';
 import { formatCurrency } from '../../shared/fdPackage/index.js';
+import { RichTextDisplay, RichTextEditor } from '../../shared/components/RichTextEditor.jsx';
 import {
   ITINERARY_ITEM_TYPE_META,
   buildSelectionPool,
@@ -55,7 +56,7 @@ function CatalogGrid({ label, items, empty, renderMeta }) {
               ) : null}
               <div className="mt-2 text-sm font-bold">{item.name}</div>
               <div className="text-xs text-muted">{renderMeta(item)}</div>
-              {item.description && <p className="mt-1 text-xs text-muted">{item.description}</p>}
+              <RichTextDisplay html={item.description} className="mt-1 text-xs text-muted" />
             </div>
           ))}
         </div>
@@ -331,12 +332,7 @@ function CostingAndPublishing({ miceRfq, onUpdated }) {
       </Card>
 
       <Card label="Internal notes — admin only, never shown to the agent" className="border-white">
-        <Textarea
-          rows={4}
-          placeholder="Notes for the ops/finance team about this proposal…"
-          value={internalNotes}
-          onChange={(e) => setInternalNotes(e.target.value)}
-        />
+        <RichTextEditor size="sm" value={internalNotes} onChange={setInternalNotes} />
       </Card>
 
       <ErrorText>{error}</ErrorText>

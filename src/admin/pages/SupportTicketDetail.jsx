@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { useToast } from '../../shared/components/ToastProvider.jsx';
 import { Badge, Button, Card, ErrorText, FieldLabel, Select, TextInput } from '../components/ui.jsx';
+import { RichTextDisplay } from '../../shared/components/RichTextEditor.jsx';
 
 // Admin Support & Helpdesk (Task 18) — ticket detail: status controls,
 // assignment, threaded replies, activity history. Mirrors
@@ -237,7 +238,7 @@ export default function SupportTicketDetail() {
         </div>
 
         <Card label="Description" className="mb-5 border-white">
-          <p className="text-sm text-ink">{ticket.description}</p>
+          <RichTextDisplay html={ticket.description} className="text-sm text-ink" />
         </Card>
 
         <div className="mb-5 grid grid-cols-1 gap-5 sm:grid-cols-2">

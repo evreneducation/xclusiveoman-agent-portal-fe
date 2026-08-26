@@ -4,6 +4,7 @@ import { api, getAccessToken } from '../api/client.js';
 import { Button, Card, Checkbox, ErrorText, FieldLabel, TextInput } from '../components/ui.jsx';
 import { TourImagesUpload } from '../components/TourImagesUpload.jsx';
 import { validateTourForm } from '../lib/tourForm.js';
+import { RichTextEditor, isEmptyHtml } from '../../shared/components/RichTextEditor.jsx';
 
 // Draft autosave's payload — deliberately looser than handleSave's below:
 // only fields with an actual value are included (Number('') / Number(undefined)
@@ -17,7 +18,7 @@ function buildDraftPayload(form, images) {
   const payload = { isBestseller: !!form.isBestseller };
   if (form.name) payload.name = form.name;
   if (form.city) payload.city = form.city;
-  if (form.description) payload.description = form.description;
+  if (!isEmptyHtml(form.description)) payload.description = form.description;
   if (form.duration) payload.duration = form.duration;
   if (form.category) payload.category = form.category;
   if (form.price) payload.price = Number(form.price);
@@ -265,7 +266,7 @@ export default function TourEditor() {
                 </div>
                 <div className="sm:col-span-2">
                   <FieldLabel>Description *</FieldLabel>
-                  <TextInput required value={form.description || ''} onChange={(e) => update('description', e.target.value)} />
+                  <RichTextEditor size="md" value={form.description || ''} onChange={(html) => update('description', html)} />
                 </div>
                 <TourImagesUpload tourId={tourId} images={images} onChange={updateImages} />
                 <div className="sm:col-span-2">

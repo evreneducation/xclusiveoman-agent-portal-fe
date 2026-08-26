@@ -34,6 +34,7 @@ import { api } from '../api/client.js';
 import { Button, Card, Checkbox, ErrorText, Select, TextInput } from '../components/ui.jsx';
 import { formatCurrency, formatShortDate, formatTime, getSeatsLeft } from '../../shared/fdPackage/index.js';
 import { computeNightsByCity, ITINERARY_ITEM_TYPE_META, itineraryHasItemType } from '../../shared/itinerary/index.js';
+import { RichTextDisplay } from '../../shared/components/RichTextEditor.jsx';
 
 // Booking terms card below — body_html is admin-authored (TermsAndConditions.jsx,
 // GET /site-terms) but still passes through an untrusted-input boundary
@@ -529,7 +530,7 @@ function HotelInformation({ hotel }) {
           )}
         </div>
       </div>
-      {hotel.description && <p className="mt-3 text-sm leading-relaxed text-agent-ink">{hotel.description}</p>}
+      <RichTextDisplay html={hotel.description} className="mt-3 text-sm leading-relaxed text-agent-ink" />
     </Card>
   );
 }

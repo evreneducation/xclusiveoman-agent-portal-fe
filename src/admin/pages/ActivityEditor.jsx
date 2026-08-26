@@ -4,6 +4,7 @@ import { api, getAccessToken } from '../api/client.js';
 import { Button, Card, Checkbox, ErrorText, FieldLabel, TextInput } from '../components/ui.jsx';
 import { ActivityImagesUpload } from '../components/ActivityImagesUpload.jsx';
 import { validateActivityForm } from '../lib/activityForm.js';
+import { RichTextEditor, isEmptyHtml } from '../../shared/components/RichTextEditor.jsx';
 
 // Mirrors HotelEditor.jsx / TourEditor.jsx — activities previously only had
 // an inline add form + delete in ProductCatalog.jsx (no edit at all), which
@@ -18,7 +19,7 @@ function buildDraftPayload(form, images) {
   if (form.name) payload.name = form.name;
   if (form.city) payload.city = form.city;
   if (form.duration) payload.duration = form.duration;
-  if (form.description) payload.description = form.description;
+  if (!isEmptyHtml(form.description)) payload.description = form.description;
   if (form.pricePerPax !== '' && form.pricePerPax !== undefined) payload.pricePerPax = Number(form.pricePerPax);
   if (images.length > 0) payload.images = images;
   return payload;
@@ -250,7 +251,7 @@ export default function ActivityEditor() {
                 </div>
                 <div className="sm:col-span-2">
                   <FieldLabel>Description</FieldLabel>
-                  <TextInput value={form.description || ''} onChange={(e) => update('description', e.target.value)} />
+                  <RichTextEditor size="sm" value={form.description || ''} onChange={(html) => update('description', html)} />
                 </div>
                 <ActivityImagesUpload activityId={activityId} images={images} onChange={updateImages} />
                 <div className="sm:col-span-2">

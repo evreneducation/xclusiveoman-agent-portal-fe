@@ -17,6 +17,7 @@ import {
 import { api } from '../api/client.js';
 import { Button, Card, ErrorText, FieldLabel, Pagination, Table, TextInput } from '../components/ui.jsx';
 import { formatCurrency, formatDateRange, formatTime, getFdBadges } from '../../shared/fdPackage/index.js';
+import { RichTextDisplay, isEmptyHtml } from '../../shared/components/RichTextEditor.jsx';
 
 const TABS = [
   { key: 'fdPackages', label: 'FD Packages', icon: LuBriefcase },
@@ -411,10 +412,10 @@ function HotelPreviewModal({ hotel, onClose }) {
         <FieldTile label="Price / night">{formatCurrency(hotel.price_per_night)}</FieldTile>
         <FieldTile label="MICE enabled">{hotel.is_mice_enabled ? 'Yes' : 'No'}</FieldTile>
       </div>
-      {hotel.description && (
+      {!isEmptyHtml(hotel.description) && (
         <div className="mt-4">
           <FieldLabel>Description</FieldLabel>
-          <p className="text-sm text-ink">{hotel.description}</p>
+          <RichTextDisplay html={hotel.description} className="text-ink" />
         </div>
       )}
     </Modal>
@@ -573,10 +574,10 @@ function TourPreviewModal({ tour, onClose }) {
         <FieldTile label="Suitable age (min)">{tour.suitable_age_min ?? '—'}</FieldTile>
         <FieldTile label="Bestseller">{tour.is_bestseller ? 'Yes' : 'No'}</FieldTile>
       </div>
-      {tour.description && (
+      {!isEmptyHtml(tour.description) && (
         <div className="mt-4">
           <FieldLabel>Description</FieldLabel>
-          <p className="text-sm text-ink">{tour.description}</p>
+          <RichTextDisplay html={tour.description} className="text-ink" />
         </div>
       )}
     </Modal>
@@ -724,10 +725,10 @@ function ActivityPreviewModal({ activity, onClose }) {
         <FieldTile label="Price per pax">{formatCurrency(pricePerPax)}</FieldTile>
         <FieldTile label="Bestseller">{isBestseller ? 'Yes' : 'No'}</FieldTile>
       </div>
-      {activity.description && (
+      {!isEmptyHtml(activity.description) && (
         <div className="mt-4">
           <FieldLabel>Description</FieldLabel>
-          <p className="text-sm text-ink">{activity.description}</p>
+          <RichTextDisplay html={activity.description} className="text-ink" />
         </div>
       )}
     </Modal>
@@ -875,10 +876,10 @@ function TransferPreviewModal({ transfer, onClose }) {
         <FieldTile label="City">{transfer.city || '—'}</FieldTile>
         <FieldTile label="Price">{formatCurrency(transfer.price)}</FieldTile>
       </div>
-      {transfer.description && (
+      {!isEmptyHtml(transfer.description) && (
         <div className="mt-4">
           <FieldLabel>Description</FieldLabel>
-          <p className="text-sm text-ink">{transfer.description}</p>
+          <RichTextDisplay html={transfer.description} className="text-ink" />
         </div>
       )}
     </Modal>

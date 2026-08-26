@@ -4,6 +4,7 @@ import { api, getAccessToken } from '../api/client.js';
 import { Button, Card, ErrorText, FieldLabel, Select, TextInput } from '../components/ui.jsx';
 import { TransferImagesUpload } from '../components/TransferImagesUpload.jsx';
 import { TRANSFER_TYPE_OPTIONS, validateTransferForm } from '../lib/transferForm.js';
+import { RichTextEditor, isEmptyHtml } from '../../shared/components/RichTextEditor.jsx';
 
 // Mirrors HotelEditor.jsx / TourEditor.jsx — transfers previously only had
 // an inline add form + delete in ProductCatalog.jsx (no edit at all), which
@@ -21,7 +22,7 @@ function buildDraftPayload(form, images) {
   if (form.type) payload.type = form.type;
   if (form.vehicleClass) payload.vehicleClass = form.vehicleClass;
   if (form.city) payload.city = form.city;
-  if (form.description) payload.description = form.description;
+  if (!isEmptyHtml(form.description)) payload.description = form.description;
   if (form.price !== '' && form.price !== undefined) payload.price = Number(form.price);
   if (images.length > 0) payload.images = images;
   return payload;
@@ -262,7 +263,7 @@ export default function TransferEditor() {
                 </div>
                 <div className="sm:col-span-2">
                   <FieldLabel>Description</FieldLabel>
-                  <TextInput value={form.description || ''} onChange={(e) => update('description', e.target.value)} />
+                  <RichTextEditor size="sm" value={form.description || ''} onChange={(html) => update('description', html)} />
                 </div>
                 <TransferImagesUpload transferId={transferId} images={images} onChange={updateImages} />
               </div>

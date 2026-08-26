@@ -5,6 +5,7 @@ import { getSocket } from '../lib/socket.js';
 import { Badge, Button, Card, ErrorText, FieldLabel, Table, Textarea } from '../components/ui.jsx';
 import ItineraryTimeline from '../components/ItineraryTimeline.jsx';
 import { formatCurrency } from '../../shared/fdPackage/index.js';
+import { RichTextDisplay } from '../../shared/components/RichTextEditor.jsx';
 
 // Item 2 — agent-facing status labels/tones match the wireframe's colour
 // language (green = good, amber = in progress, red = stop).
@@ -42,7 +43,7 @@ function CatalogList({ label, items, empty, renderMeta }) {
               ) : null}
               <div className="mt-2 text-sm font-bold">{item.name}</div>
               <div className="text-xs text-agent-muted">{renderMeta(item)}</div>
-              {item.description && <p className="mt-1 text-xs text-agent-muted">{item.description}</p>}
+              <RichTextDisplay html={item.description} className="mt-1 text-xs text-agent-muted" />
             </div>
           ))}
         </div>
