@@ -50,6 +50,26 @@ const STATUS_BADGE_SOLID = {
   closed: 'bg-rose-600 text-white',
 };
 
+// draft/published badge for Hotels/Tours/Activities/Transfers table rows
+// (0070_hotels_status.sql / 0072_tours_activities_transfers_status.sql) —
+// reuses the same STATUS_BADGE_SOLID palette FdPackagesTab's own status pill
+// already established. `status` can come back undefined from a stale cached
+// response shape; defaults to "published" rather than showing a blank pill,
+// since that's what every one of these rows already was before the column
+// existed.
+function StatusBadge({ status }) {
+  const value = status || 'published';
+  return (
+    <span
+      className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${
+        STATUS_BADGE_SOLID[value] || 'bg-slate-700 text-white'
+      }`}
+    >
+      {value}
+    </span>
+  );
+}
+
 function CardBadge({ tone, children }) {
   return (
     <span
@@ -333,66 +353,6 @@ function FdPackagesTab() {
   );
 }
 
-// Shared premium card shell for the four simple catalog entities below
-// (Hotels/Tours/Activities/Transfers) — the same "dark placeholder + hover
-// lift + solid badge" treatment the FD Packages tab's own cards used before
-// that tab was rebuilt as a table (FdPackagesTab below — its per-row data,
-// including operational fields like net rate and departure window, reads
-// better as a scannable list at this size than a photo grid). Generalized
-// here since these four only differ in which fields they show, not in how
-// the card itself should look; still replaces the plain <Table> rows
-// (a 40×40 thumbnail squeezed into a dense grid of columns) these four tabs
-// used even before that — read as a cramped spreadsheet rather than a
-// catalog. `meta` is a small array of already-formatted strings (city, duration,
-// etc.), rendered as one "·"-joined line; falsy entries are skipped by the
-// caller before this ever sees them.
-function CatalogCard({ imageUrl, badge, title, meta, price, priceLabel = 'Price', editHref, onDelete }) {
-  return (
-    <div className="group flex flex-col overflow-hidden rounded-2xl border border-line-light bg-white shadow-md shadow-black/5 transition-all duration-300 hover:-translate-y-1.5 hover:border-accent/40 hover:shadow-2xl hover:shadow-ink/15">
-      <div className="relative h-36 flex-none overflow-hidden bg-[linear-gradient(135deg,#172554_0%,#3730A3_100%)]">
-        {imageUrl ? (
-          <img
-            src={imageUrl}
-            alt=""
-            className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-110"
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center text-[11px] font-semibold uppercase tracking-wide text-white/40">
-            No image
-          </div>
-        )}
-        {badge && (
-          <span className="absolute left-2.5 top-2.5 rounded-full bg-white/95 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-ink shadow-sm">
-            {badge}
-          </span>
-        )}
-      </div>
-
-      <div className="flex flex-col p-4">
-        <div className="text-sm font-bold leading-snug text-ink transition-colors duration-300 group-hover:text-accent-dark">
-          {title}
-        </div>
-        {meta.length > 0 && <div className="mt-1 text-xs text-muted">{meta.join(' · ')}</div>}
-
-        <div className="mt-3 flex items-end justify-between gap-2 border-t border-line-light pt-3">
-          <div>
-            <div className="text-[10px] uppercase tracking-wide text-muted">{priceLabel}</div>
-            <div className="text-base font-bold text-ink">{price}</div>
-          </div>
-          <div className="flex items-center gap-3">
-            <button type="button" onClick={onDelete} className="text-xs text-[#a5162d] hover:underline">
-              Delete
-            </button>
-            <Link to={editHref}>
-              <Button variant="accent">Edit</Button>
-            </Link>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // Small generic confirm-before-delete modal, reusing the local Modal/
 // FieldTile shell above — HotelsTab's own delete used to fire straight off
 // a single click with no confirmation step at all; a standalone icon button
@@ -461,9 +421,9 @@ function HotelPreviewModal({ hotel, onClose }) {
   );
 }
 
-// Table (not the CatalogCard grid Tours/Activities/Transfers still use) —
-// same reasoning, and same server-side search/pagination (10/page), as
-// FdPackagesTab above.
+// Table — same reasoning, and same server-side search/pagination (10/page),
+// as FdPackagesTab above. Tours/Activities/Transfers below were converted to
+// this same shape too (they used to be a card grid).
 function HotelsTab() {
   const [items, setItems] = useState([]);
   const [pagination, setPagination] = useState({ total: 0, page: 1, pageSize: PAGE_SIZE, totalPages: 1 });
@@ -522,7 +482,7 @@ function HotelsTab() {
       ) : (
         <>
           <Table
-            columns={['Hotel Name', 'Location', 'Category', 'Price / Night', 'MICE', { label: 'Actions', align: 'right' }]}
+            columns={['Hotel Name', 'Location', 'Category', 'Price / Night', 'MICE', 'Status', { label: 'Actions', align: 'right' }]}
             rows={items}
             renderRow={(hotel) => (
               <tr key={hotel.id} className="border-b border-line-light transition-colors last:border-0 hover:bg-panel/50">
@@ -540,6 +500,9 @@ function HotelsTab() {
                   ) : (
                     <span className="text-xs text-muted">—</span>
                   )}
+                </td>
+                <td className="px-3 py-3 align-middle">
+                  <StatusBadge status={hotel.status} />
                 </td>
                 <td className="px-3 py-3 align-middle">
                   <div className="flex flex-nowrap items-center justify-end gap-2">
@@ -595,164 +558,454 @@ function HotelsTab() {
   );
 }
 
+function TourPreviewModal({ tour, onClose }) {
+  return (
+    <Modal title={tour.name} onClose={onClose} footer={<Button onClick={onClose}>Close</Button>}>
+      <div className="mb-4">
+        <StatusBadge status={tour.status} />
+      </div>
+      {tour.images?.[0] && <img src={tour.images[0]} alt="" className="mb-4 h-40 w-full rounded-lg object-cover" />}
+      <div className="grid gap-3 text-sm sm:grid-cols-2">
+        <FieldTile label="City">{tour.city || '—'}</FieldTile>
+        <FieldTile label="Duration">{tour.duration || '—'}</FieldTile>
+        <FieldTile label="Category">{tour.category || '—'}</FieldTile>
+        <FieldTile label="Price">{formatCurrency(tour.price)}</FieldTile>
+        <FieldTile label="Suitable age (min)">{tour.suitable_age_min ?? '—'}</FieldTile>
+        <FieldTile label="Bestseller">{tour.is_bestseller ? 'Yes' : 'No'}</FieldTile>
+      </div>
+      {tour.description && (
+        <div className="mt-4">
+          <FieldLabel>Description</FieldLabel>
+          <p className="text-sm text-ink">{tour.description}</p>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+// Table (not the CatalogCard grid this used to be) — same reasoning, and
+// same server-side search/pagination (10/page), as HotelsTab above.
 function ToursTab() {
   const [items, setItems] = useState([]);
+  const [pagination, setPagination] = useState({ total: 0, page: 1, pageSize: PAGE_SIZE, totalPages: 1 });
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [previewing, setPreviewing] = useState(null);
+  const [pendingDelete, setPendingDelete] = useState(null);
 
-  function load() {
-    setLoading(true);
-    api
-      .get(`/tours${search ? `?search=${encodeURIComponent(search)}` : ''}`)
-      .then(({ tours }) => setItems(tours))
-      .finally(() => setLoading(false));
+  function updateSearch(v) {
+    setSearch(v);
+    setPage(1);
   }
 
-  useEffect(load, [search]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    setLoading(true);
+    setError('');
+    const params = new URLSearchParams();
+    if (search) params.set('search', search);
+    params.set('page', String(page));
+    params.set('pageSize', String(PAGE_SIZE));
+
+    api
+      .get(`/tours?${params.toString()}`)
+      .then(({ tours, pagination: p }) => {
+        setItems(tours);
+        setPagination(p);
+      })
+      .catch((err) => setError(err.message || 'Unable to load tours'))
+      .finally(() => setLoading(false));
+  }, [search, page]);
 
   async function handleDelete(id) {
     await api.del(`/admin/tours/${id}`);
     setItems((list) => list.filter((i) => i.id !== id));
+    setPagination((p) => ({ ...p, total: Math.max(0, p.total - 1) }));
+    setPendingDelete(null);
   }
 
   return (
     <div>
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <TextInput className="flex-1" placeholder="Search tours…" value={search} onChange={(e) => setSearch(e.target.value)} />
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <TextInput className="flex-1" placeholder="Search tours…" value={search} onChange={(e) => updateSearch(e.target.value)} />
         <Link to="/admin/catalog/tours/new">
           <Button variant="accent">+ Add New Tour</Button>
         </Link>
       </div>
+
+      <ErrorText>{error}</ErrorText>
+
       {loading ? (
         <p className="text-xs text-muted">Loading…</p>
       ) : items.length === 0 ? (
-        <p className="text-xs text-muted">No tours match that search.</p>
+        <p className="text-xs text-muted">{search ? 'No tours match that search.' : 'No tours yet.'}</p>
       ) : (
-        <div className="grid grid-cols-1 items-start gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {items.map((tour) => (
-            <CatalogCard
-              key={tour.id}
-              imageUrl={tour.images?.[0]}
-              badge={tour.category}
-              title={tour.name}
-              meta={[tour.city, tour.duration].filter(Boolean)}
-              price={formatCurrency(tour.price)}
-              editHref={`/admin/catalog/tours/${tour.id}`}
-              onDelete={() => handleDelete(tour.id)}
-            />
-          ))}
-        </div>
+        <>
+          <Table
+            columns={['Tour Name', 'City', 'Duration', 'Category', 'Price', 'Status', { label: 'Actions', align: 'right' }]}
+            rows={items}
+            renderRow={(tour) => (
+              <tr key={tour.id} className="border-b border-line-light transition-colors last:border-0 hover:bg-panel/50">
+                <td className="px-3 py-3 align-middle font-semibold text-ink">{tour.name}</td>
+                <td className="px-3 py-3 align-middle whitespace-nowrap">{tour.city || '—'}</td>
+                <td className="px-3 py-3 align-middle whitespace-nowrap">{tour.duration || '—'}</td>
+                <td className="px-3 py-3 align-middle whitespace-nowrap">{tour.category || '—'}</td>
+                <td className="px-3 py-3 align-middle whitespace-nowrap">{formatCurrency(tour.price)}</td>
+                <td className="px-3 py-3 align-middle">
+                  <StatusBadge status={tour.status} />
+                </td>
+                <td className="px-3 py-3 align-middle">
+                  <div className="flex flex-nowrap items-center justify-end gap-2">
+                    <Button size="sm" className="whitespace-nowrap" onClick={() => setPreviewing(tour)}>
+                      <LuEye className="mr-1.5 flex-shrink-0" size={14} />
+                      View
+                    </Button>
+                    <Link to={`/admin/catalog/tours/${tour.id}`}>
+                      <Button size="sm" variant="accent" className="whitespace-nowrap">
+                        <LuPencil className="mr-1.5 flex-shrink-0" size={14} />
+                        Edit
+                      </Button>
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => setPendingDelete(tour)}
+                      aria-label={`Delete ${tour.name}`}
+                      className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md border border-[#FECACA] text-[#B91C1C] hover:bg-[#FEF2F2]"
+                    >
+                      <LuTrash2 size={14} />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            )}
+          />
+
+          <Pagination
+            page={pagination.page}
+            totalPages={pagination.totalPages}
+            total={pagination.total}
+            pageSize={pagination.pageSize}
+            onChange={setPage}
+            itemLabel="tours"
+          />
+        </>
+      )}
+
+      {previewing && <TourPreviewModal tour={previewing} onClose={() => setPreviewing(null)} />}
+      {pendingDelete && (
+        <ConfirmDeleteModal
+          title="Delete tour?"
+          message={
+            <>
+              Delete <span className="font-semibold">"{pendingDelete.name}"</span>? This can't be undone.
+            </>
+          }
+          onCancel={() => setPendingDelete(null)}
+          onConfirm={() => handleDelete(pendingDelete.id)}
+        />
       )}
     </div>
   );
 }
 
-// Gets its own dedicated tab (mirroring HotelsTab/ToursTab) instead of the
-// old generic SimpleEntityTab — activities now have a photo option, which
-// means a thumbnail column here and a real edit page (ActivityEditor.jsx)
-// instead of the previous add-only inline form.
+function ActivityPreviewModal({ activity, onClose }) {
+  const pricePerPax = activity.pricePerPax ?? activity.price_per_pax;
+  const isBestseller = activity.isBestseller ?? activity.is_bestseller;
+  return (
+    <Modal title={activity.name} onClose={onClose} footer={<Button onClick={onClose}>Close</Button>}>
+      <div className="mb-4">
+        <StatusBadge status={activity.status} />
+      </div>
+      {activity.images?.[0] && <img src={activity.images[0]} alt="" className="mb-4 h-40 w-full rounded-lg object-cover" />}
+      <div className="grid gap-3 text-sm sm:grid-cols-2">
+        <FieldTile label="City">{activity.city || '—'}</FieldTile>
+        <FieldTile label="Duration">{activity.duration || '—'}</FieldTile>
+        <FieldTile label="Price per pax">{formatCurrency(pricePerPax)}</FieldTile>
+        <FieldTile label="Bestseller">{isBestseller ? 'Yes' : 'No'}</FieldTile>
+      </div>
+      {activity.description && (
+        <div className="mt-4">
+          <FieldLabel>Description</FieldLabel>
+          <p className="text-sm text-ink">{activity.description}</p>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+// Table (not the CatalogCard grid this used to be) — same reasoning, and
+// same server-side search/pagination (10/page), as HotelsTab above.
 function ActivitiesTab() {
   const [items, setItems] = useState([]);
+  const [pagination, setPagination] = useState({ total: 0, page: 1, pageSize: PAGE_SIZE, totalPages: 1 });
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [previewing, setPreviewing] = useState(null);
+  const [pendingDelete, setPendingDelete] = useState(null);
 
-  function load() {
-    setLoading(true);
-    api
-      .get(`/activities${search ? `?search=${encodeURIComponent(search)}` : ''}`)
-      .then(({ activities }) => setItems(activities))
-      .finally(() => setLoading(false));
+  function updateSearch(v) {
+    setSearch(v);
+    setPage(1);
   }
 
-  useEffect(load, [search]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    setLoading(true);
+    setError('');
+    const params = new URLSearchParams();
+    if (search) params.set('search', search);
+    params.set('page', String(page));
+    params.set('pageSize', String(PAGE_SIZE));
+
+    api
+      .get(`/activities?${params.toString()}`)
+      .then(({ activities, pagination: p }) => {
+        setItems(activities);
+        setPagination(p);
+      })
+      .catch((err) => setError(err.message || 'Unable to load activities'))
+      .finally(() => setLoading(false));
+  }, [search, page]);
 
   async function handleDelete(id) {
     await api.del(`/admin/activities/${id}`);
     setItems((list) => list.filter((i) => i.id !== id));
+    setPagination((p) => ({ ...p, total: Math.max(0, p.total - 1) }));
+    setPendingDelete(null);
   }
 
   return (
     <div>
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <TextInput className="flex-1" placeholder="Search activities…" value={search} onChange={(e) => setSearch(e.target.value)} />
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <TextInput className="flex-1" placeholder="Search activities…" value={search} onChange={(e) => updateSearch(e.target.value)} />
         <Link to="/admin/catalog/activities/new">
           <Button variant="accent">+ Add New Activity</Button>
         </Link>
       </div>
+
+      <ErrorText>{error}</ErrorText>
+
       {loading ? (
         <p className="text-xs text-muted">Loading…</p>
       ) : items.length === 0 ? (
-        <p className="text-xs text-muted">No activities match that search.</p>
+        <p className="text-xs text-muted">{search ? 'No activities match that search.' : 'No activities yet.'}</p>
       ) : (
-        <div className="grid grid-cols-1 items-start gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {items.map((activity) => (
-            <CatalogCard
-              key={activity.id}
-              imageUrl={activity.images?.[0]}
-              title={activity.name}
-              meta={[activity.city, activity.duration].filter(Boolean)}
-              price={formatCurrency(activity.pricePerPax ?? activity.price_per_pax)}
-              priceLabel="Price per pax"
-              editHref={`/admin/catalog/activities/${activity.id}`}
-              onDelete={() => handleDelete(activity.id)}
-            />
-          ))}
-        </div>
+        <>
+          <Table
+            columns={['Activity Name', 'City', 'Duration', 'Price per pax', 'Status', { label: 'Actions', align: 'right' }]}
+            rows={items}
+            renderRow={(activity) => (
+              <tr key={activity.id} className="border-b border-line-light transition-colors last:border-0 hover:bg-panel/50">
+                <td className="px-3 py-3 align-middle font-semibold text-ink">{activity.name}</td>
+                <td className="px-3 py-3 align-middle whitespace-nowrap">{activity.city || '—'}</td>
+                <td className="px-3 py-3 align-middle whitespace-nowrap">{activity.duration || '—'}</td>
+                <td className="px-3 py-3 align-middle whitespace-nowrap">
+                  {formatCurrency(activity.pricePerPax ?? activity.price_per_pax)}
+                </td>
+                <td className="px-3 py-3 align-middle">
+                  <StatusBadge status={activity.status} />
+                </td>
+                <td className="px-3 py-3 align-middle">
+                  <div className="flex flex-nowrap items-center justify-end gap-2">
+                    <Button size="sm" className="whitespace-nowrap" onClick={() => setPreviewing(activity)}>
+                      <LuEye className="mr-1.5 flex-shrink-0" size={14} />
+                      View
+                    </Button>
+                    <Link to={`/admin/catalog/activities/${activity.id}`}>
+                      <Button size="sm" variant="accent" className="whitespace-nowrap">
+                        <LuPencil className="mr-1.5 flex-shrink-0" size={14} />
+                        Edit
+                      </Button>
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => setPendingDelete(activity)}
+                      aria-label={`Delete ${activity.name}`}
+                      className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md border border-[#FECACA] text-[#B91C1C] hover:bg-[#FEF2F2]"
+                    >
+                      <LuTrash2 size={14} />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            )}
+          />
+
+          <Pagination
+            page={pagination.page}
+            totalPages={pagination.totalPages}
+            total={pagination.total}
+            pageSize={pagination.pageSize}
+            onChange={setPage}
+            itemLabel="activities"
+          />
+        </>
+      )}
+
+      {previewing && <ActivityPreviewModal activity={previewing} onClose={() => setPreviewing(null)} />}
+      {pendingDelete && (
+        <ConfirmDeleteModal
+          title="Delete activity?"
+          message={
+            <>
+              Delete <span className="font-semibold">"{pendingDelete.name}"</span>? This can't be undone.
+            </>
+          }
+          onCancel={() => setPendingDelete(null)}
+          onConfirm={() => handleDelete(pendingDelete.id)}
+        />
       )}
     </div>
   );
 }
 
-// Gets its own dedicated tab for the same reason as ActivitiesTab above —
-// photos + a real edit page (TransferEditor.jsx) replacing the old add-only
-// inline form.
+function TransferPreviewModal({ transfer, onClose }) {
+  const vehicleClass = transfer.vehicleClass || transfer.vehicle_class;
+  return (
+    <Modal title={transfer.name} onClose={onClose} footer={<Button onClick={onClose}>Close</Button>}>
+      <div className="mb-4">
+        <StatusBadge status={transfer.status} />
+      </div>
+      {transfer.images?.[0] && <img src={transfer.images[0]} alt="" className="mb-4 h-40 w-full rounded-lg object-cover" />}
+      <div className="grid gap-3 text-sm sm:grid-cols-2">
+        <FieldTile label="Type">{transfer.type || '—'}</FieldTile>
+        <FieldTile label="Vehicle class">{vehicleClass || '—'}</FieldTile>
+        <FieldTile label="City">{transfer.city || '—'}</FieldTile>
+        <FieldTile label="Price">{formatCurrency(transfer.price)}</FieldTile>
+      </div>
+      {transfer.description && (
+        <div className="mt-4">
+          <FieldLabel>Description</FieldLabel>
+          <p className="text-sm text-ink">{transfer.description}</p>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+// Table (not the CatalogCard grid this used to be) — same reasoning, and
+// same server-side search/pagination (10/page), as HotelsTab above.
 function TransfersTab() {
   const [items, setItems] = useState([]);
+  const [pagination, setPagination] = useState({ total: 0, page: 1, pageSize: PAGE_SIZE, totalPages: 1 });
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [previewing, setPreviewing] = useState(null);
+  const [pendingDelete, setPendingDelete] = useState(null);
 
-  function load() {
-    setLoading(true);
-    api
-      .get(`/transfers${search ? `?search=${encodeURIComponent(search)}` : ''}`)
-      .then(({ transfers }) => setItems(transfers))
-      .finally(() => setLoading(false));
+  function updateSearch(v) {
+    setSearch(v);
+    setPage(1);
   }
 
-  useEffect(load, [search]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    setLoading(true);
+    setError('');
+    const params = new URLSearchParams();
+    if (search) params.set('search', search);
+    params.set('page', String(page));
+    params.set('pageSize', String(PAGE_SIZE));
+
+    api
+      .get(`/transfers?${params.toString()}`)
+      .then(({ transfers, pagination: p }) => {
+        setItems(transfers);
+        setPagination(p);
+      })
+      .catch((err) => setError(err.message || 'Unable to load transfers'))
+      .finally(() => setLoading(false));
+  }, [search, page]);
 
   async function handleDelete(id) {
     await api.del(`/admin/transfers/${id}`);
     setItems((list) => list.filter((i) => i.id !== id));
+    setPagination((p) => ({ ...p, total: Math.max(0, p.total - 1) }));
+    setPendingDelete(null);
   }
 
   return (
     <div>
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <TextInput className="flex-1" placeholder="Search transfers…" value={search} onChange={(e) => setSearch(e.target.value)} />
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <TextInput className="flex-1" placeholder="Search transfers…" value={search} onChange={(e) => updateSearch(e.target.value)} />
         <Link to="/admin/catalog/transfers/new">
           <Button variant="accent">+ Add New Transfer</Button>
         </Link>
       </div>
+
+      <ErrorText>{error}</ErrorText>
+
       {loading ? (
         <p className="text-xs text-muted">Loading…</p>
       ) : items.length === 0 ? (
-        <p className="text-xs text-muted">No transfers match that search.</p>
+        <p className="text-xs text-muted">{search ? 'No transfers match that search.' : 'No transfers yet.'}</p>
       ) : (
-        <div className="grid grid-cols-1 items-start gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {items.map((transfer) => (
-            <CatalogCard
-              key={transfer.id}
-              imageUrl={transfer.images?.[0]}
-              badge={transfer.type}
-              title={transfer.name}
-              meta={[transfer.city].filter(Boolean)}
-              price={formatCurrency(transfer.price)}
-              editHref={`/admin/catalog/transfers/${transfer.id}`}
-              onDelete={() => handleDelete(transfer.id)}
-            />
-          ))}
-        </div>
+        <>
+          <Table
+            columns={['Name', 'Type', 'Vehicle Class', 'City', 'Price', 'Status', { label: 'Actions', align: 'right' }]}
+            rows={items}
+            renderRow={(transfer) => (
+              <tr key={transfer.id} className="border-b border-line-light transition-colors last:border-0 hover:bg-panel/50">
+                <td className="px-3 py-3 align-middle font-semibold text-ink">{transfer.name}</td>
+                <td className="px-3 py-3 align-middle whitespace-nowrap">{transfer.type || '—'}</td>
+                <td className="px-3 py-3 align-middle whitespace-nowrap">{transfer.vehicleClass || transfer.vehicle_class || '—'}</td>
+                <td className="px-3 py-3 align-middle whitespace-nowrap">{transfer.city || '—'}</td>
+                <td className="px-3 py-3 align-middle whitespace-nowrap">{formatCurrency(transfer.price)}</td>
+                <td className="px-3 py-3 align-middle">
+                  <StatusBadge status={transfer.status} />
+                </td>
+                <td className="px-3 py-3 align-middle">
+                  <div className="flex flex-nowrap items-center justify-end gap-2">
+                    <Button size="sm" className="whitespace-nowrap" onClick={() => setPreviewing(transfer)}>
+                      <LuEye className="mr-1.5 flex-shrink-0" size={14} />
+                      View
+                    </Button>
+                    <Link to={`/admin/catalog/transfers/${transfer.id}`}>
+                      <Button size="sm" variant="accent" className="whitespace-nowrap">
+                        <LuPencil className="mr-1.5 flex-shrink-0" size={14} />
+                        Edit
+                      </Button>
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => setPendingDelete(transfer)}
+                      aria-label={`Delete ${transfer.name}`}
+                      className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md border border-[#FECACA] text-[#B91C1C] hover:bg-[#FEF2F2]"
+                    >
+                      <LuTrash2 size={14} />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            )}
+          />
+
+          <Pagination
+            page={pagination.page}
+            totalPages={pagination.totalPages}
+            total={pagination.total}
+            pageSize={pagination.pageSize}
+            onChange={setPage}
+            itemLabel="transfers"
+          />
+        </>
+      )}
+
+      {previewing && <TransferPreviewModal transfer={previewing} onClose={() => setPreviewing(null)} />}
+      {pendingDelete && (
+        <ConfirmDeleteModal
+          title="Delete transfer?"
+          message={
+            <>
+              Delete <span className="font-semibold">"{pendingDelete.name}"</span>? This can't be undone.
+            </>
+          }
+          onCancel={() => setPendingDelete(null)}
+          onConfirm={() => handleDelete(pendingDelete.id)}
+        />
       )}
     </div>
   );
