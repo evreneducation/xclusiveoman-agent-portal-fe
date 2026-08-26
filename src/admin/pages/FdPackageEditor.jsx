@@ -24,7 +24,7 @@ import {
 import { api } from '../api/client.js';
 import { useToast } from '../../shared/components/ToastProvider.jsx';
 import { Button, Card, Checkbox, FieldLabel, Select, Tag, Table, TextInput } from '../components/ui.jsx';
-import { ImageUpload } from '../components/ImageUpload.jsx';
+import { ImageUpload } from '../../shared/components/ImageUpload.jsx';
 import { InclusionExclusionList, itineraryHasItemType, linesFromText, textFromLines } from '../components/InclusionExclusionList.jsx';
 import { FD_THEMES, formatCurrency, formatTime, parseDurationDays } from '../../shared/fdPackage/index.js';
 import {

@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api/client.js';
 import { ErrorText } from '../components/ui.jsx';
 import AuthShell, { AUTH_ACCENT, AuthButton, AuthFieldLabel, AuthSelect, AuthTextInput } from '../components/AuthShell.jsx';
+import { ImageUpload } from '../../shared/components/ImageUpload.jsx';
 
 const COUNTRIES = ['Oman', 'India', 'UAE', 'Saudi Arabia', 'Qatar', 'Kuwait', 'Bahrain', 'Other'];
 
@@ -14,7 +15,8 @@ const COUNTRIES = ['Oman', 'India', 'UAE', 'Saudi Arabia', 'Qatar', 'Kuwait', 'B
 // allows image/webp; not offered here since it wasn't asked for, but a webp
 // file wouldn't be rejected server-side if someone renamed one past this
 // accept filter.
-const LICENSE_ACCEPT = 'image/jpeg,image/png,application/pdf';
+const LICENSE_ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'application/pdf'];
+const LICENSE_ACCEPT_HINT = 'JPG, PNG, PDF';
 
 const FOOTER_NOTE = "By creating an account, you agree to Xclusive Oman's current Terms of Service and Privacy Policy.";
 
@@ -46,35 +48,20 @@ export default function Register() {
   // Uploaded immediately on selection (same upload-then-submit-the-URL
   // pattern as every other file upload in this app, e.g. Payment.jsx's NEFT
   // slip) rather than deferred to form submit, so the Sign Up form itself
-  // stays a plain JSON POST.
-  const [licenseFile, setLicenseFile] = useState(null);
+  // stays a plain JSON POST. The shared ImageUpload component owns the
+  // uploading/error state around that upload itself — this only needs to
+  // remember the resulting URL.
   const [licenseDocumentUrl, setLicenseDocumentUrl] = useState('');
-  const [licenseUploading, setLicenseUploading] = useState(false);
-  const [licenseError, setLicenseError] = useState('');
 
   function update(field, value) {
     setForm((f) => ({ ...f, [field]: value }));
   }
 
-  async function handleLicenseFileChange(e) {
-    const file = e.target.files?.[0] || null;
-    setLicenseFile(file);
-    setLicenseDocumentUrl('');
-    setLicenseError('');
-    if (!file) return;
-
-    setLicenseUploading(true);
-    try {
-      const formData = new FormData();
-      formData.append('licenseDocument', file);
-      const { url } = await api.postForm('/auth/register/license-document', formData);
-      setLicenseDocumentUrl(url);
-    } catch (err) {
-      setLicenseError(err.message || 'Unable to upload document');
-      setLicenseFile(null);
-    } finally {
-      setLicenseUploading(false);
-    }
+  async function uploadLicenseDocument(file) {
+    const formData = new FormData();
+    formData.append('licenseDocument', file);
+    const { url } = await api.postForm('/auth/register/license-document', formData);
+    return url;
   }
 
   async function handleSubmit(e) {
@@ -149,22 +136,15 @@ export default function Register() {
           </div>
 
           <div className="sm:col-span-2">
-            <AuthFieldLabel>IATA / License No.*</AuthFieldLabel>
-            <input
-              type="file"
+            <ImageUpload
+              label="IATA / GST / Company Registration"
               required
-              accept={LICENSE_ACCEPT}
-              onChange={handleLicenseFileChange}
-              className="w-full rounded-md border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm file:mr-3 file:rounded-md file:border-0 file:bg-[#fdece2] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-[#d1642f]"
+              value={licenseDocumentUrl}
+              onChange={setLicenseDocumentUrl}
+              onUpload={uploadLicenseDocument}
+              acceptedTypes={LICENSE_ACCEPTED_TYPES}
+              acceptHint={LICENSE_ACCEPT_HINT}
             />
-            <p className="mt-1.5 text-xs text-slate-500">
-              {licenseUploading
-                ? 'Uploading…'
-                : licenseDocumentUrl
-                  ? `✓ ${licenseFile?.name || 'Document'} uploaded`
-                  : 'Accepted formats: JPG, PNG, PDF.'}
-            </p>
-            <ErrorText>{licenseError}</ErrorText>
           </div>
 
           <div>
@@ -193,7 +173,7 @@ export default function Register() {
         </div>
 
         <ErrorText>{error}</ErrorText>
-        <AuthButton type="submit" disabled={submitting || licenseUploading}>
+        <AuthButton type="submit" disabled={submitting}>
           {submitting ? 'Submitting…' : 'Submit for Approval'}
         </AuthButton>
       </form>
