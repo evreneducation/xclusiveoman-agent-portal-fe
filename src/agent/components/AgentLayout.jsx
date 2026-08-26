@@ -120,7 +120,7 @@ function SidebarContent({ onNavigate, collapsed = false }) {
               <span
                 className={`relative z-10 flex items-center gap-3 rounded-xl py-3 text-sm font-semibold transition-colors ${
                   collapsed ? 'justify-center px-0' : 'px-4'
-                } ${active ? 'text-[#241804]' : 'text-[#241804]/70 hover:bg-black/10 hover:text-[#241804]'}`}
+                } ${active ? 'text-[#3A2612]' : 'text-[#FFF8E8] hover:bg-black/10 hover:text-white'}`}
               >
                 <Icon className="flex-none" />
                 {!collapsed && label}

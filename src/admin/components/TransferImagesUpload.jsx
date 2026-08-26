@@ -1,5 +1,5 @@
 import { api } from '../api/client.js';
-import { ImageUpload } from './ImageUpload.jsx';
+import { ImageUpload } from '../../shared/components/ImageUpload.jsx';
 
 // Mirrors HotelImagesUpload.jsx / TourImagesUpload.jsx — same picker, same
 // upload flow, scoped to the `transfers` table's own images endpoint.

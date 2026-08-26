@@ -1,5 +1,5 @@
 import { api } from '../api/client.js';
-import { ImageUpload } from './ImageUpload.jsx';
+import { ImageUpload } from '../../shared/components/ImageUpload.jsx';
 
 // Shared by the Product Catalog Hotel form (HotelEditor.jsx) and the Admin
 // MICE Catalog Hotel form (MiceCatalog.jsx) — both create/edit rows in the

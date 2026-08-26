@@ -4,7 +4,7 @@ import { PillButton } from '../components/PillButton.jsx';
 
 export function Navbar() {
   return (
-    <header className="sticky top-0 z-40 border-y-[3px] border-[#1B1B1B] bg-[#F7F3EA] backdrop-blur">
+    <header className="sticky top-0 z-40 border-t-[3px] border-[#1B1B1B] bg-[#F7F3EA] backdrop-blur">
       <div className="flex items-center justify-between px-6 py-4 sm:px-10">
         <Link to="/" className="flex items-center gap-2">
           <img src="/Xclusive_Oman_Logo_2.png" alt="Xclusive Oman by Traveon" className="h-10 w-auto" />
