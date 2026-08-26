@@ -225,8 +225,8 @@ export default function AdminLayout() {
                     collapsed ? 'justify-center px-0' : 'px-3.5'
                   } ${
                     active
-                      ? 'border-transparent bg-gradient-to-r from-[#2563EB] to-[#7C3AED] text-white shadow-md shadow-black/20'
-                      : 'border-transparent text-white/75 hover:bg-white/10 hover:text-white'
+                      ? 'border-transparent bg-accent-soft text-ink-dark shadow-md shadow-black/15'
+                      : 'border-transparent text-white/90 hover:bg-white/10 hover:text-white'
                   }`}
                 >
                   <item.Icon className="flex-none" size={18} />
@@ -249,7 +249,7 @@ export default function AdminLayout() {
                   } ${
                     hasActiveChild
                       ? 'border-transparent bg-white/10 text-white'
-                      : 'border-transparent text-white/75 hover:bg-white/10 hover:text-white'
+                      : 'border-transparent text-white/90 hover:bg-white/10 hover:text-white'
                   }`}
                 >
                   <item.Icon className="flex-none" size={18} />
@@ -281,8 +281,8 @@ export default function AdminLayout() {
                               to={child.to}
                               className={`flex items-center gap-2.5 rounded-md px-3 py-2 text-[13px] font-medium transition-colors ${
                                 active
-                                  ? 'bg-gradient-to-r from-[#2563EB] to-[#7C3AED] text-white shadow-md shadow-black/20'
-                                  : 'text-white/70 hover:bg-white/10 hover:text-white'
+                                  ? 'bg-accent-soft text-ink-dark shadow-md shadow-black/15'
+                                  : 'text-white/85 hover:bg-white/10 hover:text-white'
                               }`}
                             >
                               <child.Icon className="flex-none" size={15} />
