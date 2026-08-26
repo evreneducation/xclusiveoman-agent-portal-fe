@@ -149,6 +149,9 @@ function MiceHotelForm({ onCreated }) {
         miceBallroomCapacity: form.miceBallroomCapacity ? Number(form.miceBallroomCapacity) : undefined,
         miceBreakoutRooms: form.miceBreakoutRooms ? Number(form.miceBreakoutRooms) : undefined,
         isMiceEnabled: !!form.isMiceEnabled,
+        // 0070_hotels_status.sql — same "fully validated above, so saved
+        // means published" reasoning as HotelEditor.jsx's own Save.
+        status: 'published',
       };
       const { hotel } = await api.post('/admin/hotels', payload);
       onCreated(hotel);
