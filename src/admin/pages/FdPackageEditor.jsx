@@ -62,6 +62,7 @@ function HeroImageUpload({ packageId, value, onUploaded }) {
   return (
     <ImageUpload
       label="Hero image"
+      required
       value={value}
       onChange={onUploaded}
       onUpload={upload}
@@ -574,15 +575,13 @@ function DayHotelSection({ hotels, currentHotelId, onSelect }) {
   );
 }
 
-// Tours and Transfers are marked required (mirrors the agent Custom FIT
-// Builder's per-day requirement) — findItineraryPublishError below blocks
-// publishing until every day has at least one of each. Activities stay
-// optional. `required` only decorates the field label — kept separate from
-// `label` itself so the lowercased "No {label} in the catalog yet."
-// empty-state message below doesn't pick up a stray asterisk.
+// Tours/Transfers/Activities are all optional per day — only "the day has
+// *some* content" (a note or any item) is enforced, by findItineraryPublishError
+// below. `required` is kept as a hook here (unused today) rather than deleted
+// outright, since DayCatalogSection's label already knows how to render it.
 const DAY_SECTION_META = {
-  tour: { label: 'Tours', addLabel: '+ Add tour', required: true },
-  transfer: { label: 'Transfers', addLabel: '+ Add transfer', required: true },
+  tour: { label: 'Tours', addLabel: '+ Add tour' },
+  transfer: { label: 'Transfers', addLabel: '+ Add transfer' },
   activity: { label: 'Activities', addLabel: '+ Add activity' },
 };
 
@@ -708,12 +707,13 @@ function DayPlanCard({ dayNumber, items, catalogs, notes, onNotesChange, addItem
   );
 }
 
-// A day is "complete" once it has both a tour and a transfer — the same two
-// requirements findItineraryPublishError enforces before publishing — used
-// here purely to decorate each tab with a ✓ so admin can see progress across
-// days without having to click through all of them.
-function isDayComplete(items) {
-  return items.some((it) => it.type === 'tour') && items.some((it) => it.type === 'transfer');
+// A day is "complete" once it has *any* content — a note or at least one
+// item — matching findItineraryPublishError's hasContent check below (tours
+// and transfers are no longer required); used here purely to decorate each
+// tab with a ✓ so admin can see progress across days without having to click
+// through all of them.
+function isDayComplete(items, notes) {
+  return items.length > 0 || !!(notes || '').trim();
 }
 
 function ItineraryManager({ fdPackageId, itinerary, duration, onChange, onComputedRateChange }) {
@@ -842,11 +842,11 @@ function ItineraryManager({ fdPackageId, itinerary, duration, onChange, onComput
       ) : (
         <div>
           {/* Task 6 — tabs, one per day, instead of a long stacked list. ✓
-              marks a day that already has both a tour and a transfer (what
+              marks a day that already has content — a note or any item (what
               publishing actually requires — see isDayComplete). */}
           <div className="mb-3 flex flex-wrap gap-1.5 border-b border-line-light pb-2">
             {Array.from({ length: dayCount }, (_, i) => i + 1).map((dayNumber) => {
-              const complete = isDayComplete(itemsForDay(itineraryItems, dayNumber));
+              const complete = isDayComplete(itemsForDay(itineraryItems, dayNumber), dayNotes[dayNumber]);
               return (
                 <button key={dayNumber} type="button" onClick={() => setActiveDay(dayNumber)}>
                   <Tag active={activeDay === dayNumber}>
@@ -1782,11 +1782,6 @@ export default function FdPackageEditor() {
       const items = day?.items || [];
       const hasContent = (day?.notes || '').trim() || items.length > 0;
       if (!hasContent) return `Day ${n} is missing itinerary details. Fill in every day before publishing.`;
-      // Every day needs its own tour and transfer, not just somewhere in the
-      // package — mirrors the agent Custom FIT Builder's per-day requirement
-      // (see PackageBuilder.jsx's validateStep).
-      if (!items.some((it) => it.type === 'tour')) return `Day ${n} needs at least one tour before publishing.`;
-      if (!items.some((it) => it.type === 'transfer')) return `Day ${n} needs at least one transfer before publishing.`;
     }
     return null;
   }
@@ -1797,6 +1792,17 @@ export default function FdPackageEditor() {
   function findCarouselImagesError() {
     if ((form.images || []).length < MIN_CAROUSEL_IMAGES) {
       return `Add at least ${MIN_CAROUSEL_IMAGES} carousel images before publishing.`;
+    }
+    return null;
+  }
+
+  // Mirrors findCarouselImagesError just above — heroImageUrl is nullable in
+  // the backend schema on purpose (a package can sit in draft with no hero
+  // image yet), so this only blocks the moment of Publish, same gate the
+  // backend's own heroImageError re-checks server-side.
+  function findHeroImageError() {
+    if (!form.heroImageUrl) {
+      return 'Add a hero image before publishing.';
     }
     return null;
   }
@@ -1822,6 +1828,11 @@ export default function FdPackageEditor() {
     const carouselImagesError = findCarouselImagesError();
     if (carouselImagesError) {
       toast.error(carouselImagesError);
+      return;
+    }
+    const heroImageError = findHeroImageError();
+    if (heroImageError) {
+      toast.error(heroImageError);
       return;
     }
     const flightsSelectionError = findFlightsSelectionError();
