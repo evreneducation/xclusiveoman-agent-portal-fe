@@ -248,33 +248,80 @@ function MerchandisingForm({ form, update, addonsEnabled, onToggleAddons }) {
   );
 }
 
+// Sentinel option value that switches the Location field from the picklist
+// select into a free-text input — never collides with a real location name
+// since it can't come back out of GET /departure-locations.
+const NEW_LOCATION_OPTION = '__new_location__';
+
 function DepartureDatesManager({ fdPackageId, dates, onChange }) {
   const toast = useToast();
   const [date, setDate] = useState('');
   const [seatsTotal, setSeatsTotal] = useState(20);
   const [location, setLocation] = useState('');
   const [locations, setLocations] = useState([]);
+  // true once "+ Enter a new location…" has been picked — swaps the Select
+  // below for a plain text field instead.
+  const [customLocation, setCustomLocation] = useState(false);
   const [open, setOpen] = useState(true);
 
   useEffect(() => {
     api.get('/departure-locations').then((d) => setLocations(d.locations || []));
   }, []);
 
+  function handleLocationSelect(e) {
+    if (e.target.value === NEW_LOCATION_OPTION) {
+      setCustomLocation(true);
+      setLocation('');
+    } else {
+      setLocation(e.target.value);
+    }
+  }
+
+  function backToLocationList() {
+    setCustomLocation(false);
+    setLocation('');
+  }
+
   async function add() {
     if (!date) return;
-    if (!location) {
+    const trimmedLocation = location.trim();
+    if (!trimmedLocation) {
       toast.error('Select a location for this departure date.');
       return;
+    }
+    if (!seatsTotal || seatsTotal <= 0) {
+      toast.error('Seats must be at least 1.');
+      return;
+    }
+    let finalLocation = trimmedLocation;
+    // A freshly-typed location isn't just used for this one departure date —
+    // it's saved into the master list too (POST /departure-locations,
+    // upsert-by-name — see locations.model.js), so it shows up in the
+    // dropdown for every future departure date from here on, not only this
+    // package. Skipped when the admin picked an existing option, since
+    // that's already in the list.
+    if (customLocation) {
+      try {
+        const { location: saved } = await api.post('/departure-locations', { name: trimmedLocation });
+        finalLocation = saved.name;
+        setLocations((list) =>
+          list.some((l) => l.id === saved.id) ? list : [...list, saved].sort((a, b) => a.name.localeCompare(b.name))
+        );
+      } catch (err) {
+        toast.error(err.message || 'Unable to save new location');
+        return;
+      }
     }
     try {
       const { departureDate } = await api.post(`/admin/fd-packages/${fdPackageId}/departure-dates`, {
         date,
         seatsTotal,
-        location,
+        location: finalLocation,
       });
       onChange([...dates, departureDate]);
       setDate('');
       setLocation('');
+      setCustomLocation(false);
     } catch (err) {
       toast.error(err.message || 'Unable to add departure date');
     }
@@ -307,25 +354,40 @@ function DepartureDatesManager({ fdPackageId, dates, onChange }) {
       />
       <div className="mt-3 flex flex-wrap items-end gap-2">
         <div>
+          <FieldLabel>Location *</FieldLabel>
+          {customLocation ? (
+            <div className="flex items-center gap-2">
+              <TextInput
+                autoFocus
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                placeholder="Enter new location"
+              />
+              <button type="button" onClick={backToLocationList} className="flex-none whitespace-nowrap text-[11px] text-muted underline hover:text-ink">
+                Choose from list
+              </button>
+            </div>
+          ) : (
+            <Select value={location} onChange={handleLocationSelect}>
+              <option value="">Select location…</option>
+              {locations.map((loc) => (
+                <option key={loc.id} value={loc.name}>
+                  {loc.name}
+                </option>
+              ))}
+              <option value={NEW_LOCATION_OPTION}>+ Enter a new location…</option>
+            </Select>
+          )}
+        </div>
+        <div>
           <FieldLabel>Date</FieldLabel>
           <TextInput type="date" value={date} onChange={(e) => setDate(e.target.value)} />
         </div>
         <div>
-          <FieldLabel>Location *</FieldLabel>
-          <Select value={location} onChange={(e) => setLocation(e.target.value)}>
-            <option value="">Select location…</option>
-            {locations.map((loc) => (
-              <option key={loc.id} value={loc.name}>
-                {loc.name}
-              </option>
-            ))}
-          </Select>
+          <FieldLabel>Seats *</FieldLabel>
+          <TextInput type="number" min="1" value={seatsTotal} onChange={(e) => setSeatsTotal(Number(e.target.value))} />
         </div>
-        <div>
-          <FieldLabel>Seats</FieldLabel>
-          <TextInput type="number" value={seatsTotal} onChange={(e) => setSeatsTotal(Number(e.target.value))} />
-        </div>
-        <Button onClick={add} disabled={!date || !location}>
+        <Button onClick={add} disabled={!date || !location || !seatsTotal}>
           + Add departure date
         </Button>
       </div>

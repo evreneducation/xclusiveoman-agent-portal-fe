@@ -767,11 +767,20 @@ function groupAddonsByType(addons) {
 // the moment it opens, since the departure/addons list itself only carries
 // id/type/catalogId/name/pricePerPax (departures.controller.js), not
 // description/images/city/duration. Same fixed-overlay + Escape/backdrop-
-// click-to-close pattern as Lightbox above, just a content card instead of
-// a full-bleed image.
-function AddonDetailModal({ addon, onClose }) {
+// click-to-close pattern as Lightbox above. Doubles as the actual add/remove
+// control — Cancel just closes, Add(/Remove once already selected) toggles
+// the add-on via the same onToggle the checklist rows use, then closes.
+//
+// `infoLines` shows whichever of duration/city/route the catalog row
+// actually has (activities/tours have duration, transfers have city,
+// flights have neither but do have source/destination) — the reference this
+// was built from shows a fixed "Duration : … / Pickup Time : …" pair, but
+// there's no pickup-time field anywhere in this app's catalog schema, so
+// that's real available fields instead of a fabricated one.
+function AddonDetailModal({ addon, selected, onToggle, onClose }) {
   const [detail, setDetail] = useState(null);
   const [detailError, setDetailError] = useState('');
+  const [lightboxIndex, setLightboxIndex] = useState(null);
 
   useEffect(() => {
     const prevOverflow = document.body.style.overflow;
@@ -795,60 +804,148 @@ function AddonDetailModal({ addon, onClose }) {
       .catch((err) => setDetailError(err.message));
   }, [addon.type, addon.catalogId]);
 
+  const images = detail?.images || [];
+  const [mainImage, ...restImages] = images;
+  const infoLines = [];
+  if (detail?.duration) infoLines.push({ label: 'Duration', value: detail.duration, icon: LuClock });
+  if (detail?.city) infoLines.push({ label: 'City', value: detail.city, icon: LuMapPin });
+  if (detail?.source || detail?.destination) {
+    infoLines.push({ label: 'Route', value: `${detail.source} → ${detail.destination}`, icon: LuPlane });
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div
         onClick={(e) => e.stopPropagation()}
-        className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl sm:p-6"
+        className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-agent-bg p-5 shadow-2xl sm:p-6"
       >
-        <div className="mb-3 flex items-start justify-between gap-3">
-          <h3 className={`text-base font-bold ${INK}`}>{addon.name}</h3>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className={`flex h-8 w-8 flex-none items-center justify-center rounded-full transition-colors hover:bg-agent-bg ${MUTED}`}
-          >
-            <LuX size={18} />
-          </button>
-        </div>
         {!detail && !detailError && <p className={`text-sm ${MUTED}`}>Loading…</p>}
         {detailError && <p className="text-sm text-rose-600">{detailError}</p>}
         {detail && (
-          <div className="space-y-3">
-            {detail.images?.length > 0 && (
-              <div className="flex gap-2 overflow-x-auto">
-                {detail.images.slice(0, 4).map((src, i) => (
-                  <img key={i} src={src} alt="" className="h-28 w-40 flex-none rounded-lg object-cover" />
+          <>
+            {/* Gallery shape adapts to how many images the catalog row
+                actually has: 1 -> a single centered photo (no empty second
+                column), 2 -> equal side-by-side, 3+ -> one big photo on the
+                left with the rest stacked on the right (scrolling past 2),
+                matching the reference design's 3-image case exactly. */}
+            {images.length === 1 && (
+              <div className="mb-5 flex justify-center">
+                <button
+                  type="button"
+                  onClick={() => setLightboxIndex(0)}
+                  aria-label="View photo"
+                  className="group h-48 w-full max-w-md min-h-0 cursor-zoom-in overflow-hidden rounded-2xl shadow-md shadow-black/10 sm:h-64"
+                >
+                  <img
+                    src={images[0]}
+                    alt=""
+                    className="h-full w-full object-cover object-center transition duration-300 group-hover:scale-105 group-hover:brightness-95"
+                  />
+                </button>
+              </div>
+            )}
+            {images.length === 2 && (
+              <div className="mb-5 grid h-48 grid-cols-2 gap-3 sm:h-64">
+                {images.map((url, i) => (
+                  <button
+                    key={url + i}
+                    type="button"
+                    onClick={() => setLightboxIndex(i)}
+                    aria-label="View photo"
+                    className="group h-full min-h-0 w-full min-w-0 cursor-zoom-in overflow-hidden rounded-2xl shadow-md shadow-black/10"
+                  >
+                    <img
+                      src={url}
+                      alt=""
+                      className="h-full w-full object-cover object-center transition duration-300 group-hover:scale-105 group-hover:brightness-95"
+                    />
+                  </button>
                 ))}
               </div>
             )}
-            {(detail.city || detail.duration || detail.source || detail.destination) && (
-              <div className={`flex flex-wrap items-center gap-x-4 gap-y-1 text-sm ${MUTED}`}>
-                {detail.city && (
-                  <span className="inline-flex items-center gap-1">
-                    <LuMapPin size={13} /> {detail.city}
-                  </span>
-                )}
-                {detail.duration && (
-                  <span className="inline-flex items-center gap-1">
-                    <LuClock size={13} /> {detail.duration}
-                  </span>
-                )}
-                {(detail.source || detail.destination) && (
-                  <span className="inline-flex items-center gap-1">
-                    <LuPlane size={13} /> {detail.source} → {detail.destination}
-                  </span>
-                )}
+            {images.length >= 3 && (
+              <div className="mb-5 grid h-48 grid-cols-2 gap-3 sm:h-64">
+                <button
+                  type="button"
+                  onClick={() => setLightboxIndex(0)}
+                  aria-label="View photo"
+                  className="group h-full min-h-0 w-full min-w-0 cursor-zoom-in overflow-hidden rounded-2xl shadow-md shadow-black/10"
+                >
+                  <img
+                    src={mainImage}
+                    alt=""
+                    className="h-full w-full object-cover object-center transition duration-300 group-hover:scale-105 group-hover:brightness-95"
+                  />
+                </button>
+                <div className="grid h-full min-h-0 w-full min-w-0 grid-flow-row auto-rows-[47%] gap-3 overflow-y-auto scroll-smooth">
+                  {restImages.map((url, i) => (
+                    <button
+                      key={url + i}
+                      type="button"
+                      onClick={() => setLightboxIndex(i + 1)}
+                      aria-label="View photo"
+                      className="group h-full min-h-0 w-full min-w-0 cursor-zoom-in overflow-hidden rounded-2xl bg-white shadow-md shadow-black/10"
+                    >
+                      <img
+                        src={url}
+                        alt=""
+                        className="h-full w-full object-cover object-center transition duration-300 group-hover:scale-110 group-hover:brightness-95"
+                      />
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
-            <RichTextDisplay html={detail.description} className={`text-sm leading-relaxed ${BODY}`} />
-            <div className={`rounded-xl bg-agent-accent-soft px-3.5 py-2.5 text-sm font-bold ${INK}`}>
-              + {formatCurrency(addon.pricePerPax)} per person
+
+            <div className={`flex flex-wrap items-start justify-between gap-3 border-b ${DIVIDER} pb-3`}>
+              <h3 className={`text-2xl font-extrabold ${INK}`}>{addon.name}</h3>
+              {infoLines.length > 0 && (
+                <div className="flex flex-col items-end gap-1.5">
+                  {infoLines.slice(0, 2).map((line) => (
+                    <span
+                      key={line.label}
+                      className="inline-flex items-center gap-1.5 rounded-full bg-agent-accent-soft px-3 py-1 text-xs font-semibold text-agent-accent-dark"
+                    >
+                      <line.icon size={12} className="flex-none" />
+                      {line.label} : {line.value}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
-          </div>
+
+            <RichTextDisplay html={detail.description} className={`mt-3 text-sm leading-relaxed ${BODY}`} />
+
+            <div className="mt-5 flex items-center justify-center gap-3">
+              <button
+                type="button"
+                onClick={onClose}
+                className={`rounded-full border ${DIVIDER} bg-white px-6 py-2.5 text-sm font-semibold ${INK} transition-colors hover:bg-agent-bg`}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onToggle(addon.id);
+                  onClose();
+                }}
+                className="rounded-full bg-agent-accent px-8 py-2.5 text-sm font-semibold text-white shadow-sm shadow-agent-accent/30 transition hover:opacity-90"
+              >
+                {selected ? 'Remove' : 'Add'}
+              </button>
+            </div>
+          </>
         )}
       </div>
+      {lightboxIndex != null && (
+        <Lightbox
+          gallery={images}
+          index={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+          onNavigate={(delta) => setLightboxIndex((i) => (i + delta + images.length) % images.length)}
+        />
+      )}
     </div>
   );
 }
@@ -1483,7 +1580,14 @@ export default function DepartureDetail() {
               </Card>
             )}
 
-            {detailAddon && <AddonDetailModal addon={detailAddon} onClose={() => setDetailAddon(null)} />}
+            {detailAddon && (
+              <AddonDetailModal
+                addon={detailAddon}
+                selected={selectedAddonIds.includes(detailAddon.id)}
+                onToggle={toggleAddon}
+                onClose={() => setDetailAddon(null)}
+              />
+            )}
 
             {termsHtml && (
               <Card className="border-white rounded-2xl p-5 sm:p-6">
