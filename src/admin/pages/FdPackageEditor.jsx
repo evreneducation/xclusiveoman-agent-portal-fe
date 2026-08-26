@@ -21,7 +21,7 @@ import {
   LuIndianRupee,
   LuCircleCheck,
 } from 'react-icons/lu';
-import { api } from '../api/client.js';
+import { api, getAccessToken } from '../api/client.js';
 import { useToast } from '../../shared/components/ToastProvider.jsx';
 import { Button, Card, Checkbox, FieldLabel, Select, Tag, Table, TextInput } from '../components/ui.jsx';
 import { ImageUpload } from '../../shared/components/ImageUpload.jsx';
@@ -1574,6 +1574,26 @@ function toFormState(fdPackage) {
   return { ...fdPackage, ratePerPax: fdPackage.rateOverride ?? null };
 }
 
+// A handful of `form` fields are meaningfully `null` — the admin explicitly
+// cleared them (Flights' "Turn off" / meal checkboxes unticking / Pricing's
+// "Reset to automatic") and that null needs to reach the backend. Every other
+// still-`null`/`undefined` field just hasn't been filled in yet (e.g.
+// heroImageUrl before any image is uploaded) — sending an explicit null for
+// those made the backend's required-field validation reject the *entire*
+// autosave PATCH while the admin was still mid-edit, well before Publish, so
+// they're left out of the payload entirely instead (standard partial-update:
+// the backend keeps whatever it already has for an omitted field).
+const NULLABLE_FORM_FIELDS = new Set(['ratePerPax', 'onwardFlightId', 'returnFlightId', 'lunchMealId', 'dinnerMealId']);
+
+function buildAutosavePayload(form) {
+  const payload = {};
+  for (const [key, value] of Object.entries(form)) {
+    if ((value === null || value === undefined) && !NULLABLE_FORM_FIELDS.has(key)) continue;
+    payload[key] = value;
+  }
+  return payload;
+}
+
 export default function FdPackageEditor() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -1663,7 +1683,7 @@ export default function FdPackageEditor() {
     autosaveTimerRef.current = setTimeout(async () => {
       setAutosaving(true);
       try {
-        await api.patch(`/admin/fd-packages/${packageId}`, form);
+        await api.patch(`/admin/fd-packages/${packageId}`, buildAutosavePayload(form));
       } catch (err) {
         toast.error(describeApiError(err));
       } finally {
@@ -1675,6 +1695,48 @@ export default function FdPackageEditor() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form, packageId]);
+
+  // Belt-and-braces on top of the debounce above, for the two moments a
+  // pending 1s-out autosave could otherwise be lost entirely: leaving via
+  // "Back to catalog" (flushed + awaited before navigating, so the next
+  // catalog list read is never stale) and an actual page refresh/tab close
+  // (best-effort — `keepalive: true` lets the PATCH survive the page
+  // unloading, but browsers don't guarantee it completes either way).
+  async function flushAutosave() {
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    if (!packageId || !hasUserEditedRef.current) return;
+    try {
+      await api.patch(`/admin/fd-packages/${packageId}`, buildAutosavePayload(form));
+    } catch (err) {
+      toast.error(describeApiError(err));
+    }
+  }
+
+  useEffect(() => {
+    function saveOnUnload() {
+      if (!packageId || !hasUserEditedRef.current) return;
+      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+      const token = getAccessToken();
+      fetch(`/api/admin/fd-packages/${packageId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        credentials: 'include',
+        keepalive: true,
+        body: JSON.stringify(buildAutosavePayload(form)),
+      }).catch(() => {});
+    }
+    window.addEventListener('pagehide', saveOnUnload);
+    window.addEventListener('beforeunload', saveOnUnload);
+    return () => {
+      window.removeEventListener('pagehide', saveOnUnload);
+      window.removeEventListener('beforeunload', saveOnUnload);
+    };
+  }, [packageId, form]);
+
+  async function handleBackToCatalog() {
+    await flushAutosave();
+    navigate('/admin/catalog');
+  }
 
   // Inclusions default-seed — same idea as the Custom FIT Quote Inbox
   // (QuoteInboxDetail.jsx's CostingAndPublishing): while Inclusions is
@@ -1789,7 +1851,7 @@ export default function FdPackageEditor() {
   return (
     <div className="min-h-screen bg-[#F4F7FF]">
       <div className="mx-auto max-w-4xl space-y-4 p-6 lg:p-10">
-        <button onClick={() => navigate('/admin/catalog')} className="text-xs text-muted hover:text-ink">
+        <button onClick={handleBackToCatalog} className="text-xs text-muted hover:text-ink">
           ← Back to catalog
         </button>
         <h2 className="text-3xl font-bold">{isNew ? 'Add FD Package' : `Edit — ${form.title || ''}`}</h2>
