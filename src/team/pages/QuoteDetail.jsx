@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { Badge, Button, Card, ErrorText, FieldLabel, Select, Table, Textarea, TextInput } from '../components/ui.jsx';
 import { formatCurrency } from '../../shared/fdPackage/index.js';
 import { ITINERARY_ITEM_TYPE_META } from '../../shared/itinerary/index.js';
+import { RichTextEditor } from '../../shared/components/RichTextEditor.jsx';
 
 const KINDS = {
   fit: {
@@ -323,7 +324,7 @@ export default function QuoteDetail() {
 
         <div className="mt-4">
           <FieldLabel>Internal notes</FieldLabel>
-          <Textarea rows={3} value={internalNotes} onChange={(e) => setInternalNotes(e.target.value)} disabled={!canEdit} />
+          <RichTextEditor size="sm" value={internalNotes} onChange={setInternalNotes} disabled={!canEdit} inkClassName="text-team-ink" />
         </div>
 
         {kind === 'fit' && (

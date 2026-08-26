@@ -1053,7 +1053,15 @@ export default function PackageBuilder() {
   const [submittedId, setSubmittedId] = useState('');
 
   useEffect(() => {
-    Promise.all([api.get('/hotels'), api.get('/tours'), api.get('/transfers'), api.get('/activities'), api.get('/meals')])
+    // 0070_hotels_status.sql / 0072_tours_activities_transfers_status.sql —
+    // only published catalog rows are offered for the itinerary builder here.
+    Promise.all([
+      api.get('/hotels?status=published'),
+      api.get('/tours?status=published'),
+      api.get('/transfers?status=published'),
+      api.get('/activities?status=published'),
+      api.get('/meals'),
+    ])
       .then(([h, t, tr, a, m]) => {
         setHotels(h.hotels || []);
         setTours(t.tours || []);

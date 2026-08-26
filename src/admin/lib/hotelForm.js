@@ -3,9 +3,14 @@
 // so both the Product Catalog Hotel form (HotelEditor.jsx) and the Admin
 // MICE Catalog Hotel form (MiceCatalog.jsx) validate identically instead of
 // each keeping a divergent copy.
+import { isEmptyHtml } from '../../shared/components/RichTextEditor.jsx';
+
 export const STAR_OPTIONS = [3, 4, 5];
 
 export const HOTEL_REQUIRED_FIELDS = ['name', 'city', 'state', 'address', 'email', 'category', 'description'];
+
+// description is rich text now — its empty state is `<p></p>`, not `''`.
+const HTML_FIELDS = new Set(['description']);
 
 // Occupancy-tiered pricing (0061_hotel_occupancy_pricing.sql) — HotelEditor.jsx's
 // form now collects singlePrice/doublePrice/triplePrice (checkbox per
@@ -18,7 +23,8 @@ const PRICE_FIELDS = ['pricePerNight', 'singlePrice', 'doublePrice', 'triplePric
 
 export function validateHotelForm(form, images) {
   for (const key of HOTEL_REQUIRED_FIELDS) {
-    if (form[key] === undefined || form[key] === null || form[key] === '') {
+    const empty = HTML_FIELDS.has(key) ? isEmptyHtml(form[key]) : form[key] === undefined || form[key] === null || form[key] === '';
+    if (empty) {
       return 'Please fill in all required fields.';
     }
   }

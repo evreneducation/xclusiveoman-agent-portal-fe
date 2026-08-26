@@ -21,10 +21,11 @@ import {
   LuIndianRupee,
   LuCircleCheck,
 } from 'react-icons/lu';
-import { api } from '../api/client.js';
+import { api, getAccessToken } from '../api/client.js';
 import { useToast } from '../../shared/components/ToastProvider.jsx';
 import { Button, Card, Checkbox, FieldLabel, Select, Tag, Table, TextInput } from '../components/ui.jsx';
 import { ImageUpload } from '../../shared/components/ImageUpload.jsx';
+import { RichTextEditor } from '../../shared/components/RichTextEditor.jsx';
 import { InclusionExclusionList, itineraryHasItemType, linesFromText, textFromLines } from '../components/InclusionExclusionList.jsx';
 import { FD_THEMES, formatCurrency, formatTime, parseDurationDays } from '../../shared/fdPackage/index.js';
 import {
@@ -62,6 +63,7 @@ function HeroImageUpload({ packageId, value, onUploaded }) {
   return (
     <ImageUpload
       label="Hero image"
+      required
       value={value}
       onChange={onUploaded}
       onUpload={upload}
@@ -152,7 +154,7 @@ function BasicsForm({ form, update, packageId }) {
         </div>
         <div className="sm:col-span-2">
           <FieldLabel>Short description</FieldLabel>
-          <TextInput value={form.shortDescription || ''} onChange={(e) => update('shortDescription', e.target.value)} />
+          <RichTextEditor size="sm" value={form.shortDescription || ''} onChange={(html) => update('shortDescription', html)} />
         </div>
       </div>
       {/* Each its own full-width row (was a 2-col grid) — matches the
@@ -574,15 +576,13 @@ function DayHotelSection({ hotels, currentHotelId, onSelect }) {
   );
 }
 
-// Tours and Transfers are marked required (mirrors the agent Custom FIT
-// Builder's per-day requirement) — findItineraryPublishError below blocks
-// publishing until every day has at least one of each. Activities stay
-// optional. `required` only decorates the field label — kept separate from
-// `label` itself so the lowercased "No {label} in the catalog yet."
-// empty-state message below doesn't pick up a stray asterisk.
+// Tours/Transfers/Activities are all optional per day — only "the day has
+// *some* content" (a note or any item) is enforced, by findItineraryPublishError
+// below. `required` is kept as a hook here (unused today) rather than deleted
+// outright, since DayCatalogSection's label already knows how to render it.
 const DAY_SECTION_META = {
-  tour: { label: 'Tours', addLabel: '+ Add tour', required: true },
-  transfer: { label: 'Transfers', addLabel: '+ Add transfer', required: true },
+  tour: { label: 'Tours', addLabel: '+ Add tour' },
+  transfer: { label: 'Transfers', addLabel: '+ Add transfer' },
   activity: { label: 'Activities', addLabel: '+ Add activity' },
 };
 
@@ -708,12 +708,13 @@ function DayPlanCard({ dayNumber, items, catalogs, notes, onNotesChange, addItem
   );
 }
 
-// A day is "complete" once it has both a tour and a transfer — the same two
-// requirements findItineraryPublishError enforces before publishing — used
-// here purely to decorate each tab with a ✓ so admin can see progress across
-// days without having to click through all of them.
-function isDayComplete(items) {
-  return items.some((it) => it.type === 'tour') && items.some((it) => it.type === 'transfer');
+// A day is "complete" once it has *any* content — a note or at least one
+// item — matching findItineraryPublishError's hasContent check below (tours
+// and transfers are no longer required); used here purely to decorate each
+// tab with a ✓ so admin can see progress across days without having to click
+// through all of them.
+function isDayComplete(items, notes) {
+  return items.length > 0 || !!(notes || '').trim();
 }
 
 function ItineraryManager({ fdPackageId, itinerary, duration, onChange, onComputedRateChange }) {
@@ -743,7 +744,16 @@ function ItineraryManager({ fdPackageId, itinerary, duration, onChange, onComput
   }, [dayCount, activeDay]);
 
   useEffect(() => {
-    Promise.all([api.get('/hotels'), api.get('/tours'), api.get('/transfers'), api.get('/activities')])
+    // 0070_hotels_status.sql / 0072_tours_activities_transfers_status.sql —
+    // only published catalog rows are offered for the day-by-day itinerary;
+    // drafts stay editable in ProductCatalog.jsx but can't be placed into a
+    // package yet.
+    Promise.all([
+      api.get('/hotels?status=published'),
+      api.get('/tours?status=published'),
+      api.get('/transfers?status=published'),
+      api.get('/activities?status=published'),
+    ])
       .then(([h, t, tr, a]) => {
         setHotels(h.hotels || []);
         setTours(t.tours || []);
@@ -842,11 +852,11 @@ function ItineraryManager({ fdPackageId, itinerary, duration, onChange, onComput
       ) : (
         <div>
           {/* Task 6 — tabs, one per day, instead of a long stacked list. ✓
-              marks a day that already has both a tour and a transfer (what
+              marks a day that already has content — a note or any item (what
               publishing actually requires — see isDayComplete). */}
           <div className="mb-3 flex flex-wrap gap-1.5 border-b border-line-light pb-2">
             {Array.from({ length: dayCount }, (_, i) => i + 1).map((dayNumber) => {
-              const complete = isDayComplete(itemsForDay(itineraryItems, dayNumber));
+              const complete = isDayComplete(itemsForDay(itineraryItems, dayNumber), dayNotes[dayNumber]);
               return (
                 <button key={dayNumber} type="button" onClick={() => setActiveDay(dayNumber)}>
                   <Tag active={activeDay === dayNumber}>
@@ -1574,6 +1584,26 @@ function toFormState(fdPackage) {
   return { ...fdPackage, ratePerPax: fdPackage.rateOverride ?? null };
 }
 
+// A handful of `form` fields are meaningfully `null` — the admin explicitly
+// cleared them (Flights' "Turn off" / meal checkboxes unticking / Pricing's
+// "Reset to automatic") and that null needs to reach the backend. Every other
+// still-`null`/`undefined` field just hasn't been filled in yet (e.g.
+// heroImageUrl before any image is uploaded) — sending an explicit null for
+// those made the backend's required-field validation reject the *entire*
+// autosave PATCH while the admin was still mid-edit, well before Publish, so
+// they're left out of the payload entirely instead (standard partial-update:
+// the backend keeps whatever it already has for an omitted field).
+const NULLABLE_FORM_FIELDS = new Set(['ratePerPax', 'onwardFlightId', 'returnFlightId', 'lunchMealId', 'dinnerMealId']);
+
+function buildAutosavePayload(form) {
+  const payload = {};
+  for (const [key, value] of Object.entries(form)) {
+    if ((value === null || value === undefined) && !NULLABLE_FORM_FIELDS.has(key)) continue;
+    payload[key] = value;
+  }
+  return payload;
+}
+
 export default function FdPackageEditor() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -1663,7 +1693,7 @@ export default function FdPackageEditor() {
     autosaveTimerRef.current = setTimeout(async () => {
       setAutosaving(true);
       try {
-        await api.patch(`/admin/fd-packages/${packageId}`, form);
+        await api.patch(`/admin/fd-packages/${packageId}`, buildAutosavePayload(form));
       } catch (err) {
         toast.error(describeApiError(err));
       } finally {
@@ -1675,6 +1705,48 @@ export default function FdPackageEditor() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form, packageId]);
+
+  // Belt-and-braces on top of the debounce above, for the two moments a
+  // pending 1s-out autosave could otherwise be lost entirely: leaving via
+  // "Back to catalog" (flushed + awaited before navigating, so the next
+  // catalog list read is never stale) and an actual page refresh/tab close
+  // (best-effort — `keepalive: true` lets the PATCH survive the page
+  // unloading, but browsers don't guarantee it completes either way).
+  async function flushAutosave() {
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    if (!packageId || !hasUserEditedRef.current) return;
+    try {
+      await api.patch(`/admin/fd-packages/${packageId}`, buildAutosavePayload(form));
+    } catch (err) {
+      toast.error(describeApiError(err));
+    }
+  }
+
+  useEffect(() => {
+    function saveOnUnload() {
+      if (!packageId || !hasUserEditedRef.current) return;
+      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+      const token = getAccessToken();
+      fetch(`/api/admin/fd-packages/${packageId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        credentials: 'include',
+        keepalive: true,
+        body: JSON.stringify(buildAutosavePayload(form)),
+      }).catch(() => {});
+    }
+    window.addEventListener('pagehide', saveOnUnload);
+    window.addEventListener('beforeunload', saveOnUnload);
+    return () => {
+      window.removeEventListener('pagehide', saveOnUnload);
+      window.removeEventListener('beforeunload', saveOnUnload);
+    };
+  }, [packageId, form]);
+
+  async function handleBackToCatalog() {
+    await flushAutosave();
+    navigate('/admin/catalog');
+  }
 
   // Inclusions default-seed — same idea as the Custom FIT Quote Inbox
   // (QuoteInboxDetail.jsx's CostingAndPublishing): while Inclusions is
@@ -1720,11 +1792,6 @@ export default function FdPackageEditor() {
       const items = day?.items || [];
       const hasContent = (day?.notes || '').trim() || items.length > 0;
       if (!hasContent) return `Day ${n} is missing itinerary details. Fill in every day before publishing.`;
-      // Every day needs its own tour and transfer, not just somewhere in the
-      // package — mirrors the agent Custom FIT Builder's per-day requirement
-      // (see PackageBuilder.jsx's validateStep).
-      if (!items.some((it) => it.type === 'tour')) return `Day ${n} needs at least one tour before publishing.`;
-      if (!items.some((it) => it.type === 'transfer')) return `Day ${n} needs at least one transfer before publishing.`;
     }
     return null;
   }
@@ -1735,6 +1802,17 @@ export default function FdPackageEditor() {
   function findCarouselImagesError() {
     if ((form.images || []).length < MIN_CAROUSEL_IMAGES) {
       return `Add at least ${MIN_CAROUSEL_IMAGES} carousel images before publishing.`;
+    }
+    return null;
+  }
+
+  // Mirrors findCarouselImagesError just above — heroImageUrl is nullable in
+  // the backend schema on purpose (a package can sit in draft with no hero
+  // image yet), so this only blocks the moment of Publish, same gate the
+  // backend's own heroImageError re-checks server-side.
+  function findHeroImageError() {
+    if (!form.heroImageUrl) {
+      return 'Add a hero image before publishing.';
     }
     return null;
   }
@@ -1760,6 +1838,11 @@ export default function FdPackageEditor() {
     const carouselImagesError = findCarouselImagesError();
     if (carouselImagesError) {
       toast.error(carouselImagesError);
+      return;
+    }
+    const heroImageError = findHeroImageError();
+    if (heroImageError) {
+      toast.error(heroImageError);
       return;
     }
     const flightsSelectionError = findFlightsSelectionError();
@@ -1789,7 +1872,7 @@ export default function FdPackageEditor() {
   return (
     <div className="min-h-screen bg-[#F4F7FF]">
       <div className="mx-auto max-w-4xl space-y-4 p-6 lg:p-10">
-        <button onClick={() => navigate('/admin/catalog')} className="text-xs text-muted hover:text-ink">
+        <button onClick={handleBackToCatalog} className="text-xs text-muted hover:text-ink">
           ← Back to catalog
         </button>
         <h2 className="text-3xl font-bold">{isNew ? 'Add FD Package' : `Edit — ${form.title || ''}`}</h2>

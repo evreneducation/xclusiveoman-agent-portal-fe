@@ -10,6 +10,7 @@ import { ActivityImagesUpload } from '../components/ActivityImagesUpload.jsx';
 import { validateActivityForm } from '../lib/activityForm.js';
 import { TransferImagesUpload } from '../components/TransferImagesUpload.jsx';
 import { TRANSFER_TYPE_OPTIONS, validateTransferForm } from '../lib/transferForm.js';
+import { RichTextEditor } from '../../shared/components/RichTextEditor.jsx';
 
 // Activities and transfers now get their own dedicated forms too
 // (MiceActivityForm / MiceTransferForm, below — mirroring MiceHotelForm /
@@ -19,7 +20,7 @@ import { TRANSFER_TYPE_OPTIONS, validateTransferForm } from '../lib/transferForm
 const ENTITY_FIELDS = {
   experiences: [
     { key: 'name', label: 'Name', type: 'text', required: true },
-    { key: 'description', label: 'Description', type: 'text' },
+    { key: 'description', label: 'Description', type: 'richtext' },
     { key: 'suitableGroupSizeMin', label: 'Min group size', type: 'number' },
     { key: 'suitableGroupSizeMax', label: 'Max group size', type: 'number' },
   ],
@@ -70,6 +71,8 @@ function AddEntityForm({ entity, fields, endpoint, onCreated, defaults = {} }) {
             <div className="mb-1 text-xs text-muted">{f.label}</div>
             {f.type === 'checkbox' ? (
               <Checkbox checked={!!form[f.key]} onChange={(v) => update(f.key, v)} label={f.label} />
+            ) : f.type === 'richtext' ? (
+              <RichTextEditor size="sm" value={form[f.key] || ''} onChange={(html) => update(f.key, html)} />
             ) : f.type === 'select' ? (
               <Select value={form[f.key] || ''} onChange={(e) => update(f.key, e.target.value)}>
                 <option value="">Select…</option>
@@ -149,6 +152,9 @@ function MiceHotelForm({ onCreated }) {
         miceBallroomCapacity: form.miceBallroomCapacity ? Number(form.miceBallroomCapacity) : undefined,
         miceBreakoutRooms: form.miceBreakoutRooms ? Number(form.miceBreakoutRooms) : undefined,
         isMiceEnabled: !!form.isMiceEnabled,
+        // 0070_hotels_status.sql — same "fully validated above, so saved
+        // means published" reasoning as HotelEditor.jsx's own Save.
+        status: 'published',
       };
       const { hotel } = await api.post('/admin/hotels', payload);
       onCreated(hotel);
@@ -209,7 +215,7 @@ function MiceHotelForm({ onCreated }) {
           </div>
           <div className="sm:col-span-2">
             <FieldLabel>Description *</FieldLabel>
-            <TextInput required value={form.description || ''} onChange={(e) => update('description', e.target.value)} />
+            <RichTextEditor size="md" value={form.description || ''} onChange={(html) => update('description', html)} />
           </div>
           <HotelImagesUpload hotelId={null} images={images} onChange={setImages} />
         </div>
@@ -347,6 +353,9 @@ function MiceTourForm({ onCreated }) {
         price: Number(form.price),
         images,
         isMiceEnabled: !!form.isMiceEnabled,
+        // 0072_tours_activities_transfers_status.sql — same "fully validated
+        // above, so saved means published" reasoning as MiceHotelForm's own.
+        status: 'published',
       };
       const { tour } = await api.post('/admin/tours', payload);
       onCreated(tour);
@@ -392,7 +401,7 @@ function MiceTourForm({ onCreated }) {
           </div>
           <div className="sm:col-span-2">
             <FieldLabel>Description *</FieldLabel>
-            <TextInput required value={form.description || ''} onChange={(e) => update('description', e.target.value)} />
+            <RichTextEditor size="md" value={form.description || ''} onChange={(html) => update('description', html)} />
           </div>
           <TourImagesUpload tourId={null} images={images} onChange={setImages} />
         </div>
@@ -507,6 +516,7 @@ function MiceActivityForm({ onCreated }) {
         ...(form.pricePerPax !== '' && form.pricePerPax !== undefined
           ? { pricePerPax: Number(form.pricePerPax) }
           : {}),
+        status: 'published',
       };
       const { activity } = await api.post('/admin/activities', payload);
       onCreated(activity);
@@ -547,7 +557,7 @@ function MiceActivityForm({ onCreated }) {
           </div>
           <div className="sm:col-span-2">
             <FieldLabel>Description</FieldLabel>
-            <TextInput value={form.description || ''} onChange={(e) => update('description', e.target.value)} />
+            <RichTextEditor size="sm" value={form.description || ''} onChange={(html) => update('description', html)} />
           </div>
           <ActivityImagesUpload activityId={null} images={images} onChange={setImages} />
         </div>
@@ -661,6 +671,7 @@ function MiceTransferForm({ onCreated }) {
         images,
         isMiceEnabled: !!form.isMiceEnabled,
         ...(form.price !== '' && form.price !== undefined ? { price: Number(form.price) } : {}),
+        status: 'published',
       };
       const { transfer } = await api.post('/admin/transfers', payload);
       onCreated(transfer);
@@ -712,7 +723,7 @@ function MiceTransferForm({ onCreated }) {
           </div>
           <div className="sm:col-span-2">
             <FieldLabel>Description</FieldLabel>
-            <TextInput value={form.description || ''} onChange={(e) => update('description', e.target.value)} />
+            <RichTextEditor size="sm" value={form.description || ''} onChange={(html) => update('description', html)} />
           </div>
           <TransferImagesUpload transferId={null} images={images} onChange={setImages} />
         </div>

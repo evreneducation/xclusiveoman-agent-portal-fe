@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
-import { Badge, Button, Card, ErrorText, Select, TextInput, Textarea } from '../components/ui.jsx';
+import { Badge, Button, Card, ErrorText, Select, TextInput } from '../components/ui.jsx';
+import { RichTextEditor, RichTextDisplay, isEmptyHtml } from '../../shared/components/RichTextEditor.jsx';
 
 // Agent Support & Helpdesk (Task 18 — Screen 27, SUP-1/SUP-3). RM contact
 // card is unchanged/real (reuses GET /agencies/me, already live before this
@@ -68,13 +69,13 @@ function NewTicketForm({ onCreated }) {
 
   async function handleSubmit() {
     setError('');
-    if (!subject.trim() || !description.trim()) {
+    if (!subject.trim() || isEmptyHtml(description)) {
       setError('Subject and description are both required.');
       return;
     }
     setSubmitting(true);
     try {
-      await api.post('/support/tickets', { subject: subject.trim(), description: description.trim(), priority });
+      await api.post('/support/tickets', { subject: subject.trim(), description, priority });
       setSubject('');
       setDescription('');
       setPriority('normal');
@@ -90,7 +91,7 @@ function NewTicketForm({ onCreated }) {
     <Card label="Raise a Support Ticket" className="border-white">
       <div className="space-y-2.5">
         <TextInput placeholder="Subject" value={subject} onChange={(e) => setSubject(e.target.value)} />
-        <Textarea rows={3} placeholder="Describe the issue…" value={description} onChange={(e) => setDescription(e.target.value)} />
+        <RichTextEditor size="sm" value={description} onChange={setDescription} />
         <div className="flex items-center gap-2">
           <Select className="max-w-[160px]" value={priority} onChange={(e) => setPriority(e.target.value)}>
             <option value="low">Low priority</option>
@@ -168,7 +169,7 @@ function TicketCard({ ticket, expanded, onToggle, onReplied }) {
       </button>
       {expanded && (
         <>
-          <p className="mt-2 text-sm text-agent-ink">{ticket.description}</p>
+          <RichTextDisplay html={ticket.description} className="mt-2 text-sm text-agent-ink" />
           <TicketThread ticket={ticket} onReplied={onReplied} />
         </>
       )}
