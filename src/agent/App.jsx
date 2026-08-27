@@ -18,6 +18,7 @@ import MiceProposalDetail from './pages/MiceProposalDetail.jsx';
 import Bookings from './pages/Bookings.jsx';
 import BookingDetail from './pages/BookingDetail.jsx';
 import Payment from './pages/Payment.jsx';
+import PaymentReturn from './pages/PaymentReturn.jsx';
 import Transactions from './pages/Transactions.jsx';
 import Notifications from './pages/Notifications.jsx';
 import Support from './pages/Support.jsx';
@@ -59,6 +60,7 @@ export default function App() {
             <Route path="mice-requests/:id" element={<MiceProposalDetail />} />
             <Route path="bookings" element={<Bookings />} />
             <Route path="bookings/:bookingId" element={<BookingDetail />} />
+            <Route path="payments/return" element={<PaymentReturn />} />
             <Route path="payments/:bookingId" element={<Payment />} />
             <Route path="transactions" element={<Transactions />} />
             <Route path="notifications" element={<Notifications />} />
