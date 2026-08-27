@@ -3,13 +3,18 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import ItineraryDocument from '../components/ItineraryDocument.jsx';
 import { computeDayCount } from '../../shared/itinerary/index.js';
 
-// Same base-URL resolution as shared/api/createApiClient.js — deliberately
-// not that module (or the agent `api` singleton it backs): this page
-// authenticates with the short-lived pdfToken in the query string, not a
-// login session's access token, and must never touch the session's own
-// refresh-cookie flow (see AuthContext.jsx) which that client is wired into.
-const API_TARGET = import.meta.env.VITE_API_PROXY_TARGET?.replace(/\/+$/, '');
-const BASE_URL = API_TARGET ? `${API_TARGET}/api` : '/api';
+// Always same-origin '/api', same as shared/api/createApiClient.js (not that
+// module itself — this page authenticates with the short-lived pdfToken in
+// the query string, not a login session's access token, and must never touch
+// the session's own refresh-cookie flow (see AuthContext.jsx) which that
+// client is wired into). Deliberately NOT built from VITE_API_PROXY_TARGET —
+// see DepartureItineraryPrint.jsx's BASE_URL comment: that env var resolves
+// to the backend's absolute Render URL in .env.production, which made this
+// fetch cross-origin instead of going through vercel.json's same-origin
+// /api rewrite — the exact class of bug createApiClient.js's own BASE_URL
+// comment already documents (there for the refresh cookie; here it 502'd
+// PDF downloads in production while working fine locally).
+const BASE_URL = '/api';
 
 // Fills gaps in the backend's composed itinerary (composeItinerary in
 // packageRequests.model.js) so every day 1..dayCount renders — the composed
