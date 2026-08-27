@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { LuEye, LuPencil, LuUserPlus } from 'react-icons/lu';
 import { api } from '../api/client.js';
 import { Badge, Button, Card, Checkbox, ErrorText, FieldLabel, Pagination, Select, Table, TextInput } from '../components/ui.jsx';
+import { formatDateTime } from '../../shared/components/formatDateTime.js';
 
 // Access Features — the checkboxes that decide both what an LM/RM's /team
 // sidebar shows (team/components/TeamLayout.jsx) and, for real, which
@@ -500,6 +501,8 @@ function EmployeeTypeTab({ role, roleLabel }) {
               'WhatsApp Number',
               ...(kind.showAssignedAgencies ? ['Assigned Agencies'] : []),
               'Status',
+              'Created',
+              'Updated',
               { label: 'Actions', align: 'right' },
             ]}
             rows={employees}
@@ -516,6 +519,12 @@ function EmployeeTypeTab({ role, roleLabel }) {
                 )}
                 <td className="px-3 py-3 align-middle">
                   <Badge tone={e.status === 'active' ? 'green' : 'grey'}>{e.status}</Badge>
+                </td>
+                <td className="px-3 py-3 align-middle whitespace-nowrap text-[11px] text-muted">
+                  {formatDateTime(e.createdAt ?? e.created_at)}
+                </td>
+                <td className="px-3 py-3 align-middle whitespace-nowrap text-[11px] text-muted">
+                  {formatDateTime(e.updatedAt ?? e.updated_at)}
                 </td>
                 <td className="px-3 py-3 align-middle">
                   <div className="flex flex-nowrap items-center justify-end gap-2">

@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { Button, Card, ErrorText, Tag, TextInput } from '../components/ui.jsx';
+import { usePaymentAttempt } from '../lib/usePaymentAttempt.js';
+import { PaymentAttemptStatus } from '../components/PaymentAttemptStatus.jsx';
 
 const CASHFREE_SDK_URL = 'https://sdk.cashfree.com/js/v3/cashfree.js';
 
@@ -16,27 +18,76 @@ function loadCashfreeSdk() {
   });
 }
 
-function CardPanel({ booking }) {
-  const [error, setError] = useState('');
-  const [submitting, setSubmitting] = useState(false);
+function newAttemptToken() {
+  return window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
 
-  async function handlePay() {
-    setError('');
-    setSubmitting(true);
+// Card checkout with attempt reconciliation (spec J/K/L). The attempt id lives
+// in both the URL (?attempt=) and sessionStorage so a browser Back/Forward or
+// bfcache restore lands back here, reads it, and reconciles the real state via
+// GET /api/payments/:id instead of blindly opening a second checkout.
+function CardPanel({ booking }) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const storageKey = `pay:${booking.id}`;
+
+  const storedAttempt =
+    typeof window !== 'undefined' ? (() => { try { return window.sessionStorage.getItem(storageKey); } catch { return null; } })() : null;
+  const attemptId = searchParams.get('attempt') || storedAttempt || null;
+
+  const { payment, refetch } = usePaymentAttempt(attemptId);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(''); // '' | 'start' | 'cancel'
+
+  function persistAttempt(id) {
     try {
-      const { paymentSessionId } = await api.post('/payments/cashfree/create-order', {
+      window.sessionStorage.setItem(storageKey, id);
+    } catch {
+      /* private mode — URL param still carries it */
+    }
+    const next = new URLSearchParams(searchParams);
+    next.set('attempt', id);
+    setSearchParams(next, { replace: true });
+  }
+
+  // "Pay" / "Resume" / "Try again" are the same call — the backend decides
+  // whether to reuse the current active order or supersede a stale one; a
+  // fresh token per click is the per-request idempotency key.
+  async function startCheckout() {
+    setError('');
+    setBusy('start');
+    try {
+      const { paymentId, paymentSessionId } = await api.post('/payments/cashfree/create-order', {
         bookingId: booking.id,
         amount: booking.balanceDue,
+        clientAttemptToken: newAttemptToken(),
       });
+      if (paymentId) persistAttempt(paymentId);
+      await refetch();
+      if (!paymentSessionId) return; // reuse path with no fresh session (e.g. already paid)
       const Cashfree = await loadCashfreeSdk();
-      const cashfree = Cashfree({ mode: 'sandbox' });
-      cashfree.checkout({ paymentSessionId, redirectTarget: '_self' });
+      Cashfree({ mode: 'sandbox' }).checkout({ paymentSessionId, redirectTarget: '_self' });
     } catch (err) {
       setError(err.message || 'Unable to start payment');
     } finally {
-      setSubmitting(false);
+      setBusy('');
     }
   }
+
+  async function cancelAttempt() {
+    if (!attemptId) return;
+    setError('');
+    setBusy('cancel');
+    try {
+      await api.post(`/payments/${attemptId}/abort`);
+      await refetch();
+    } catch (err) {
+      setError(err.message || 'Unable to cancel this attempt');
+    } finally {
+      setBusy('');
+    }
+  }
+
+  const status = payment?.status;
 
   return (
     <Card label="Option A — Payment Gateway" className="border-white">
@@ -44,9 +95,43 @@ function CardPanel({ booking }) {
         You'll be redirected to Cashfree's secure checkout to complete card payment.
       </p>
       <ErrorText>{error}</ErrorText>
-      <Button variant="accent" className="w-full" disabled={submitting} onClick={handlePay}>
-        {submitting ? 'Starting checkout…' : `Pay ₹${booking.balanceDue} Now`}
-      </Button>
+
+      {(status === 'pending' || status === 'awaiting_payment') && (
+        <PaymentAttemptStatus
+          status={status}
+          actions={
+            <>
+              <Button variant="accent" disabled={!!busy} onClick={startCheckout}>
+                {busy === 'start' ? 'Resuming…' : 'Resume'}
+              </Button>
+              <Button disabled={!!busy} onClick={cancelAttempt}>
+                {busy === 'cancel' ? 'Cancelling…' : 'Cancel & start over'}
+              </Button>
+            </>
+          }
+        />
+      )}
+
+      {status === 'awaiting_confirmation' && <PaymentAttemptStatus status={status} />}
+
+      {status === 'confirmed' && <PaymentAttemptStatus status={status} />}
+
+      {(status === 'failed' || status === 'cancelled') && (
+        <PaymentAttemptStatus
+          status={status}
+          actions={
+            <Button variant="accent" disabled={!!busy} onClick={startCheckout}>
+              {busy === 'start' ? 'Starting…' : 'Try again'}
+            </Button>
+          }
+        />
+      )}
+
+      {!status && (
+        <Button variant="accent" className="w-full" disabled={!!busy} onClick={startCheckout}>
+          {busy === 'start' ? 'Starting checkout…' : `Pay ₹${booking.balanceDue} Now`}
+        </Button>
+      )}
     </Card>
   );
 }

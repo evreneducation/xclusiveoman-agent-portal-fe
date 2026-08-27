@@ -94,7 +94,7 @@ export default function Register() {
             Thanks — your registration is now <span className="font-semibold text-slate-900">Pending Approval</span>. A
             Super Admin will review it, assign your tier, and you'll be able to sign in once approved.
           </p>
-          <Link to="/agent/login" className="mt-6 block">
+          <Link to="/agent" className="mt-6 block">
             <AuthButton type="button">Back to Sign In</AuthButton>
           </Link>
         </div>
@@ -180,7 +180,7 @@ export default function Register() {
 
       <p className="mt-5 text-center text-sm text-slate-500">
         Already registered?{' '}
-        <Link to="/agent/login" className="font-semibold hover:underline" style={{ color: AUTH_ACCENT }}>
+        <Link to="/agent" className="font-semibold hover:underline" style={{ color: AUTH_ACCENT }}>
           Sign in
         </Link>
       </p>

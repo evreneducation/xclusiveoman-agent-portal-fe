@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../api/client.js';
+import { getSocket } from '../lib/socket.js';
+import { useAuth } from '../context/AuthContext.jsx';
 import { Badge, Button, Card, ErrorText } from '../components/ui.jsx';
 
 // Agent Traveler Document Upload (Task 14 — DOC-1/DOC-6). "After a booking
@@ -140,6 +142,7 @@ function TravelerUploadCard({ bookingId, traveler, onUploaded }) {
 
 export default function BookingDetail() {
   const { bookingId } = useParams();
+  const { socketConnected } = useAuth();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -160,6 +163,24 @@ export default function BookingDetail() {
     loadDetail();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookingId]);
+
+  // Live refresh when a payment for this booking confirms (spec M) — the
+  // status badge / upload-eligibility flip through without a manual reload.
+  // Poll + REST remain the source of truth; this is just a fast nudge.
+  useEffect(() => {
+    const socket = getSocket();
+    if (!socket) return undefined;
+    const onChange = (evt) => {
+      if (evt?.bookingId === bookingId) loadDetail();
+    };
+    socket.on('payment:status_changed', onChange);
+    socket.on('booking:status_changed', onChange);
+    return () => {
+      socket.off('payment:status_changed', onChange);
+      socket.off('booking:status_changed', onChange);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bookingId, socketConnected]);
 
   async function handleVoucherDownload() {
     setVoucherDownloading(true);

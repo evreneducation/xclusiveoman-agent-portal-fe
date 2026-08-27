@@ -137,13 +137,13 @@ function DepartureCard({ d }) {
               it. Scoped to just these two spots rather than swapping the
               tokens everywhere in the card. */}
           <div
-            className={`border-b pb-2.5 font-serif text-xl font-bold leading-snug ${isSoldOut ? 'border-[#E6E1D2] text-agent-muted' : 'border-[#E6E1D2] text-[#1B1B1B]'}`}
+            className={`border-b pb-2.5 font-serif text-xl font-bold leading-snug ${isSoldOut ? 'border-agent-line-light text-agent-muted' : 'border-agent-line-light text-agent-ink-dark'}`}
           >
             {d.title}
           </div>
-          <div className={`mt-2.5 text-sm ${isSoldOut ? 'text-[#6B6B65]/70' : 'text-[#6B6B65]'}`}>{subtitle}</div>
+          <div className={`mt-2.5 text-sm ${isSoldOut ? 'text-agent-muted/70' : 'text-agent-muted'}`}>{subtitle}</div>
 
-          <div className={`mt-2.5 space-y-1.5 text-xs ${isSoldOut ? 'text-agent-muted/60' : 'text-[#4B4844]'}`}>
+          <div className={`mt-2.5 space-y-1.5 text-xs ${isSoldOut ? 'text-agent-muted/60' : 'text-agent-ink'}`}>
             {monthRange && (
               <div className="flex items-center gap-2">
                 <LuCalendarDays size={13} className="flex-none" />
@@ -182,7 +182,7 @@ function DepartureCard({ d }) {
           {nextDate && (
             <div className="mt-3">
               <div className="mb-1.5 flex items-center justify-between text-[11px] font-semibold">
-                <span className={`flex items-center gap-1.5 ${isSoldOut ? 'text-agent-muted' : 'text-[#1B1B1B]'}`}>
+                <span className={`flex items-center gap-1.5 ${isSoldOut ? 'text-agent-muted' : 'text-agent-ink-dark'}`}>
                   <span className={`h-2 w-2 rounded-full ${isSoldOut ? 'bg-agent-muted' : 'bg-[#EF4A3D]'}`} />
                   {isSoldOut ? '0 Seats Left' : `${seatsLeft} Seats Left`}
                 </span>
@@ -200,7 +200,7 @@ function DepartureCard({ d }) {
           <div className="mt-4 flex items-end justify-between">
             <div>
               <div className="text-[11px] font-medium text-agent-muted">Starting at</div>
-              <div className={`text-xl font-extrabold ${isSoldOut ? 'text-agent-muted' : 'text-[#1B1B1B]'}`}>
+              <div className={`text-xl font-extrabold ${isSoldOut ? 'text-agent-muted' : 'text-agent-ink-dark'}`}>
                 {d.ratePerPax != null ? `${Number(d.ratePerPax).toLocaleString('en-IN')}/-` : 'On request'}
               </div>
             </div>
@@ -280,7 +280,7 @@ export default function Departures() {
         <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-agent-accent-dark">
           <span className="h-px w-6 bg-agent-accent-dark" /> Curated Departures
         </div>
-        <h2 className="font-serif text-4xl font-bold leading-tight text-[#1B1B1B] sm:text-5xl">
+        <h2 className="font-serif text-4xl font-bold leading-tight text-agent-ink-dark sm:text-5xl">
           Fixed Group <span className="italic text-agent-accent-dark">Departure</span>
         </h2>
         <p className="mt-3 max-w-xl text-sm text-agent-muted">

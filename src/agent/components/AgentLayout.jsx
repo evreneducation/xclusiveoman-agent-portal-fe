@@ -84,7 +84,7 @@ function SidebarContent({ onNavigate, collapsed = false }) {
           className={`w-auto flex-none object-contain ${collapsed ? 'h-10' : 'h-12'}`}
         />
         {!collapsed && (
-          <span className="flex-none rounded-full border border-black/10 bg-[#241804] px-2.5 py-1 text-xs font-semibold uppercase text-[#F4C765] shadow-sm shadow-black/20">
+          <span className="flex-none rounded-full border border-black/10 bg-[#1C1C1C] px-2.5 py-1 text-xs font-semibold uppercase text-agent-accent shadow-sm shadow-black/20">
             Agent
           </span>
         )}
@@ -102,25 +102,19 @@ function SidebarContent({ onNavigate, collapsed = false }) {
               title={collapsed ? label : undefined}
             >
               {active && (
-                // Pure white read as a stark cutout against the gold
-                // gradient (screenshot feedback) — agent-accent-soft is
-                // already this palette's own pale cream tint (used
-                // elsewhere for badges/notification chips), so the active
-                // pill now reads as "a lighter shade of the same gold
-                // family" instead of an unrelated white block. A hairline
-                // dark ring (barely visible on white, does real work here)
-                // keeps its edge defined against the lighter parts of the
-                // gradient where the cream/gold contrast is otherwise soft.
+                // Crisp white pill on the solid #FFC15A rail — the cleanest
+                // read for the active item against the flat yellow. A
+                // hairline dark ring keeps its edge defined.
                 <motion.div
                   layoutId="agent-active-nav-pill"
-                  className="absolute inset-0 rounded-xl bg-agent-accent-soft shadow-md shadow-black/15 ring-1 ring-black/5"
+                  className="absolute inset-0 rounded-xl bg-white shadow-md shadow-black/15 ring-1 ring-black/5"
                   transition={{ type: 'spring', stiffness: 380, damping: 32 }}
                 />
               )}
               <span
                 className={`relative z-10 flex items-center gap-3 rounded-xl py-3 text-sm font-semibold transition-colors ${
                   collapsed ? 'justify-center px-0' : 'px-4'
-                } ${active ? 'text-[#3A2612]' : 'text-[#FFF8E8] hover:bg-black/10 hover:text-white'}`}
+                } ${active ? 'text-agent-ink-dark' : 'text-[#1C1C1C]/75 hover:bg-black/5 hover:text-agent-ink-dark'}`}
               >
                 <Icon className="flex-none" />
                 {!collapsed && label}
@@ -142,13 +136,13 @@ function SidebarContent({ onNavigate, collapsed = false }) {
             }`}
           />
           {!collapsed && (
-            <span className="text-[#241804]/70">{socketConnected ? 'Live connection active' : 'Connecting…'}</span>
+            <span className="text-[#1C1C1C]/70">{socketConnected ? 'Live connection active' : 'Connecting…'}</span>
           )}
         </div>
         {!collapsed && (
           <div className="px-1 text-xs">
-            <div className="font-semibold text-[#241804]">{user?.fullName}</div>
-            <div className="text-[#241804]/60">{user?.role}</div>
+            <div className="font-semibold text-[#1C1C1C]">{user?.fullName}</div>
+            <div className="text-[#1C1C1C]/60">{user?.role}</div>
           </div>
         )}
         <Button
@@ -184,7 +178,7 @@ export default function AgentLayout() {
         transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
         onMouseEnter={() => setCollapsed(false)}
         onMouseLeave={() => setCollapsed(true)}
-        className="sticky top-0 hidden h-screen flex-none flex-col bg-[linear-gradient(180deg,#E6B94D_0%,#D9A62A_55%,#BD8A1E_100%)] shadow-xl shadow-black/10 lg:flex"
+        className="sticky top-0 hidden h-screen flex-none flex-col bg-agent-accent shadow-xl shadow-black/10 lg:flex"
       >
         <SidebarContent collapsed={collapsed} />
       </motion.aside>
@@ -205,11 +199,11 @@ export default function AgentLayout() {
               animate={{ x: 0 }}
               exit={{ x: -288 }}
               transition={{ type: 'spring', stiffness: 320, damping: 34 }}
-              className="fixed inset-y-0 left-0 z-50 flex h-screen w-72 flex-none flex-col bg-[linear-gradient(180deg,#E6B94D_0%,#D9A62A_55%,#BD8A1E_100%)] shadow-2xl lg:hidden"
+              className="fixed inset-y-0 left-0 z-50 flex h-screen w-72 flex-none flex-col bg-agent-accent shadow-2xl lg:hidden"
             >
               <button
                 onClick={() => setMobileOpen(false)}
-                className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full border border-black/20 text-[#241804]"
+                className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full border border-black/20 text-[#1C1C1C]"
                 aria-label="Close menu"
               >
                 <CloseIcon width={16} height={16} />
@@ -222,10 +216,9 @@ export default function AgentLayout() {
 
       <div className="min-w-0 flex-1">
         {/* Top bar — back nav + current section label, sticky across pages.
-            Plain white with a solid gold underline (re-themed off the
-            previous tri-tone gradient) to match the reference design's
-            "white bar, gold accents" shell. */}
-        <div className="sticky top-0 z-30 flex items-center gap-3 border-b-2 border-[#D9A62A] bg-white px-4 py-3 shadow-sm lg:px-8">
+            Plain white with a solid #FFC15A underline, per the brand
+            guideline's "lines = yellow" rule. */}
+        <div className="sticky top-0 z-30 flex items-center gap-3 border-b-2 border-agent-accent bg-white px-4 py-3 shadow-sm lg:px-8">
           <button
             onClick={() => setMobileOpen(true)}
             className="flex h-9 w-9 flex-none items-center justify-center rounded-lg bg-agent-panel text-agent-ink lg:hidden"
@@ -235,12 +228,12 @@ export default function AgentLayout() {
           </button>
           <button
             onClick={() => navigate(-1)}
-            className="flex h-9 w-9 flex-none items-center justify-center rounded-full border border-agent-line-light text-[#241804] transition-colors hover:border-agent-accent hover:text-agent-accent-dark"
+            className="flex h-9 w-9 flex-none items-center justify-center rounded-full border border-agent-line-light text-agent-ink-dark transition-colors hover:border-agent-accent hover:text-agent-accent-dark"
             aria-label="Go back"
           >
             <LuArrowLeft size={17} />
           </button>
-          <div className="text-sm font-bold text-[#241804]">{activeItem?.label || 'Agent Portal'}</div>
+          <div className="text-sm font-bold text-agent-ink-dark">{activeItem?.label || 'Agent Portal'}</div>
           <div className="ml-auto">
             <NotificationBell
               api={api}

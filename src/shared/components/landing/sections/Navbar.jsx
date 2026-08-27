@@ -19,7 +19,7 @@ export function Navbar() {
         </nav>
 
         <PillButton
-          to="/login"
+          to="/agent"
           variant="solid"
           withArrow={false}
           className="bg-[#E8B84B] px-6 py-2.5 text-sm font-semibold text-[#1B1B1B] hover:bg-[#d9a93a]"

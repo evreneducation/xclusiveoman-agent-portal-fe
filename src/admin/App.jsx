@@ -39,7 +39,10 @@ export default function App() {
     <ToastProvider>
       <AuthProvider>
         <Routes>
-          <Route path="login" element={<Login />} />
+          {/* /admin IS the admin login (staff-only; agents never get an OTP
+              here). /admin/login kept as a redirect for old links. */}
+          <Route index element={<Login />} />
+          <Route path="login" element={<Navigate to="/admin" replace />} />
           <Route element={<ProtectedRoute />}>
             <Route element={<AdminLayout />}>
               <Route path="dashboard" element={<Dashboard />} />
@@ -88,7 +91,8 @@ export default function App() {
               </Route>
             </Route>
           </Route>
-          <Route index element={<Navigate to="/admin/dashboard" replace />} />
+          {/* index is the login above; unknown /admin/* subpaths fall through
+              to the dashboard (ProtectedRoute bounces to /admin if anon). */}
           <Route path="*" element={<Navigate to="/admin/dashboard" replace />} />
         </Routes>
       </AuthProvider>

@@ -13,7 +13,7 @@ export default function ProtectedRoute() {
   }
 
   if (status === 'anonymous') {
-    return <Navigate to="/admin/login" replace />;
+    return <Navigate to="/admin" replace />;
   }
 
   return <Outlet />;
