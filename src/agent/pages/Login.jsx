@@ -1,9 +1,13 @@
+import { Navigate } from 'react-router-dom';
 import { LoginModal } from '../../shared/components/LoginModal.jsx';
+import { useAuth } from '../context/AuthContext.jsx';
 
-// Single shared login screen (shared/components/LoginModal.jsx) — the exact
-// same one rendered at "/", /admin/login, and here. Nothing to configure:
-// LoginModal's own agentDestination default ("/agent/dashboard") already
-// matches this page's pre-existing post-login landing spot.
+// Agent Portal login — mounted at /agent (the AgentApp index route). Scoped
+// to travel agents (restrictTo="agent"): a staff/admin account that verifies
+// here is refused and pointed at /login instead. An already-signed-in agent
+// who lands on /agent skips straight to the dashboard.
 export default function Login() {
-  return <LoginModal />;
+  const { status } = useAuth();
+  if (status === 'authenticated') return <Navigate to="/agent/dashboard" replace />;
+  return <LoginModal restrictTo="agent" />;
 }

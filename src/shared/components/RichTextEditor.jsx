@@ -37,6 +37,8 @@ import {
   LuMinus,
   LuEraser,
   LuLink,
+  LuHighlighter,
+  LuX,
 } from 'react-icons/lu';
 
 // Portal-agnostic rich text field, built on TipTap (ProseMirror-based) —
@@ -44,22 +46,17 @@ import {
 // every "description"-shaped field across the app (catalog editors, support
 // tickets, quote notes, …) can use the same real document model + toolbar
 // instead of a plain <textarea>, rather than each field keeping its own
-// copy. TermsAndConditions.jsx now renders this with `toolbar="full"`;
-// everything else uses the lighter `toolbar="basic"` default.
+// copy. Every field gets the full toolbar — `toolbar="full"` is the default.
 //
-// `toolbar="full"` — every control TermsAndConditions.jsx's reference design
-// called for: undo/redo, font family/size, paragraph/heading format, line
-// height, bold/italic/underline/strike, sub/superscript, text/highlight
-// color, headings 1-3, alignment, lists, indent/outdent, emoji, image,
-// table, link, blockquote, horizontal rule, clear formatting.
-// `toolbar="basic"` (default) — bold/italic/underline/strike, bullet/
-// numbered list, link, blockquote, clear formatting, undo/redo. Enough
-// formatting for a catalog description or a support ticket without a full
-// CMS-page toolbar dominating a small field. Same StarterKit alone already
-// covers every command "basic" needs (bold/italic/underline/strike/lists/
-// link/blockquote/heading come bundled in TipTap v3's StarterKit, same as
-// "full" mode already relied on without importing them separately) — no
-// extra extensions to load for this mode.
+// `toolbar="full"` (default, used everywhere) — the complete control set:
+// undo/redo, font family/size, paragraph/heading format, line height, bold/
+// italic/underline/strike, sub/superscript, text/highlight color, headings
+// 1-3, alignment, lists, indent/outdent, emoji, image, table, link,
+// blockquote, horizontal rule, clear formatting.
+// `toolbar="basic"` — a trimmed toolbar (bold/italic/underline/strike,
+// bullet/numbered list, link, blockquote, clear formatting, undo/redo),
+// backed by StarterKit alone. Kept as an opt-in for any future compact
+// field; no call site passes it today.
 //
 // `size="sm"|"md"|"lg"` sets the editable area's min-height — "how much
 // text this particular field is expected to hold" is a per-field call the
@@ -160,9 +157,7 @@ function HighlightPicker({ editor }) {
   return (
     <div className="relative">
       <ToolbarButton title="Highlight color" onClick={() => setOpen((o) => !o)} active={open || active}>
-        <span className="flex h-4 w-4 items-center justify-center rounded-sm bg-[#FEF08A] text-[10px] font-bold text-[#713F12]">
-          H
-        </span>
+        <LuHighlighter size={15} />
       </ToolbarButton>
       {open && (
         <div className="absolute left-0 top-full z-20 mt-1 flex gap-1.5 rounded-lg border border-[#E4E9FB] bg-white p-2 shadow-lg">
@@ -188,9 +183,9 @@ function HighlightPicker({ editor }) {
               editor.chain().focus().unsetHighlight().run();
               setOpen(false);
             }}
-            className="flex h-6 w-6 items-center justify-center rounded-full border border-[#E4E9FB] text-[10px] text-[#94A3B8]"
+            className="flex h-6 w-6 items-center justify-center rounded-full border border-[#E4E9FB] text-[#94A3B8]"
           >
-            ✕
+            <LuX size={12} />
           </button>
         </div>
       )}
@@ -595,7 +590,7 @@ export function isEmptyHtml(html) {
  * fires on every edit. Renders nothing until TipTap has mounted (one tick
  * after first render), same as every other TipTap-based editor in this app.
  */
-export function RichTextEditor({ value, onChange, toolbar = 'basic', size = 'md', disabled = false, inkClassName = 'text-ink' }) {
+export function RichTextEditor({ value, onChange, toolbar = 'full', size = 'md', disabled = false, inkClassName = 'text-ink' }) {
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
 

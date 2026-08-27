@@ -18,6 +18,7 @@ import MiceProposalDetail from './pages/MiceProposalDetail.jsx';
 import Bookings from './pages/Bookings.jsx';
 import BookingDetail from './pages/BookingDetail.jsx';
 import Payment from './pages/Payment.jsx';
+import PaymentReturn from './pages/PaymentReturn.jsx';
 import Transactions from './pages/Transactions.jsx';
 import Notifications from './pages/Notifications.jsx';
 import Support from './pages/Support.jsx';
@@ -26,8 +27,15 @@ import Profile from './pages/Profile.jsx';
 export default function App() {
   return (
     <AuthProvider>
+      {/* Portal-wide brand type + ink: Europa Nuova body/headings on #222222,
+          scoped to the agent tree so admin/team keep the default stack. Every
+          agent page inherits from here — no per-page font class. */}
+      <div className="font-agent text-agent-ink">
       <Routes>
-        <Route path="login" element={<Login />} />
+        {/* /agent is the agent login (Sign up shown; staff are refused and
+            pointed at /login). /agent/login kept as a redirect for old links. */}
+        <Route index element={<Login />} />
+        <Route path="login" element={<Navigate to="/agent" replace />} />
         <Route path="register" element={<Register />} />
         {/* No forgot/reset-password routes — there's no password anywhere
             to forget or reset (email OTP is the sole sign-in mechanism). */}
@@ -55,6 +63,7 @@ export default function App() {
             <Route path="mice-requests/:id" element={<MiceProposalDetail />} />
             <Route path="bookings" element={<Bookings />} />
             <Route path="bookings/:bookingId" element={<BookingDetail />} />
+            <Route path="payments/return" element={<PaymentReturn />} />
             <Route path="payments/:bookingId" element={<Payment />} />
             <Route path="transactions" element={<Transactions />} />
             <Route path="notifications" element={<Notifications />} />
@@ -65,6 +74,7 @@ export default function App() {
         <Route index element={<Navigate to="/agent/dashboard" replace />} />
         <Route path="*" element={<Navigate to="/agent/dashboard" replace />} />
       </Routes>
+      </div>
     </AuthProvider>
   );
 }

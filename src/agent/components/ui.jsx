@@ -17,7 +17,7 @@ export function Button({ variant = 'default', className = '', ...props }) {
     default: 'border-agent-line-light bg-white text-agent-ink hover:border-agent-accent hover:bg-agent-panel',
     solid: 'border-transparent bg-agent-ink-dark text-white shadow-md shadow-black/10 hover:bg-agent-ink',
     accent:
-      'border-transparent bg-gradient-to-r from-[#E2A33B] to-[#F97316] text-white shadow-md shadow-[#E2A33B]/25 hover:border-transparent hover:opacity-90',
+      'border-transparent bg-agent-accent text-agent-ink-dark shadow-md shadow-agent-accent/30 hover:border-transparent hover:bg-agent-accent-dark',
     danger: 'border-[#FECACA] bg-[#FEF2F2] text-[#B91C1C] hover:border-[#EF4444] hover:bg-[#FEE2E2]',
   };
   return (
@@ -87,7 +87,7 @@ export function Tag({ active, className = '', children, ...props }) {
       className={`inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-semibold transition ${
         active
           ? 'border-agent-ink bg-agent-ink text-white shadow-sm'
-          : 'border-agent-line-light bg-white text-[#5a6d6a] hover:border-agent-line hover:text-agent-ink'
+          : 'border-agent-line-light bg-white text-agent-muted hover:border-agent-line hover:text-agent-ink'
       } ${className}`}
       {...props}
     >

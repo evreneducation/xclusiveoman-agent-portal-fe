@@ -22,7 +22,7 @@ export function CtaSection() {
               Create a free trade account to access net rates, full itinerary PDFs and our booking portal.
             </p>
           </div>
-          <PillButton to="/login" variant="solid" className="whitespace-nowrap">
+          <PillButton to="/agent" variant="solid" className="whitespace-nowrap">
             Sign Up For Trade Access / Log In
           </PillButton>
         </div>

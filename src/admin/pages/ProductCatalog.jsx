@@ -17,6 +17,7 @@ import {
 import { api } from '../api/client.js';
 import { Button, Card, ErrorText, FieldLabel, Pagination, Table, TextInput } from '../components/ui.jsx';
 import { formatCurrency, formatDateRange, formatTime, getFdBadges } from '../../shared/fdPackage/index.js';
+import { formatDateTime } from '../../shared/components/formatDateTime.js';
 import { RichTextDisplay, isEmptyHtml } from '../../shared/components/RichTextEditor.jsx';
 
 const TABS = [
@@ -68,6 +69,23 @@ function StatusBadge({ status }) {
     >
       {value}
     </span>
+  );
+}
+
+// Created / Updated cells shared by all five catalog tables below. FD
+// packages come back camelCase (createdAt/updatedAt — the latter added to
+// toPublicPackage in fdPackagesAdmin.controller.js); hotels/tours/activities/
+// transfers are raw `SELECT *` rows, so snake_case — accept either.
+function TimestampCells({ row }) {
+  return (
+    <>
+      <td className="px-3 py-3 align-middle whitespace-nowrap text-[11px] text-muted">
+        {formatDateTime(row.createdAt ?? row.created_at)}
+      </td>
+      <td className="px-3 py-3 align-middle whitespace-nowrap text-[11px] text-muted">
+        {formatDateTime(row.updatedAt ?? row.updated_at)}
+      </td>
+    </>
   );
 }
 
@@ -278,7 +296,7 @@ function FdPackagesTab() {
       ) : (
         <>
           <Table
-            columns={['Package Name', 'Theme', 'Departure Dates', 'Net Rate', 'Status', { label: 'Actions', align: 'right' }]}
+            columns={['Package Name', 'Theme', 'Departure Dates', 'Net Rate', 'Status', 'Created', 'Updated', { label: 'Actions', align: 'right' }]}
             rows={items}
             renderRow={(pkg) => {
               const dateRange = formatDateRange(pkg.firstDepartureDate, pkg.lastDepartureDate);
@@ -300,6 +318,7 @@ function FdPackagesTab() {
                       {pkg.status}
                     </span>
                   </td>
+                  <TimestampCells row={pkg} />
                   <td className="px-3 py-3 align-middle">
                     <div className="flex flex-nowrap items-center justify-end gap-2">
                       <Button size="sm" className="whitespace-nowrap" onClick={() => setPreviewing(pkg)}>
@@ -483,7 +502,7 @@ function HotelsTab() {
       ) : (
         <>
           <Table
-            columns={['Hotel Name', 'Location', 'Category', 'Price / Night', 'MICE', 'Status', { label: 'Actions', align: 'right' }]}
+            columns={['Hotel Name', 'Location', 'Category', 'Price / Night', 'MICE', 'Status', 'Created', 'Updated', { label: 'Actions', align: 'right' }]}
             rows={items}
             renderRow={(hotel) => (
               <tr key={hotel.id} className="border-b border-line-light transition-colors last:border-0 hover:bg-panel/50">
@@ -505,6 +524,7 @@ function HotelsTab() {
                 <td className="px-3 py-3 align-middle">
                   <StatusBadge status={hotel.status} />
                 </td>
+                <TimestampCells row={hotel} />
                 <td className="px-3 py-3 align-middle">
                   <div className="flex flex-nowrap items-center justify-end gap-2">
                     <Button size="sm" className="whitespace-nowrap" onClick={() => setPreviewing(hotel)}>
@@ -644,7 +664,7 @@ function ToursTab() {
       ) : (
         <>
           <Table
-            columns={['Tour Name', 'City', 'Duration', 'Category', 'Price', 'Status', { label: 'Actions', align: 'right' }]}
+            columns={['Tour Name', 'City', 'Duration', 'Category', 'Price', 'Status', 'Created', 'Updated', { label: 'Actions', align: 'right' }]}
             rows={items}
             renderRow={(tour) => (
               <tr key={tour.id} className="border-b border-line-light transition-colors last:border-0 hover:bg-panel/50">
@@ -656,6 +676,7 @@ function ToursTab() {
                 <td className="px-3 py-3 align-middle">
                   <StatusBadge status={tour.status} />
                 </td>
+                <TimestampCells row={tour} />
                 <td className="px-3 py-3 align-middle">
                   <div className="flex flex-nowrap items-center justify-end gap-2">
                     <Button size="sm" className="whitespace-nowrap" onClick={() => setPreviewing(tour)}>
@@ -795,7 +816,7 @@ function ActivitiesTab() {
       ) : (
         <>
           <Table
-            columns={['Activity Name', 'City', 'Duration', 'Price per pax', 'Status', { label: 'Actions', align: 'right' }]}
+            columns={['Activity Name', 'City', 'Duration', 'Price per pax', 'Status', 'Created', 'Updated', { label: 'Actions', align: 'right' }]}
             rows={items}
             renderRow={(activity) => (
               <tr key={activity.id} className="border-b border-line-light transition-colors last:border-0 hover:bg-panel/50">
@@ -808,6 +829,7 @@ function ActivitiesTab() {
                 <td className="px-3 py-3 align-middle">
                   <StatusBadge status={activity.status} />
                 </td>
+                <TimestampCells row={activity} />
                 <td className="px-3 py-3 align-middle">
                   <div className="flex flex-nowrap items-center justify-end gap-2">
                     <Button size="sm" className="whitespace-nowrap" onClick={() => setPreviewing(activity)}>
@@ -946,7 +968,7 @@ function TransfersTab() {
       ) : (
         <>
           <Table
-            columns={['Name', 'Type', 'Vehicle Class', 'City', 'Price', 'Status', { label: 'Actions', align: 'right' }]}
+            columns={['Name', 'Type', 'Vehicle Class', 'City', 'Price', 'Status', 'Created', 'Updated', { label: 'Actions', align: 'right' }]}
             rows={items}
             renderRow={(transfer) => (
               <tr key={transfer.id} className="border-b border-line-light transition-colors last:border-0 hover:bg-panel/50">
@@ -958,6 +980,7 @@ function TransfersTab() {
                 <td className="px-3 py-3 align-middle">
                   <StatusBadge status={transfer.status} />
                 </td>
+                <TimestampCells row={transfer} />
                 <td className="px-3 py-3 align-middle">
                   <div className="flex flex-nowrap items-center justify-end gap-2">
                     <Button size="sm" className="whitespace-nowrap" onClick={() => setPreviewing(transfer)}>

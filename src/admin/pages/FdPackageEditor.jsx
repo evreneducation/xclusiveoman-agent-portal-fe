@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -476,7 +476,7 @@ function resolveHotelPerPaxRate(hotel) {
 
 // Mirrors the backend's computeNetRatePerPax (fdPackages.model.js) so the
 // "auto" net rate updates live as items are added/removed, without waiting
-// on "Save Itinerary" or a round trip. `catalogs` is the plural
+// on the itinerary autosave or a round trip. `catalogs` is the plural
 // {hotels, tours, transfers, activities} shape ItineraryManager already
 // fetches; catalog rows come straight off the DB (snake_case), same as the
 // backend reads them.
@@ -779,11 +779,28 @@ function isDayComplete(items, notes) {
   return items.length > 0 || !!(notes || '').trim();
 }
 
-function ItineraryManager({ fdPackageId, itinerary, duration, onChange, onComputedRateChange }) {
+function ItineraryManager({ fdPackageId, itinerary, duration, onChange, onComputedRateChange, ref }) {
   const [itineraryItems, setItineraryItems] = useState(() => deserializeItinerary(itinerary).items);
   const [dayNotes, setDayNotes] = useState(() => deserializeItinerary(itinerary).dayNotes);
   const [saving, setSaving] = useState(false);
   const [open, setOpen] = useState(true);
+
+  const toast = useToast();
+  // Debounced autosave for the day-by-day itinerary — same shape as the
+  // parent editor's Task-2 form autosave, replacing the old explicit "Save
+  // Itinerary" button. `hasUserEditedRef` is flipped only by the day/item/
+  // note mutators below (never the initial load, nor the parent handing back
+  // a just-saved itinerary), so opening a package never re-PUTs what it just
+  // loaded.
+  const hasUserEditedRef = useRef(false);
+  const autosaveTimerRef = useRef(null);
+  // Consumed once by the reload effect below: our own autosave calls
+  // onChange(saved), which flows straight back in as a new `itinerary` prop —
+  // this stops that round trip from resetting local state (and regenerating
+  // item keys) out from under an edit still in progress.
+  const skipNextReloadRef = useRef(false);
+  // Latest serialized payload, read synchronously by the unmount flush.
+  const latestPayloadRef = useRef(null);
 
   const [hotels, setHotels] = useState([]);
   const [tours, setTours] = useState([]);
@@ -834,9 +851,15 @@ function ItineraryManager({ fdPackageId, itinerary, duration, onChange, onComput
     onComputedRateChange?.(computeItineraryNetRate(itineraryItems, { hotels, tours, transfers, activities }));
   }, [itineraryItems, hotels, tours, transfers, activities, catalogLoading, onComputedRateChange]);
 
-  // Reload from the DB whenever the parent hands us a freshly fetched (or
-  // just-saved) itinerary — e.g. opening the editor for an existing package.
+  // Reload from the DB whenever the parent hands us a freshly fetched
+  // itinerary — e.g. opening the editor for an existing package. Skipped for
+  // the prop change our own autosave triggers (see skipNextReloadRef), so an
+  // in-progress edit isn't reset from under the admin ~1s after they type.
   useEffect(() => {
+    if (skipNextReloadRef.current) {
+      skipNextReloadRef.current = false;
+      return;
+    }
     const { items, dayNotes: loaded } = deserializeItinerary(itinerary);
     setItineraryItems(items);
     setDayNotes(loaded);
@@ -863,6 +886,7 @@ function ItineraryManager({ fdPackageId, itinerary, duration, onChange, onComput
       }
       setItineraryItems((items) => items.filter((it) => it.dayNumber <= dayCount));
       setDayNotes((notes) => Object.fromEntries(Object.entries(notes).filter(([day]) => Number(day) <= dayCount)));
+      hasUserEditedRef.current = true; // persist the trim on the next autosave tick
       lastSyncedDays.current = dayCount;
     }, DURATION_SYNC_DELAY_MS);
     return () => clearTimeout(timer);
@@ -870,40 +894,116 @@ function ItineraryManager({ fdPackageId, itinerary, duration, onChange, onComput
   }, [dayCount]);
 
   function addItemToDay(dayNumber, type, id) {
+    hasUserEditedRef.current = true;
     setItineraryItems((items) => addItineraryItem(items, { type, id, dayNumber }));
   }
 
   function removeItemFromDay(key) {
+    hasUserEditedRef.current = true;
     setItineraryItems((items) => removeItineraryItemByKey(items, key));
   }
 
   function updateItemNoteByKey(key, note) {
+    hasUserEditedRef.current = true;
     setItineraryItems((items) => updateItineraryItemNote(items, key, note));
   }
 
   function setHotelForDayNumber(dayNumber, hotelId) {
+    hasUserEditedRef.current = true;
     setItineraryItems((items) =>
       hotelId ? setHotelForDay(items, dayNumber, hotelId) : items.filter((it) => !(it.dayNumber === dayNumber && it.type === 'hotel')),
     );
   }
 
-  async function save() {
-    setSaving(true);
-    try {
-      const days = serializeItinerary(itineraryItems, dayNotes, dayCount);
-      const { itinerary: saved } = await api.put(`/admin/fd-packages/${fdPackageId}/itinerary`, { days });
-      onChange(saved);
-    } finally {
-      setSaving(false);
-    }
+  function updateDayNote(dayNumber, value) {
+    hasUserEditedRef.current = true;
+    setDayNotes((n) => ({ ...n, [dayNumber]: value }));
   }
+
+  // PUT the current itinerary. Shared by the debounce, the imperative flush
+  // (parent calls it before publish / leaving), and the unload handlers.
+  async function persistItinerary() {
+    const days = serializeItinerary(itineraryItems, dayNotes, dayCount);
+    const { itinerary: saved } = await api.put(`/admin/fd-packages/${fdPackageId}/itinerary`, { days });
+    skipNextReloadRef.current = true;
+    onChange(saved);
+    return saved;
+  }
+
+  latestPayloadRef.current = { days: serializeItinerary(itineraryItems, dayNotes, dayCount), dayCount };
+
+  // Debounced ~1s after the admin stops editing days — replaces the old
+  // explicit "Save Itinerary" button. Never fires on load (hasUserEditedRef)
+  // or before Duration yields a day count.
+  useEffect(() => {
+    if (!hasUserEditedRef.current || dayCount === 0) return undefined;
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    autosaveTimerRef.current = setTimeout(async () => {
+      setSaving(true);
+      try {
+        await persistItinerary();
+      } catch (err) {
+        toast.error(describeApiError(err));
+      } finally {
+        setSaving(false);
+      }
+    }, 1000);
+    return () => {
+      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itineraryItems, dayNotes]);
+
+  // Parent (handlePublish / handleBackToCatalog) awaits this so the publish
+  // gate and the next catalog list read never run against a ~1s-stale
+  // itinerary.
+  useImperativeHandle(ref, () => ({
+    // Resolves to the freshly-saved itinerary when a flush happened, else
+    // null — the parent uses it to run the publish gate against current data
+    // (React state from onChange() above hasn't re-rendered yet at that
+    // point).
+    async flush() {
+      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+      if (hasUserEditedRef.current && dayCount > 0) return persistItinerary();
+      return null;
+    },
+  }));
+
+  // Best-effort catch for the two moments a pending debounce would be lost:
+  // an actual page refresh/tab close (keepalive PUT), and this editor
+  // unmounting via an in-app navigation (the []-deps cleanup below, reading
+  // the latest payload from a ref).
+  useEffect(() => {
+    function saveOnUnload() {
+      if (!hasUserEditedRef.current) return;
+      const { days, dayCount: dc } = latestPayloadRef.current || {};
+      if (!dc) return;
+      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+      const token = getAccessToken();
+      fetch(`/api/admin/fd-packages/${fdPackageId}/itinerary`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        credentials: 'include',
+        keepalive: true,
+        body: JSON.stringify({ days }),
+      }).catch(() => {});
+    }
+    window.addEventListener('pagehide', saveOnUnload);
+    window.addEventListener('beforeunload', saveOnUnload);
+    return () => {
+      window.removeEventListener('pagehide', saveOnUnload);
+      window.removeEventListener('beforeunload', saveOnUnload);
+      saveOnUnload();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fdPackageId]);
 
   return (
     <CollapsibleSection icon={LuMap} title="Day-by-day itinerary builder" open={open} onToggle={() => setOpen((o) => !o)}>
       <p className="mb-3 text-[10px] text-muted">
         {dayCount
           ? `${dayCount} day${dayCount === 1 ? '' : 's'}, generated from Duration above. Each day picks its own hotel plus tours/transfers/activities straight from the catalog.`
-          : 'Set a Duration above (e.g. "7N/8D") to generate day sections.'}
+          : 'Set a Duration above (e.g. "7N") to generate day sections.'}
       </p>
       {dayCount === 0 ? (
         <p className="rounded-md border border-dashed border-line-light bg-panel/40 p-4 text-center text-sm text-muted">
@@ -934,7 +1034,7 @@ function ItineraryManager({ fdPackageId, itinerary, duration, onChange, onComput
             items={itemsForDay(itineraryItems, activeDay)}
             catalogs={{ hotels, tours, transfers, activities }}
             notes={dayNotes[activeDay] || ''}
-            onNotesChange={(value) => setDayNotes((n) => ({ ...n, [activeDay]: value }))}
+            onNotesChange={(value) => updateDayNote(activeDay, value)}
             addItem={(type, id) => addItemToDay(activeDay, type, id)}
             removeItem={removeItemFromDay}
             updateNote={updateItemNoteByKey}
@@ -942,11 +1042,7 @@ function ItineraryManager({ fdPackageId, itinerary, duration, onChange, onComput
           />
         </div>
       )}
-      <div className="mt-3 flex gap-2">
-        <Button variant="accent" disabled={saving || dayCount === 0} onClick={save}>
-          {saving ? 'Saving…' : 'Save Itinerary'}
-        </Button>
-      </div>
+      {saving && <p className="mt-3 text-[10px] font-semibold text-muted">Saving itinerary…</p>}
     </CollapsibleSection>
   );
 }
@@ -1077,7 +1173,7 @@ function FlightsSection({ form, update, onComputedRateChange }) {
 // automatically off the item, never typed by hand), unchecking removes it.
 // Reused for Activities/Tours/Transfers below (AddonsManager) — only the
 // catalog list, id field, and display price field differ per type.
-const ADDON_ID_FIELD = { activity: 'activityId', tour: 'tourId', transfer: 'transferId', flight: 'flightId' };
+const ADDON_ID_FIELD = { activity: 'activityId', tour: 'tourId', transfer: 'transferId', flight: 'flightId', meal: 'mealId' };
 const ADDON_PRICE_FIELD = { activity: 'price_per_pax', tour: 'price', transfer: 'price', flight: 'price' };
 
 // Per-card color identity (icon avatar, "N selected" badge, selected-item
@@ -1342,19 +1438,14 @@ function CollapsibleSection({
   );
 }
 
-// Task 4/5 — replaces both the old AddonsManager (freeform name+price
-// entry) and the separate Meals card that used to sit below this section:
-// Activities/Tours/Transfers are now real fd_addons rows picked by
-// checkbox, priced straight from the catalog; Visa and Meals (Lunch/Dinner)
-// are simple "included or not" checkboxes on the package itself
-// (form.visaEnabled / lunchMealId / dinnerMealId) — no manual price entry
-// and, for meals, no headcount/day-count either, since a real pax is only
-// known once an agent actually books (agent/pages/DepartureDetail.jsx's
-// Traveler Details step). Meals/Visa cost is computed here purely for the
-// live Net rate preview (mirrors the backend's own resolveRatePerPax /
-// computeFdMealsPerPax, utils/meals.js — kept in sync by hand since this is
-// a client-side preview, not the source of truth); the real charge is
-// resolved server-side at booking time either way.
+// Activities/Tours/Transfers/Flights/Meals are all real fd_addons rows now,
+// picked by checkbox and priced straight from the catalog (meals: catalog
+// price_per_day × the package's Duration — see 0075). They're opt-in extras
+// the agent applies at booking, so none of them touch the advertised Net
+// rate. Visa is still a simple "included or not" flag on the package itself
+// (form.visaEnabled), the one AddonsManager inclusion that IS folded into
+// the live Net rate preview (mirrors the backend's resolveRatePerPax —
+// visaRatePerPax in the parent).
 function AddonsManager({ fdPackageId, addons, onChange, form, update, duration, onComputedRateChange, addonsEnabled }) {
   const [activities, setActivities] = useState([]);
   const [tours, setTours] = useState([]);
@@ -1364,14 +1455,11 @@ function AddonsManager({ fdPackageId, addons, onChange, form, update, duration, 
   const [meals, setMeals] = useState([]);
   const [visa, setVisa] = useState(null);
   const [loading, setLoading] = useState(true);
-  // Visa/Meals collapsible cards default closed, then force themselves open
-  // exactly once the moment loading finishes if this package already has a
-  // value set — so opening an already-configured package doesn't look like
-  // that setting vanished, but a brand-new package starts clean/collapsed.
-  // Only ever forces open, never closed, so a manual collapse afterward
-  // always sticks.
+  // Visa's collapsible card defaults closed, then forces itself open once
+  // the moment loading finishes if this package already has visa enabled —
+  // so opening an already-configured package doesn't look like that setting
+  // vanished. Only ever forces open, so a manual collapse afterward sticks.
   const [visaOpen, setVisaOpen] = useState(false);
-  const [mealsOpen, setMealsOpen] = useState(false);
   // Independent of addonsEnabled — that's what shows/hides this whole card
   // in the first place; this just lets the admin collapse it locally once
   // it's on, same "click the heading" behavior as every other section.
@@ -1409,32 +1497,34 @@ function AddonsManager({ fdPackageId, addons, onChange, form, update, duration, 
     }
   }
 
-  // "The" lunch/dinner/visa entry — one catalog row is expected per
-  // meal_type (and Visa has only ever the one row), so there's nothing else
-  // for the admin to choose between — see MealsManager's old identical
-  // comment, this replaces it.
+  // "The" lunch/dinner/visa entry — one catalog row per meal_type (and Visa
+  // has only ever the one row), so there's nothing else for the admin to
+  // choose between. Meals are opt-in fd_addons rows now (0075): toggling a
+  // meal checkbox adds/removes an fd_addons row priced price_per_day ×
+  // Duration, exactly like the activity/tour/transfer add-on cards.
   const lunchMeal = meals.find((m) => m.meal_type === 'lunch');
   const dinnerMeal = meals.find((m) => m.meal_type === 'dinner');
   const dayCount = parseDurationDays(duration);
+  const lunchAddon = addons.find((a) => a.mealId && lunchMeal && a.mealId === lunchMeal.id);
+  const dinnerAddon = addons.find((a) => a.mealId && dinnerMeal && a.mealId === dinnerMeal.id);
 
-  function mealPerPax(meal, mealId) {
-    return meal && mealId && dayCount ? Number(meal.price_per_day || 0) * dayCount : 0;
+  function mealPreviewPerPax(meal) {
+    return meal && dayCount ? Number(meal.price_per_day || 0) * dayCount : 0;
   }
-  const mealsAndVisaPerPax =
-    mealPerPax(lunchMeal, form.lunchMealId) +
-    mealPerPax(dinnerMeal, form.dinnerMealId) +
-    (form.visaEnabled ? Number(visa?.price_per_person || 0) : 0);
+
+  // Only Visa is folded into the package's advertised Net rate now — meals
+  // sit in the Add-ons total instead.
+  const visaPerPax = form.visaEnabled ? Number(visa?.price_per_person || 0) : 0;
 
   useEffect(() => {
     if (loading) return;
-    onComputedRateChange?.(mealsAndVisaPerPax);
+    onComputedRateChange?.(visaPerPax);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mealsAndVisaPerPax, loading]);
+  }, [visaPerPax, loading]);
 
   useEffect(() => {
     if (loading) return;
     if (form.visaEnabled) setVisaOpen(true);
-    if (form.lunchMealId != null || form.dinnerMealId != null) setMealsOpen(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading]);
 
@@ -1459,7 +1549,9 @@ function AddonsManager({ fdPackageId, addons, onChange, form, update, duration, 
           open={addonsSectionOpen}
           onToggle={() => setAddonsSectionOpen((o) => !o)}
         >
-          <p className="-mt-1 mb-4 text-xs text-muted">Select the add-on activities, tours, transfers and flights to include in this package.</p>
+          <p className="-mt-1 mb-4 text-xs text-muted">
+            Select the add-on activities, tours, transfers, flights and meals the agent can pick at booking.
+          </p>
 
           {loading ? (
             <p className="text-sm text-muted">Loading catalog…</p>
@@ -1534,6 +1626,46 @@ function AddonsManager({ fdPackageId, addons, onChange, form, update, duration, 
                     />
                   </>
                 )}
+
+                {/* Meals — lunch/dinner offered as opt-in add-ons (0075).
+                    Two catalog rows (one per meal_type), so a checkbox pair
+                    rather than a multi-select card, but the same box shape as
+                    the cards above so it sits in the grid cleanly. Priced per
+                    pax at the catalog rate × this package's Duration; never
+                    part of the Net rate. */}
+                <div className="flex flex-col gap-3 rounded-xl border border-line-light bg-white p-4">
+                  <div className="flex items-center gap-2.5">
+                    <div className="flex h-9 w-9 flex-none items-center justify-center rounded-lg bg-[#FEF3C7]">
+                      <LuUtensils size={16} className="text-[#D97706]" />
+                    </div>
+                    <div>
+                      <div className="text-sm font-bold text-ink">Meals</div>
+                      <p className="text-[11px] text-muted">Lunch / dinner the agent can add at booking</p>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <Checkbox
+                      checked={!!lunchAddon}
+                      onChange={(v) => (lunchMeal ? toggleAddon('meal', lunchMeal, v ? undefined : lunchAddon) : undefined)}
+                      label="Offer lunch"
+                      hint={
+                        lunchMeal?.price_per_day != null
+                          ? `${formatCurrency(lunchMeal.price_per_day)}/pax/day${dayCount ? ` · ${formatCurrency(mealPreviewPerPax(lunchMeal))}/pax for ${dayCount} day${dayCount === 1 ? '' : 's'}` : ' · set a Duration to price it'}`
+                          : 'No lunch price configured yet'
+                      }
+                    />
+                    <Checkbox
+                      checked={!!dinnerAddon}
+                      onChange={(v) => (dinnerMeal ? toggleAddon('meal', dinnerMeal, v ? undefined : dinnerAddon) : undefined)}
+                      label="Offer dinner"
+                      hint={
+                        dinnerMeal?.price_per_day != null
+                          ? `${formatCurrency(dinnerMeal.price_per_day)}/pax/day${dayCount ? ` · ${formatCurrency(mealPreviewPerPax(dinnerMeal))}/pax for ${dayCount} day${dayCount === 1 ? '' : 's'}` : ' · set a Duration to price it'}`
+                          : 'No dinner price configured yet'
+                      }
+                    />
+                  </div>
+                </div>
               </div>
 
               <div className="flex items-center justify-between rounded-xl border border-[#E4E9FB] bg-[#F7F8FF] px-4 py-3.5">
@@ -1556,10 +1688,9 @@ function AddonsManager({ fdPackageId, addons, onChange, form, update, duration, 
         </CollapsibleSection>
       )}
 
-      {/* Visa/Meals — their own heading each, outside Add-ons & Inclusions,
-          always shown regardless of addonsEnabled (they're plain package
-          inclusions, not priced add-ons). Each collapsible — click the
-          heading to open it and choose, click again to close. */}
+      {/* Visa — its own heading, outside Add-ons & Inclusions, always shown
+          regardless of addonsEnabled (it's a plain package inclusion folded
+          into the Net rate, not an opt-in add-on like Meals). */}
       <CollapsibleSection
         icon={LuShieldCheck}
         iconBg="bg-[#DBEAFE]"
@@ -1576,32 +1707,8 @@ function AddonsManager({ fdPackageId, addons, onChange, form, update, duration, 
         />
       </CollapsibleSection>
 
-      <CollapsibleSection
-        icon={LuUtensils}
-        iconBg="bg-[#FEF3C7]"
-        iconColor="text-[#D97706]"
-        title="Meals"
-        open={mealsOpen}
-        onToggle={() => setMealsOpen((o) => !o)}
-      >
-        <div className="space-y-1.5">
-          <Checkbox
-            checked={form.lunchMealId != null}
-            onChange={(v) => update('lunchMealId', v ? (lunchMeal?.id ?? null) : null)}
-            label="Lunch included"
-            hint={lunchMeal?.price_per_day != null ? `${formatCurrency(lunchMeal.price_per_day)} / pax / day` : 'No lunch price configured yet'}
-          />
-          <Checkbox
-            checked={form.dinnerMealId != null}
-            onChange={(v) => update('dinnerMealId', v ? (dinnerMeal?.id ?? null) : null)}
-            label="Dinner included"
-            hint={dinnerMeal?.price_per_day != null ? `${formatCurrency(dinnerMeal.price_per_day)} / pax / day` : 'No dinner price configured yet'}
-          />
-        </div>
-      </CollapsibleSection>
-
-      {mealsAndVisaPerPax > 0 && (
-        <p className="text-xs text-muted">Meals + visa add {formatCurrency(mealsAndVisaPerPax)}/pax to the Net rate below.</p>
+      {visaPerPax > 0 && (
+        <p className="text-xs text-muted">Visa adds {formatCurrency(visaPerPax)}/pax to the Net rate below.</p>
       )}
     </div>
   );
@@ -1655,7 +1762,7 @@ function toFormState(fdPackage) {
 // autosave PATCH while the admin was still mid-edit, well before Publish, so
 // they're left out of the payload entirely instead (standard partial-update:
 // the backend keeps whatever it already has for an omitted field).
-const NULLABLE_FORM_FIELDS = new Set(['ratePerPax', 'onwardFlightId', 'returnFlightId', 'lunchMealId', 'dinnerMealId']);
+const NULLABLE_FORM_FIELDS = new Set(['ratePerPax', 'onwardFlightId', 'returnFlightId']);
 
 function buildAutosavePayload(form) {
   const payload = {};
@@ -1695,12 +1802,14 @@ export default function FdPackageEditor() {
   // from `form` so this never gets sent back to the server as if it were
   // the override.
   const [itineraryRatePerPax, setItineraryRatePerPax] = useState(null);
-  const [mealsRatePerPax, setMealsRatePerPax] = useState(null);
+  // Visa is the only AddonsManager inclusion still folded into the Net rate —
+  // meals became opt-in add-ons (0075) and show in the Add-ons total instead.
+  const [visaRatePerPax, setVisaRatePerPax] = useState(null);
   const [flightsRatePerPax, setFlightsRatePerPax] = useState(null);
   const computedRatePerPax =
-    itineraryRatePerPax == null || mealsRatePerPax == null || flightsRatePerPax == null
+    itineraryRatePerPax == null || visaRatePerPax == null || flightsRatePerPax == null
       ? null
-      : itineraryRatePerPax + mealsRatePerPax + flightsRatePerPax;
+      : itineraryRatePerPax + visaRatePerPax + flightsRatePerPax;
 
   // Task 2 — auto-save to draft. `hasUserEditedRef` is set only by update()
   // below (a real, user-driven field change) — never by the initial load's
@@ -1709,6 +1818,9 @@ export default function FdPackageEditor() {
   const hasUserEditedRef = useRef(false);
   const autosaveTimerRef = useRef(null);
   const [autosaving, setAutosaving] = useState(false);
+  // Lets handlePublish / handleBackToCatalog flush the itinerary builder's
+  // own debounced autosave before they read `itinerary` or navigate away.
+  const itineraryRef = useRef(null);
 
   useEffect(() => {
     if (isNew) {
@@ -1807,6 +1919,7 @@ export default function FdPackageEditor() {
 
   async function handleBackToCatalog() {
     await flushAutosave();
+    await itineraryRef.current?.flush().catch(() => {});
     navigate('/admin/catalog');
   }
 
@@ -1830,25 +1943,29 @@ export default function FdPackageEditor() {
     if (itineraryHasItemType(itinerary, 'tour')) seeded.push('Tour as per itinerary');
     if (itineraryHasItemType(itinerary, 'transfer')) seeded.push('Travel as per itinerary');
     if (itineraryHasItemType(itinerary, 'activity')) seeded.push('Activity as per itinerary');
-    if (form.lunchMealId || form.dinnerMealId) seeded.push('Meals');
+    // Meals are opt-in add-ons now (0075) — not a default inclusion, so no
+    // longer auto-seeded here.
     if (form.visaEnabled) seeded.push('Visa assistance');
     if (seeded.length > 0) update('inclusions', textFromLines(seeded));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [itinerary, form.lunchMealId, form.dinnerMealId, form.visaEnabled, form.inclusions]);
+  }, [itinerary, form.visaEnabled, form.inclusions]);
 
   // Blind pricing aside, the itinerary is the one thing PRD explicitly
   // requires before a package goes live (FGD-2 / ADM-6 catalog screens both
   // show the full day-by-day plan). Checked against `itinerary` — the last
-  // saved state from "Save Itinerary" above — not any unsaved in-progress edit.
+  // autosaved state; handlePublish awaits itineraryRef.current.flush() first
+  // and passes the freshly-saved shape in, so a mid-edit publish still sees
+  // current data rather than a ~1s-stale copy.
   // `itinerary` is now the { dayNumber, notes, items } shape (see
   // ItineraryManager above) — days with neither notes nor items are omitted
   // entirely rather than kept as an empty row, so "every day has content" is
   // checked by looking each day 1..targetDays up rather than by length.
-  function findItineraryPublishError() {
-    if (!itinerary.length) return 'Add the day-by-day itinerary before publishing.';
+  function findItineraryPublishError(itineraryOverride) {
+    const it = itineraryOverride || itinerary;
+    if (!it.length) return 'Add the day-by-day itinerary before publishing.';
     const targetDays = parseDurationDays(form.duration);
     if (!targetDays) return null;
-    const byDay = new Map(itinerary.map((d) => [d.dayNumber, d]));
+    const byDay = new Map(it.map((d) => [d.dayNumber, d]));
     for (let n = 1; n <= targetDays; n++) {
       const day = byDay.get(n);
       const items = day?.items || [];
@@ -1892,7 +2009,17 @@ export default function FdPackageEditor() {
   // Task 2 — "Save as Draft" is gone (autosave above covers it); this is now
   // just the one remaining explicit action, publishing.
   async function handlePublish() {
-    const itineraryError = findItineraryPublishError();
+    // Flush any pending itinerary autosave so the publish gate checks the
+    // current day-by-day plan, not a ~1s-stale copy. flush() returns the
+    // just-saved itinerary (state from onChange hasn't re-rendered yet).
+    let flushedItinerary = null;
+    try {
+      flushedItinerary = await itineraryRef.current?.flush();
+    } catch (err) {
+      toast.error(describeApiError(err));
+      return;
+    }
+    const itineraryError = findItineraryPublishError(flushedItinerary);
     if (itineraryError) {
       toast.error(itineraryError);
       return;
@@ -1945,6 +2072,7 @@ export default function FdPackageEditor() {
           <>
             <DepartureDatesManager fdPackageId={packageId} dates={dates} onChange={setDates} />
             <ItineraryManager
+              ref={itineraryRef}
               fdPackageId={packageId}
               itinerary={itinerary}
               duration={form.duration}
@@ -1972,7 +2100,7 @@ export default function FdPackageEditor() {
               form={form}
               update={update}
               duration={form.duration}
-              onComputedRateChange={setMealsRatePerPax}
+              onComputedRateChange={setVisaRatePerPax}
               addonsEnabled={addonsEnabled}
             />
           </>

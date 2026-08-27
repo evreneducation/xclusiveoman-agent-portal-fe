@@ -51,7 +51,7 @@ export function Hero() {
               stack instead and the overlap only kicks in at `sm:`. */}
           <div className="mt-10 flex flex-col items-start gap-3 text-sm font-semibold sm:mt-16 sm:flex-row sm:items-center sm:gap-0 sm:text-base">
             <Link
-              to="/login"
+              to="/agent"
               className="relative z-10 whitespace-nowrap rounded-full bg-[#E8B84B] px-6 py-4 text-[#1B2333] transition-colors hover:bg-[#d9a93a] sm:px-8 sm:py-6"
             >
               Apply for Trade Access

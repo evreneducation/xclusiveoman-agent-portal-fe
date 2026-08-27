@@ -4,8 +4,53 @@
 
 /* Tailwind-only per the doc's styling rule — this file holds only the three
    directives above plus base element defaults that Tailwind's preflight
-   doesn't cover as component classes. */
+   doesn't cover as component classes, and the @font-face declarations for the
+   Agent Portal's brand fonts (which have no CDN — drop the .woff2 files into
+   public/fonts/ using exactly these names). Until the files are present the
+   stacks fall back to Helvetica / Georgia and nothing breaks. */
+
+/* Europa Nuova — Agent Portal body + heading face (font-agent). */
+@font-face {
+  font-family: 'Europa Nuova';
+  src: url('/fonts/EuropaNuova-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Europa Nuova';
+  src: url('/fonts/EuropaNuova-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Europa Nuova';
+  src: url('/fonts/EuropaNuova-ExtraBold.woff2') format('woff2');
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Canela Medium Italic — Agent Portal highlighted-text face (font-agent-highlight). */
+@font-face {
+  font-family: 'Canela';
+  src: url('/fonts/Canela-MediumItalic.woff2') format('woff2');
+  font-weight: 500;
+  font-style: italic;
+  font-display: swap;
+}
 
 body {
   @apply bg-[#e7e5e0] text-ink font-sans;
+}
+
+/* Agent Portal "highlighted text" treatment — Canela Medium Italic in the
+   #FFC15A yellow. Apply to the emphasised word(s) inside a heading/paragraph
+   where the brand guideline calls for a highlight. Wrapped in @layer
+   components so @apply resolves the custom `font-agent-highlight` utility. */
+@layer components {
+  .text-highlight {
+    @apply font-agent-highlight font-medium italic text-agent-accent;
+  }
 }

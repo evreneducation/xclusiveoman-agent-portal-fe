@@ -45,23 +45,25 @@ export default {
         // token below (borders, panels, background, gold accent, muted text)
         // was already light/neutral enough that it wasn't part of the "too
         // dark" complaint, so those are untouched.
-        'agent-ink': '#0F766E',
-        'agent-ink-dark': '#115E59',
-        'agent-line': '#8FB5AE',
-        'agent-line-light': '#D7EAE5',
-        'agent-panel': '#EAF6F2',
-        // Cream page canvas — re-themed off the pale ocean-mist tint to match
-        // the "Fixed Group Departures" reference design's warm cream
-        // background. Only this base canvas token changed; agent-panel/
-        // agent-ink/agent-accent (the teal/gold system every other agent
-        // page's cards, borders and buttons already use) are untouched, so
-        // existing pages keep their current look sitting on a warmer canvas
-        // rather than needing a full per-page re-theme.
+        // Brand-guideline pass (Europa Nuova / #FFC15A yellow): headings
+        // #1C1C1C, body #222222, and a single warm yellow accent used for
+        // highlights, lines, decorative elements and the sidebar. "Lighter
+        // text" is opacity on these two inks, never a separate grey — so
+        // agent-muted is just a mid-grey approximation of #222 for the rare
+        // caller that needs a solid token instead of a /opacity utility.
+        // Every agent page already reads through these token names, so this
+        // one edit re-themes the whole portal; the sidebar's own hardcoded
+        // gold hexes are swapped to match in AgentLayout.jsx.
+        'agent-ink': '#222222',
+        'agent-ink-dark': '#1C1C1C',
+        'agent-line': '#FFC15A',
+        'agent-line-light': '#F1DDB8',
+        'agent-panel': '#FFF7EA',
         'agent-bg': '#FDF8ED',
-        'agent-accent': '#E2A33B',
-        'agent-accent-dark': '#C98A24',
-        'agent-accent-soft': '#FAF0DA',
-        'agent-muted': '#5F7D79',
+        'agent-accent': '#FFC15A',
+        'agent-accent-dark': '#E9A63D',
+        'agent-accent-soft': '#FFF1D9',
+        'agent-muted': '#6B6B6B',
 
         // Team Portal (/team) — Lead Managers (sales_manager) and
         // Relationship Managers (relationship_manager) sign in here, never
@@ -84,6 +86,15 @@ export default {
       fontFamily: {
         sans: ['Helvetica', 'Arial', 'sans-serif'],
         mono: ['SFMono-Regular', 'Consolas', '"Liberation Mono"', 'Menlo', 'monospace'],
+        // Agent Portal brand fonts (see @font-face in src/index.css and the
+        // .woff2 files expected under public/fonts/). `agent` is the body +
+        // heading face (Europa Nuova, weights 400/700/800); `agent-highlight`
+        // is the Canela Medium Italic display face used only for highlighted
+        // text. Applied portal-wide via `font-agent` on the agent root in
+        // agent/App.jsx, so every agent page inherits it without per-element
+        // classes; the admin and team portals keep the default `sans` stack.
+        agent: ['"Europa Nuova"', 'Helvetica', 'Arial', 'sans-serif'],
+        'agent-highlight': ['"Canela"', 'Georgia', 'Cambria', 'serif'],
       },
       boxShadow: {
         wf: '6px 6px 0 rgba(0,0,0,0.06)',

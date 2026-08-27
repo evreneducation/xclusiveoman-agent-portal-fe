@@ -1,17 +1,16 @@
-// Single, shared login screen for both the Admin Console and the Agent
-// Portal — replaces what used to be two separate, hand-built forms
-// (admin/pages/Login.jsx, agent/pages/Login.jsx), and is also what the app
-// root ("/") renders directly (App.jsx). Renders byte-for-byte identically
-// everywhere it's used — same tagline, same fields, same Sign up link, same
-// footer note — on purpose: nobody visiting any of the three entry points is
-// asked to declare "I'm staff" or "I'm an agent" first, so there is nothing
-// left here that could differ before that's known. The only thing that ever
-// varies per call site is where a successful login *lands* afterward
-// (adminDestination/agentDestination below) — which is invisible until
-// after that decision is already made. Portal-agnostic by the same rule
-// NotificationBell.jsx already established for this directory: no
-// `agent-*`/admin `ink` Tailwind tokens, no import from either portal's own
-// components/ui.jsx.
+// Shared login screen used by all portals — same markup, same email-OTP flow
+// — but each mount point scopes it to who is allowed in:
+//   /admin -> admin/staff only  (restrictTo="admin", Sign up hidden)
+//   /agent -> travel agents only (restrictTo="agent")
+//   /team/login -> unrestricted (team roles route themselves)
+// `restrictTo` is sent to POST /auth/request-otp as `portal`: the backend
+// refuses to even generate/send a code for a wrong-portal email, so an agent
+// never receives an OTP from /admin (and vice versa). The verify step keeps
+// its own belt-and-braces role check too. `showSignUp` hides the agency
+// self-registration link on the staff login. Everything else (tagline,
+// fields, footer) is identical everywhere. Portal-agnostic by the same rule
+// NotificationBell.jsx established for this directory: no `agent-*`/admin
+// `ink` Tailwind tokens, no import from either portal's own components/ui.jsx.
 //
 // Email OTP login (replaces password): step 1 collects just the email and
 // calls POST /auth/request-otp; step 2 (rendered inline, below the email
@@ -172,19 +171,24 @@ const HERO_FEATURES = [
 ];
 
 /**
- * Props — deliberately just the three post-login destinations, nothing
- * visual: adminDestination / agentDestination / teamDestination, where each
- * role lands after a successful login (each call site supplies its own;
- * this component makes the role *decision*, never owns the destination
- * paths themselves).
- * logoSrc defaults to the one shared brand asset every entry point already
- * references directly (public/Xclusive_Oman_Logo_2.png).
+ * Props:
+ * - adminDestination / agentDestination / teamDestination — where each role
+ *   lands after a successful login (this component makes the role decision,
+ *   never owns the paths).
+ * - restrictTo — 'admin' | 'agent' | undefined. When set, a verified user
+ *   whose role doesn't match this portal is refused here (with a pointer to
+ *   the right login) instead of being cross-redirected.
+ * - showSignUp — whether to show the agency self-registration link (default
+ *   true; the staff login passes false).
+ * - logoSrc defaults to the one shared brand asset (public/Xclusive_Oman_Logo_2.png).
  */
 export function LoginModal({
   logoSrc = '/Xclusive_Oman_Logo_2.png',
   adminDestination = '/admin/dashboard',
   agentDestination = '/agent/dashboard',
   teamDestination = '/team/dashboard',
+  restrictTo,
+  showSignUp = true,
 }) {
   const [step, setStep] = useState('email'); // 'email' | 'otp'
   const [email, setEmail] = useState('');
@@ -196,6 +200,9 @@ export function LoginModal({
   // registered/active from not-registered/inactive (see auth.controller.js)
   // and this is that same response surfaced to the user.
   const [infoMessage, setInfoMessage] = useState('');
+  // Set when a verified user is refused because they belong to a different
+  // portal — drives the "sign in over here instead" link under the error.
+  const [wrongPortalHint, setWrongPortalHint] = useState(null); // { href, label } | null
   const [submitting, setSubmitting] = useState(false);
   const [resending, setResending] = useState(false);
   const [otpExpiresAt, setOtpExpiresAt] = useState(null);
@@ -212,17 +219,33 @@ export function LoginModal({
     return () => clearInterval(id);
   }, [step, otpExpiresAt]);
 
+  // `portal` lets the backend refuse to send a code at all for a wrong-portal
+  // email (auth.controller.js#requestLoginOtp). Omitted on /team/login, where
+  // restrictTo is undefined.
   async function requestOtp() {
-    const { message } = await loginApi.post('/auth/request-otp', { email }, { skipAuth: true });
+    const { message } = await loginApi.post(
+      '/auth/request-otp',
+      { email, ...(restrictTo ? { portal: restrictTo } : {}) },
+      { skipAuth: true }
+    );
     setOtp('');
     setInfoMessage(message || '');
     setOtpExpiresAt(Date.now() + OTP_VALID_SECONDS * 1000);
+  }
+
+  function pointToOtherPortal() {
+    setWrongPortalHint(
+      restrictTo === 'admin'
+        ? { href: '/agent', label: 'Go to the Agent Portal login' }
+        : { href: '/admin', label: 'Go to the staff login' }
+    );
   }
 
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
     setInfoMessage('');
+    setWrongPortalHint(null);
     setSubmitting(true);
     try {
       if (step === 'email') {
@@ -237,6 +260,20 @@ export function LoginModal({
         setStep('otp');
       } else {
         const { user } = await loginApi.post('/auth/verify-otp', { email, otp }, { skipAuth: true });
+
+        // Portal scoping (restrictTo) — refuse a wrong-portal account here
+        // and point it at the right login, rather than cross-redirecting.
+        if (restrictTo === 'admin' && !isAdminUser(user)) {
+          setError('This login is for Xclusive Oman staff. Travel agents sign in at the Agent Portal.');
+          pointToOtherPortal();
+          return;
+        }
+        if (restrictTo === 'agent' && !user.agencyId) {
+          setError('This login is for travel agents. Xclusive Oman staff sign in at the staff login.');
+          pointToOtherPortal();
+          return;
+        }
+
         const destination = isTeamUser(user)
           ? teamDestination
           : isAdminUser(user)
@@ -256,12 +293,12 @@ export function LoginModal({
         return;
       }
     } catch (err) {
-      // The backend's own message — request-otp now distinguishes
-      // not-registered/inactive/sent (auth.controller.js#requestLoginOtp),
-      // verify-otp its own invalid/expired/too-many-attempts cases; either
-      // way this is that exact response surfaced verbatim, not a generic
-      // client-side string.
+      // The backend's own message — request-otp distinguishes
+      // not-registered/inactive/wrong-portal/sent (auth.controller.js#
+      // requestLoginOtp), verify-otp its own invalid/expired/too-many-
+      // attempts cases; either way this is that exact response verbatim.
       setError(err.message || 'Something went wrong');
+      if (err.data?.error === 'wrong_portal') pointToOtherPortal();
     } finally {
       setSubmitting(false);
     }
@@ -285,6 +322,7 @@ export function LoginModal({
     setOtp('');
     setError('');
     setInfoMessage('');
+    setWrongPortalHint(null);
     setOtpExpiresAt(null);
   }
 
@@ -424,7 +462,18 @@ export function LoginModal({
               )}
 
               {error && (
-                <p className="rounded-md border border-[#f2bdc6] bg-[#fff7f8] px-3 py-2 text-xs text-[#a5162d]">{error}</p>
+                <div className="rounded-md border border-[#f2bdc6] bg-[#fff7f8] px-3 py-2 text-xs text-[#a5162d]">
+                  <p>{error}</p>
+                  {wrongPortalHint && (
+                    <Link
+                      to={wrongPortalHint.href}
+                      className="mt-1 inline-block font-semibold underline"
+                      style={{ color: ACCENT }}
+                    >
+                      {wrongPortalHint.label}
+                    </Link>
+                  )}
+                </div>
               )}
 
               <button
@@ -443,12 +492,14 @@ export function LoginModal({
               </button>
             </form>
 
-            <p className="mt-5 text-center text-sm text-slate-500">
-              Don't have an account?{' '}
-              <Link to={SIGN_UP_HREF} className="font-semibold hover:underline" style={{ color: ACCENT }}>
-                Sign up
-              </Link>
-            </p>
+            {showSignUp && (
+              <p className="mt-5 text-center text-sm text-slate-500">
+                Don't have an account?{' '}
+                <Link to={SIGN_UP_HREF} className="font-semibold hover:underline" style={{ color: ACCENT }}>
+                  Sign up
+                </Link>
+              </p>
+            )}
           </div>
 
           <div className="mt-5 text-center text-xs text-slate-500">{FOOTER_NOTE}</div>
