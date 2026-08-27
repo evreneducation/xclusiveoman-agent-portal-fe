@@ -2,14 +2,22 @@ import { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import FdItineraryDocument from '../components/FdItineraryDocument.jsx';
 
-// Same base-URL resolution as shared/api/createApiClient.js — deliberately
-// not that module (or the agent `api` singleton it backs): this page
-// authenticates with the short-lived pdfToken in the query string, not a
-// login session's access token, and must never touch the session's own
-// refresh-cookie flow (see AuthContext.jsx) which that client is wired into.
-// Mirrors ItineraryPrint.jsx exactly.
-const API_TARGET = import.meta.env.VITE_API_PROXY_TARGET?.replace(/\/+$/, '');
-const BASE_URL = API_TARGET ? `${API_TARGET}/api` : '/api';
+// Always same-origin '/api', same as shared/api/createApiClient.js (not that
+// module itself — this page authenticates with the short-lived pdfToken in
+// the query string, not a login session's access token, and must never touch
+// the session's own refresh-cookie flow (see AuthContext.jsx) which that
+// client is wired into). Deliberately NOT built from VITE_API_PROXY_TARGET —
+// that env var is set to the backend's absolute Render URL in
+// .env.production, which made this fetch cross-origin from
+// xclusiveoman-agent-portal-fe.vercel.app straight to
+// xclusiveoman-agent-portal-be.onrender.com instead of through vercel.json's
+// same-origin /api rewrite. That's the exact class of bug
+// createApiClient.js's own BASE_URL comment documents (there it silently
+// dropped the refresh cookie as third-party; here it 502'd the whole PDF
+// download in production while working fine locally, since dev's
+// VITE_API_PROXY_TARGET points at localhost where the origin mismatch never
+// bites). Mirrors ItineraryPrint.jsx, which had/has the same bug.
+const BASE_URL = '/api';
 
 function waitForImages() {
   const images = Array.from(document.images);
