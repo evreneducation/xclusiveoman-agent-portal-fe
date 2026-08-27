@@ -331,7 +331,9 @@ function ItineraryOverviewTabs({ departure }) {
     .flatMap((day) => day.items || [])
     .filter((item) => item.type === 'tour' || item.type === 'activity');
   const hasMeals = (departure.addons || []).some((a) => a.type === 'meal');
-  const hasTransfers = itineraryHasItemType(departure.itinerary, 'transfer');
+  const hasTransfers =
+    itineraryHasItemType(departure.itinerary, 'transfer') ||
+    (departure.addons || []).some((a) => a.type === 'transfer');
 
   return (
     <Card className="border-white rounded-2xl p-5 sm:p-6 print:hidden">
@@ -483,7 +485,7 @@ function MealsOverviewPanel({ hasMeals }) {
         <ul className={`space-y-1 text-sm ${INK}`}>
           <li className="flex items-center gap-2">
             <span className="h-1.5 w-1.5 flex-none rounded-full bg-agent-accent-dark" />
-            Lunch / dinner available as an add-on when you book
+            Meals as per itinerary
           </li>
         </ul>
       ) : (
@@ -501,7 +503,7 @@ function TransferOverviewPanel({ hasTransfers }) {
         <ul className={`space-y-1 text-sm ${INK}`}>
           <li className="flex items-center gap-2">
             <span className="h-1.5 w-1.5 flex-none rounded-full bg-agent-accent-dark" />
-            Transfers included
+            Transfers as per itinerary
           </li>
         </ul>
       ) : (
