@@ -5,6 +5,7 @@ import { Button, Card, ErrorText, FieldLabel, Select, TextInput } from '../compo
 import { TransferImagesUpload } from '../components/TransferImagesUpload.jsx';
 import { TRANSFER_TYPE_OPTIONS, validateTransferForm } from '../lib/transferForm.js';
 import { RichTextEditor, isEmptyHtml } from '../../shared/components/RichTextEditor.jsx';
+import { useToast } from '../../shared/components/ToastProvider.jsx';
 
 // Mirrors HotelEditor.jsx / TourEditor.jsx — transfers previously only had
 // an inline add form + delete in ProductCatalog.jsx (no edit at all), which
@@ -31,6 +32,7 @@ function buildDraftPayload(form, images) {
 export default function TransferEditor() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const toast = useToast();
   const isNew = id === 'new';
 
   const [form, setForm] = useState({});
@@ -39,6 +41,7 @@ export default function TransferEditor() {
   const [loading, setLoading] = useState(!isNew);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [savingDraft, setSavingDraft] = useState(false);
   const [autosaving, setAutosaving] = useState(false);
 
   const transferIdRef = useRef(transferId);
@@ -177,6 +180,25 @@ export default function TransferEditor() {
     navigate('/admin/catalog');
   }
 
+  // Explicit "Save as Draft" — persists whatever's on the form right now
+  // through the same draft path the autosave already uses (no full-form
+  // validation gate, never promotes an existing row to published), then
+  // confirms with a toast rather than any inline status text. Stays on the
+  // editor so the admin can keep working.
+  async function handleSaveDraft() {
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    setError('');
+    setSavingDraft(true);
+    try {
+      await saveDraft(form, images);
+      toast.success('Saved to draft');
+    } catch (err) {
+      toast.error(err.message || 'Unable to save draft');
+    } finally {
+      setSavingDraft(false);
+    }
+  }
+
   async function handleSave() {
     const validationError = validateTransferForm(form);
     if (validationError) {
@@ -271,7 +293,10 @@ export default function TransferEditor() {
 
             <ErrorText>{error}</ErrorText>
             <div className="flex justify-end gap-2">
-              <Button disabled={submitting} onClick={handleSave} variant="accent">
+              <Button disabled={submitting || savingDraft} onClick={handleSaveDraft}>
+                {savingDraft ? 'Saving…' : 'Save as Draft'}
+              </Button>
+              <Button disabled={submitting || savingDraft} onClick={handleSave} variant="accent">
                 {submitting ? 'Saving…' : 'Save Transfer'}
               </Button>
             </div>

@@ -5,6 +5,7 @@ import { Button, Card, Checkbox, ErrorText, FieldLabel, Select, TextInput } from
 import { HotelImagesUpload } from '../components/HotelImagesUpload.jsx';
 import { STAR_OPTIONS, validateHotelForm } from '../lib/hotelForm.js';
 import { RichTextEditor, isEmptyHtml } from '../../shared/components/RichTextEditor.jsx';
+import { useToast } from '../../shared/components/ToastProvider.jsx';
 
 // Occupancy-tiered pricing (0061_hotel_occupancy_pricing.sql) — admin checks
 // which of these a hotel offers and prices each independently, replacing
@@ -42,6 +43,7 @@ function buildDraftPayload(form, images) {
 export default function HotelEditor() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const toast = useToast();
   const isNew = id === 'new';
 
   const [form, setForm] = useState({});
@@ -55,6 +57,7 @@ export default function HotelEditor() {
   const [loading, setLoading] = useState(!isNew);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [savingDraft, setSavingDraft] = useState(false);
   const [autosaving, setAutosaving] = useState(false);
 
   // Ref twin of hotelId, read synchronously inside the async autosave/unload
@@ -238,6 +241,25 @@ export default function HotelEditor() {
     navigate('/admin/catalog');
   }
 
+  // Explicit "Save as Draft" — persists whatever's on the form right now
+  // through the same draft path the autosave already uses (no full-form
+  // validation gate, never promotes an existing row to published), then
+  // confirms with a toast rather than any inline status text. Stays on the
+  // editor so the admin can keep working.
+  async function handleSaveDraft() {
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    setError('');
+    setSavingDraft(true);
+    try {
+      await saveDraft(form, images);
+      toast.success('Saved to draft');
+    } catch (err) {
+      toast.error(err.message || 'Unable to save draft');
+    } finally {
+      setSavingDraft(false);
+    }
+  }
+
   async function handleSave() {
     const validationError = validateHotelForm(form, images);
     if (validationError) {
@@ -413,7 +435,10 @@ export default function HotelEditor() {
 
             <ErrorText>{error}</ErrorText>
             <div className="flex justify-end gap-2">
-              <Button disabled={submitting} onClick={handleSave} variant="accent">
+              <Button disabled={submitting || savingDraft} onClick={handleSaveDraft}>
+                {savingDraft ? 'Saving…' : 'Save as Draft'}
+              </Button>
+              <Button disabled={submitting || savingDraft} onClick={handleSave} variant="accent">
                 {submitting ? 'Saving…' : 'Save Hotel'}
               </Button>
             </div>
