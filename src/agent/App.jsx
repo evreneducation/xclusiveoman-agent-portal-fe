@@ -32,7 +32,10 @@ export default function App() {
           agent page inherits from here — no per-page font class. */}
       <div className="font-agent text-agent-ink">
       <Routes>
-        <Route path="login" element={<Login />} />
+        {/* /agent is the agent login (Sign up shown; staff are refused and
+            pointed at /login). /agent/login kept as a redirect for old links. */}
+        <Route index element={<Login />} />
+        <Route path="login" element={<Navigate to="/agent" replace />} />
         <Route path="register" element={<Register />} />
         {/* No forgot/reset-password routes — there's no password anywhere
             to forget or reset (email OTP is the sole sign-in mechanism). */}

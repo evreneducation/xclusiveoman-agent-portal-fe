@@ -41,7 +41,7 @@ export function Footer() {
           <ul className="mt-4 space-y-2 text-sm">
             {FOOTER_LINKS.partners.map((item) => (
               <li key={item}>
-                <a href="/login" className="transition-colors hover:text-[#C9A24A]">
+                <a href="/agent" className="transition-colors hover:text-[#C9A24A]">
                   {item}
                 </a>
               </li>

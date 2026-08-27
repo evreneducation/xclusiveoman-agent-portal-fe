@@ -7,7 +7,7 @@
 // Shared by SignatureToursSection and ActivitiesSection.
 import { LuArrowRight } from 'react-icons/lu';
 
-export function ArrowPillButton({ href = '/login', children }) {
+export function ArrowPillButton({ href = '/agent', children }) {
   return (
     <a
       href={href}
