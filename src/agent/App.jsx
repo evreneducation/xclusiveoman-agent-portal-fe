@@ -26,6 +26,10 @@ import Profile from './pages/Profile.jsx';
 export default function App() {
   return (
     <AuthProvider>
+      {/* Portal-wide brand type + ink: Europa Nuova body/headings on #222222,
+          scoped to the agent tree so admin/team keep the default stack. Every
+          agent page inherits from here — no per-page font class. */}
+      <div className="font-agent text-agent-ink">
       <Routes>
         <Route path="login" element={<Login />} />
         <Route path="register" element={<Register />} />
@@ -65,6 +69,7 @@ export default function App() {
         <Route index element={<Navigate to="/agent/dashboard" replace />} />
         <Route path="*" element={<Navigate to="/agent/dashboard" replace />} />
       </Routes>
+      </div>
     </AuthProvider>
   );
 }

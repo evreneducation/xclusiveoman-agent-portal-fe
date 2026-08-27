@@ -48,10 +48,10 @@ import { RichTextDisplay, isEmptyHtml } from '../../shared/components/RichTextEd
 // to this file the same way Departures.jsx keeps them local to its own card,
 // rather than redefining agent-ink globally and risking every other
 // not-yet-restyled agent page.
-const INK = 'text-[#1B1B1B]';
-const BODY = 'text-[#4B4844]';
-const MUTED = 'text-[#6B6B65]';
-const DIVIDER = 'border-[#E6E1D2]';
+const INK = 'text-agent-ink-dark';
+const BODY = 'text-agent-ink';
+const MUTED = 'text-agent-muted';
+const DIVIDER = 'border-agent-line-light';
 const SEATS_RED = '#EF4A3D';
 
 function sanitizeHtml(html) {
@@ -1828,7 +1828,7 @@ export default function DepartureDetail() {
                   >
                     Book Now <LuArrowRight size={15} />
                   </Button>
-                  {/* !text-[#1B1B1B] (Tailwind's !important prefix — same escape
+                  {/* !text-agent-ink-dark (Tailwind's !important prefix — same escape
                       hatch FdPackageEditor.jsx's own Select overrides already
                       use) beats Button's default-variant text-agent-ink on
                       specificity alone; a plain unprefixed override loses
@@ -1836,11 +1836,11 @@ export default function DepartureDetail() {
                       later in the stylesheet regardless of class order. Same
                       reason !rounded-full is needed to beat Button's own
                       base rounded-md. */}
-                  <Button className="mb-2 w-full gap-1.5 !rounded-full !text-[#1B1B1B]" onClick={handleEnquireNow}>
+                  <Button className="mb-2 w-full gap-1.5 !rounded-full !text-agent-ink-dark" onClick={handleEnquireNow}>
                     <LuMessageCircle size={15} /> Enquire Now
                   </Button>
                   <Button
-                    className="w-full gap-1.5 !rounded-full !text-[#1B1B1B]"
+                    className="w-full gap-1.5 !rounded-full !text-agent-ink-dark"
                     onClick={handleDownloadItinerary}
                     disabled={downloadingItinerary}
                   >
