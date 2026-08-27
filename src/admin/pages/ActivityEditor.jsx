@@ -197,7 +197,7 @@ export default function ActivityEditor() {
   }
 
   async function handleSave() {
-    const validationError = validateActivityForm(form);
+    const validationError = validateActivityForm(form, images);
     if (validationError) {
       setError(validationError);
       return;
@@ -258,11 +258,11 @@ export default function ActivityEditor() {
                   <TextInput required value={form.city || ''} onChange={(e) => update('city', e.target.value)} />
                 </div>
                 <div>
-                  <FieldLabel>Duration</FieldLabel>
+                  <FieldLabel>Duration *</FieldLabel>
                   <TextInput placeholder="e.g. 3 hrs" value={form.duration || ''} onChange={(e) => update('duration', e.target.value)} />
                 </div>
                 <div>
-                  <FieldLabel>Price per pax (INR)</FieldLabel>
+                  <FieldLabel>Price per pax (INR) *</FieldLabel>
                   <TextInput
                     type="number"
                     min="0"
@@ -272,7 +272,7 @@ export default function ActivityEditor() {
                   />
                 </div>
                 <div className="sm:col-span-2">
-                  <FieldLabel>Description</FieldLabel>
+                  <FieldLabel>Description *</FieldLabel>
                   <RichTextEditor size="sm" value={form.description || ''} onChange={(html) => update('description', html)} />
                 </div>
                 <ActivityImagesUpload activityId={activityId} images={images} onChange={updateImages} />

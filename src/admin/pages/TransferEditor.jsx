@@ -200,7 +200,7 @@ export default function TransferEditor() {
   }
 
   async function handleSave() {
-    const validationError = validateTransferForm(form);
+    const validationError = validateTransferForm(form, images);
     if (validationError) {
       setError(validationError);
       return;
@@ -266,15 +266,15 @@ export default function TransferEditor() {
                   </Select>
                 </div>
                 <div>
-                  <FieldLabel>Vehicle class</FieldLabel>
+                  <FieldLabel>Vehicle class *</FieldLabel>
                   <TextInput value={form.vehicleClass || ''} onChange={(e) => update('vehicleClass', e.target.value)} />
                 </div>
                 <div>
-                  <FieldLabel>City</FieldLabel>
+                  <FieldLabel>City *</FieldLabel>
                   <TextInput value={form.city || ''} onChange={(e) => update('city', e.target.value)} />
                 </div>
                 <div>
-                  <FieldLabel>Price (INR)</FieldLabel>
+                  <FieldLabel>Price (INR) *</FieldLabel>
                   <TextInput
                     type="number"
                     min="0"
@@ -284,7 +284,7 @@ export default function TransferEditor() {
                   />
                 </div>
                 <div className="sm:col-span-2">
-                  <FieldLabel>Description</FieldLabel>
+                  <FieldLabel>Description *</FieldLabel>
                   <RichTextEditor size="sm" value={form.description || ''} onChange={(html) => update('description', html)} />
                 </div>
                 <TransferImagesUpload transferId={transferId} images={images} onChange={updateImages} />

@@ -1,19 +1,28 @@
-// Shared Product Catalog `transfers` field rules — backend truth is
-// transferSchema (validation/schemas.js on the API). Unlike hotels/tours,
-// images aren't required here: transfers existed without a photo option
-// until now, so this stays a nice-to-have rather than a blocking field.
+// Shared Product Catalog `transfers` field rules — backend truth is the
+// requireTransferPublishFields gate (routes/catalog.routes.js on the API);
+// this mirrors it client-side so the Product Catalog Transfer form
+// (TransferEditor.jsx) and the Admin MICE Catalog Transfer form
+// (MiceCatalog.jsx) validate identically. Only enforced on a full "Save"
+// (publish) — the Save-as-Draft path stays lenient.
+import { isEmptyHtml } from '../../shared/components/RichTextEditor.jsx';
+
 export const TRANSFER_TYPE_OPTIONS = ['airport', 'intercity', 'point_to_point', 'group_coach'];
 
-export const TRANSFER_REQUIRED_FIELDS = ['name', 'type'];
+export const TRANSFER_REQUIRED_FIELDS = ['name', 'type', 'city', 'vehicleClass', 'description', 'price'];
 
-export function validateTransferForm(form) {
+// description is rich text — its empty state is `<p></p>`, not `''`.
+const HTML_FIELDS = new Set(['description']);
+
+export function validateTransferForm(form, images = []) {
   for (const key of TRANSFER_REQUIRED_FIELDS) {
-    if (form[key] === undefined || form[key] === null || form[key] === '') {
+    const empty = HTML_FIELDS.has(key)
+      ? isEmptyHtml(form[key])
+      : form[key] === undefined || form[key] === null || form[key] === '';
+    if (empty) {
       return 'Please fill in all required fields.';
     }
   }
-  if (form.price !== '' && form.price !== undefined && !(Number(form.price) >= 0)) {
-    return 'Price (INR) must be a positive number.';
-  }
+  if (images.length === 0) return 'Upload at least one image.';
+  if (!(Number(form.price) > 0)) return 'Price (INR) must be a positive number.';
   return '';
 }

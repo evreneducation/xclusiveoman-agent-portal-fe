@@ -498,7 +498,7 @@ function MiceActivityForm({ onCreated }) {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    const validationError = validateActivityForm(form);
+    const validationError = validateActivityForm(form, images);
     if (validationError) {
       setError(validationError);
       return;
@@ -654,7 +654,7 @@ function MiceTransferForm({ onCreated }) {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    const validationError = validateTransferForm(form);
+    const validationError = validateTransferForm(form, images);
     if (validationError) {
       setError(validationError);
       return;
