@@ -308,21 +308,6 @@ function TickBadges({ items }) {
   );
 }
 
-// Consistent section header — small gold icon chip + bold serif-adjacent
-// title — used across every content card below so the page reads as one
-// designed system instead of a stack of generic boxes. `icon` is a
-// react-icons component (e.g. LuHotel), not an emoji.
-function SectionHeading({ icon: Icon, children }) {
-  return (
-    <div className="mb-3 flex items-center gap-2.5">
-      <span className="flex h-8 w-8 flex-none items-center justify-center rounded-lg bg-agent-accent-soft text-agent-accent-dark">
-        <Icon size={16} />
-      </span>
-      <h3 className={`text-sm font-bold uppercase tracking-wide ${INK}`}>{children}</h3>
-    </div>
-  );
-}
-
 // Quick-glance tabbed summary — Hotel/Sightseeing/Meals/Transfer/Flight, one
 // panel visible at a time, active tab filled gold like the reference. A
 // lighter-weight teaser than the full sections further down the page
@@ -345,7 +330,7 @@ function ItineraryOverviewTabs({ departure }) {
   const sightseeingItems = (departure.itinerary || [])
     .flatMap((day) => day.items || [])
     .filter((item) => item.type === 'tour' || item.type === 'activity');
-  const hasMeals = (departure.meals || []).length > 0;
+  const hasMeals = (departure.addons || []).some((a) => a.type === 'meal');
   const hasTransfers = itineraryHasItemType(departure.itinerary, 'transfer');
 
   return (
@@ -498,11 +483,11 @@ function MealsOverviewPanel({ hasMeals }) {
         <ul className={`space-y-1 text-sm ${INK}`}>
           <li className="flex items-center gap-2">
             <span className="h-1.5 w-1.5 flex-none rounded-full bg-agent-accent-dark" />
-            Meals as per itinerary
+            Lunch / dinner available as an add-on when you book
           </li>
         </ul>
       ) : (
-        <p className={`text-sm ${MUTED}`}>No meals included in this package.</p>
+        <p className={`text-sm ${MUTED}`}>No meal add-ons available for this package.</p>
       )}
     </div>
   );
@@ -640,31 +625,10 @@ function ItineraryTimeline({ itinerary }) {
   );
 }
 
-// Read-only mirror of the admin's Meals section (FdPackageEditor.jsx) —
-// already folded into departure.ratePerPax server-side (resolveRatePerPax),
-// this is purely informational so the agent can see what's included and why.
-function MealsSummary({ meals }) {
-  if (!meals?.length) return null;
-  return (
-    <Card className="border-white rounded-2xl p-5 sm:p-6">
-      <SectionHeading icon={LuUtensils}>Meals</SectionHeading>
-      <div className="space-y-2">
-        {meals.map((meal) => (
-          <div key={meal.type} className={`flex items-center justify-between rounded-xl border ${DIVIDER} px-3.5 py-2.5`}>
-            <div>
-              <div className={`text-sm font-semibold ${INK}`}>{meal.label}</div>
-              <div className={`text-xs ${MUTED}`}>
-                {meal.people} {meal.people === 1 ? 'person' : 'people'} · {meal.days} {meal.days === 1 ? 'day' : 'days'} ·{' '}
-                {formatCurrency(meal.pricePerDay)}/person/day
-              </div>
-            </div>
-            <div className={`text-sm font-bold ${INK}`}>{formatCurrency(meal.cost)}</div>
-          </div>
-        ))}
-      </div>
-    </Card>
-  );
-}
+// Meals used to be an always-included, read-only summary card here. They're
+// opt-in fd_addons rows now (0075) — lunch/dinner show up in the "Meals"
+// AddonSelect box in the booking panel like any other add-on, so there's no
+// separate summary section any more.
 
 // The FD package's own short description — admin-authored rich text in
 // FdPackageEditor.jsx (fd_packages.short_description), already flowing
@@ -747,13 +711,14 @@ const ADDON_CATEGORY_META = {
   tour: { label: 'Tours', selectLabel: 'Day Tours' },
   transfer: { label: 'Transfers', selectLabel: 'Transfers' },
   flight: { label: 'Flights', selectLabel: 'Flights' },
+  meal: { label: 'Meals', selectLabel: 'Meals' },
 };
-const ADDON_CATEGORY_ORDER = ['activity', 'tour', 'transfer', 'flight'];
+const ADDON_CATEGORY_ORDER = ['activity', 'tour', 'transfer', 'flight', 'meal'];
 
 // type -> the catalog entity's plural route name (catalog.routes.js) — lets
 // AddonDetailModal fetch the full catalog row for a given add-on via the
 // existing generic GET /:entity/:id detail route.
-const ADDON_TYPE_TO_PATH = { activity: 'activities', tour: 'tours', transfer: 'transfers', flight: 'flights' };
+const ADDON_TYPE_TO_PATH = { activity: 'activities', tour: 'tours', transfer: 'transfers', flight: 'flights', meal: 'meals' };
 
 function groupAddonsByType(addons) {
   const groups = {};
@@ -1470,7 +1435,6 @@ export default function DepartureDetail() {
     (itineraryHasItemType(departure.itinerary, 'tour') || itineraryHasItemType(departure.itinerary, 'activity')) &&
       'Sightseeing Included',
     ...extraInclusionTicks,
-    departure.meals?.length > 0 && 'Meals Included',
   ].filter(Boolean);
 
   // A decorative tall photo below the booking panel, matching the
@@ -1579,8 +1543,6 @@ export default function DepartureDetail() {
             {departure.itinerary?.length > 0 && <ItineraryTimeline itinerary={departure.itinerary} />}
 
             <InclusionsExclusionsSummary inclusions={departure.inclusions} exclusions={departure.exclusions} />
-
-            <MealsSummary meals={departure.meals} />
 
             {departure.addons?.length > 0 && (
               <Card className="border-white rounded-2xl p-5 sm:p-6">
