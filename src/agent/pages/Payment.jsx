@@ -29,6 +29,11 @@ function newAttemptToken() {
 function CardPanel({ booking }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const storageKey = `pay:${booking.id}`;
+  // Part-payment (0077): the first payment is "amount due now" — the flat
+  // deposit when the departure is 15+ days out, the full price otherwise —
+  // not the whole balance. Older API responses without the field fall back
+  // to the previous behaviour.
+  const dueNow = booking.amountDueNow ?? booking.balanceDue;
 
   const storedAttempt =
     typeof window !== 'undefined' ? (() => { try { return window.sessionStorage.getItem(storageKey); } catch { return null; } })() : null;
@@ -58,7 +63,7 @@ function CardPanel({ booking }) {
     try {
       const { paymentId, paymentSessionId } = await api.post('/payments/cashfree/create-order', {
         bookingId: booking.id,
-        amount: booking.balanceDue,
+        amount: dueNow,
         clientAttemptToken: newAttemptToken(),
       });
       if (paymentId) persistAttempt(paymentId);
@@ -129,7 +134,7 @@ function CardPanel({ booking }) {
 
       {!status && (
         <Button variant="accent" className="w-full" disabled={!!busy} onClick={startCheckout}>
-          {busy === 'start' ? 'Starting checkout…' : `Pay ₹${booking.balanceDue} Now`}
+          {busy === 'start' ? 'Starting checkout…' : `Pay ₹${dueNow} Now`}
         </Button>
       )}
     </Card>
@@ -137,6 +142,7 @@ function CardPanel({ booking }) {
 }
 
 function NeftPanel({ booking }) {
+  const dueNow = booking.amountDueNow ?? booking.balanceDue;
   const [reference, setReference] = useState('');
   const [file, setFile] = useState(null);
   const [error, setError] = useState('');
@@ -154,7 +160,7 @@ function NeftPanel({ booking }) {
     try {
       const formData = new FormData();
       formData.append('slip', file);
-      formData.append('amount', String(booking.balanceDue));
+      formData.append('amount', String(dueNow));
       formData.append('reference', reference);
       await api.postForm(`/payments/${booking.id}/neft-slip`, formData);
       setSuccess(true);
@@ -234,13 +240,32 @@ export default function Payment() {
       </Link>
       <h2 className="mb-4 text-xl font-bold text-agent-ink">Payment</h2>
 
-      <Card label="Amount due" className="mb-4 border-white">
-        <div className="flex justify-between text-sm">
-          <span>Deposit due now</span>
-          <b>₹{booking.balanceDue}</b>
-        </div>
-        <div className="mt-1 text-xs text-agent-muted">Total booking value: ₹{booking.totalPrice}</div>
-      </Card>
+      {(() => {
+        const dueNow = booking.amountDueNow ?? booking.balanceDue;
+        const remaining = booking.remainingBalance ?? Math.max(0, booking.balanceDue - dueNow);
+        const isPartPayment = remaining > 0;
+        return (
+          <Card label="Amount due" className="mb-4 border-white">
+            <div className="flex justify-between text-sm">
+              <span>{isPartPayment ? 'Deposit due now' : 'Amount due now'}</span>
+              <b>₹{dueNow}</b>
+            </div>
+            {isPartPayment && (
+              <div className="mt-1 flex justify-between text-xs text-agent-muted">
+                <span>Remaining balance (payable later)</span>
+                <span>₹{remaining}</span>
+              </div>
+            )}
+            <div className="mt-1 text-xs text-agent-muted">Total booking value: ₹{booking.totalPrice}</div>
+            {isPartPayment && (
+              <p className="mt-2 text-xs text-agent-muted">
+                Your departure is more than 15 days away, so only a ₹{dueNow} deposit is needed now — the balance is
+                collected closer to travel.
+              </p>
+            )}
+          </Card>
+        );
+      })()}
 
       <div className="mb-4 flex gap-2">
         <button onClick={() => setMethod('card')}>
