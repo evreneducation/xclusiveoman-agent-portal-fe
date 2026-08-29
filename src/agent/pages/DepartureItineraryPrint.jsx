@@ -95,8 +95,11 @@ export default function DepartureItineraryPrint() {
     return <div className="p-8 font-mono text-xs text-agent-muted">Loading…</div>;
   }
 
+  // No padding wrapper — the server-side export passes real page.pdf() margins
+  // now (itineraryPdf.service.js), so an extra p-6 here would just double the
+  // page-one gap on top of them.
   return (
-    <div className="bg-white p-6">
+    <div className="bg-white">
       <FdItineraryDocument departure={departure} />
     </div>
   );
