@@ -1,3 +1,4 @@
+import DOMPurify from 'dompurify';
 import { FaCircleCheck, FaCircleXmark } from 'react-icons/fa6';
 import { formatCurrency, splitLines } from '../../shared/fdPackage/index.js';
 import { computeNightsByCity, dayTitle, itemBulletText, ITINERARY_ITEM_TYPE_META } from '../../shared/itinerary/index.js';
@@ -21,6 +22,14 @@ const BODY = 'text-[#4B4844]';
 const MUTED = 'text-[#6B6B65]';
 const DIVIDER = 'border-[#E6E1D2]';
 const SEATS_RED = '#EF4A3D';
+
+// Same DOMPurify pass DepartureDetail.jsx uses for the admin-authored
+// "Booking terms" block — the terms HTML comes from the same site_terms row
+// (carried through buildDepartureDetail's `terms` field for this token-authed
+// print page, which can't call the session-only GET /site-terms itself).
+function sanitizeHtml(html) {
+  return DOMPurify.sanitize(html || '', { USE_PROFILES: { html: true } });
+}
 
 // Same dot-and-connector bullet list as DepartureDetail.jsx's own
 // ItineraryDayRow, minus the collapse/chevron interaction — a PDF has no
@@ -70,9 +79,15 @@ export default function FdItineraryDocument({ departure }) {
   const exclusionLines = splitLines(departure.exclusions);
   const hasBothInclExcl = inclusionLines.length > 0 && exclusionLines.length > 0;
   const exLocation = departure.departureDates?.[0]?.location;
+  const termsHtml = departure.terms || '';
+  const hasTerms = termsHtml.replace(/<[^>]*>/g, '').trim().length > 0;
 
   return (
-    <div className="mx-auto max-w-3xl bg-white p-8">
+    // No outer padding — the server-side PDF export (itineraryPdf.service.js
+    // #generateFdItineraryPdf) now passes real page.pdf() margins, which frame
+    // every page including multi-page continuations; a padding here on top of
+    // that would just double the top/left/right gap on page one only.
+    <div className="mx-auto max-w-3xl bg-white">
       {/* Header */}
       <div className={`mb-6 border-b ${DIVIDER} pb-5`}>
         <div className="flex items-center gap-3">
@@ -153,6 +168,22 @@ export default function FdItineraryDocument({ departure }) {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Booking terms — the same admin-authored site_terms HTML the on-screen
+          DepartureDetail.jsx renders in its "Booking terms" card, appended to
+          the downloaded PDF. Child-element utility selectors hand-style the
+          rich text (no @tailwindcss/typography plugin installed — same note as
+          DepartureDetail.jsx's own copy of this block). `break-inside-avoid`
+          on each heading keeps a heading from being stranded at a page break. */}
+      {hasTerms && (
+        <div className={`mt-6 rounded-2xl border ${DIVIDER} p-5`}>
+          <h3 className={`mb-3 text-base font-bold ${INK}`}>Booking Terms &amp; Conditions</h3>
+          <div
+            className={`text-sm leading-relaxed ${BODY} [&_a]:text-agent-accent-dark [&_a]:underline [&_blockquote]:mb-2 [&_blockquote]:border-l-4 [&_blockquote]:pl-3 [&_blockquote]:italic [&_h1]:mb-2 [&_h1]:mt-3 [&_h1]:break-inside-avoid [&_h1]:text-xl [&_h1]:font-bold [&_h2]:mb-2 [&_h2]:mt-3 [&_h2]:break-inside-avoid [&_h2]:text-lg [&_h2]:font-bold [&_h3]:mb-1.5 [&_h3]:mt-2 [&_h3]:break-inside-avoid [&_h3]:text-base [&_h3]:font-bold [&_hr]:my-4 [&_img]:max-w-full [&_img]:rounded-md [&_li]:break-inside-avoid [&_ol]:mb-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:mb-2 [&_table]:w-full [&_table]:border-collapse [&_td]:p-2 [&_th]:p-2 [&_th]:font-semibold [&_ul]:mb-2 [&_ul]:list-disc [&_ul]:pl-5`}
+            dangerouslySetInnerHTML={{ __html: sanitizeHtml(termsHtml) }}
+          />
         </div>
       )}
     </div>
