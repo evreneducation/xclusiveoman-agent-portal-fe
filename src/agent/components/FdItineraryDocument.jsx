@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import DOMPurify from 'dompurify';
-import { FaCircleCheck, FaCircleXmark } from 'react-icons/fa6';
+import { FaCircleCheck, FaCircleXmark, FaHotel, FaListCheck, FaRegCalendarDays, FaRegFileLines } from 'react-icons/fa6';
 import { formatCurrency, splitLines } from '../../shared/fdPackage/index.js';
 import { computeNightsByCity, dayTitle, itemBulletText, ITINERARY_ITEM_TYPE_META } from '../../shared/itinerary/index.js';
 
@@ -29,6 +30,81 @@ const SEATS_RED = '#EF4A3D';
 // print page, which can't call the session-only GET /site-terms itself).
 function sanitizeHtml(html) {
   return DOMPurify.sanitize(html || '', { USE_PROFILES: { html: true } });
+}
+
+// Icon-chip section heading — the soft-gold rounded-square icon + bold label
+// pairing DepartureDetail.jsx's own on-screen cards use, so the downloaded
+// PDF's sections read the same way rather than as bare bold lines.
+function SectionHeading({ icon: Icon, children }) {
+  return (
+    <h2 className={`mb-3 flex items-center gap-2 text-base font-bold ${INK}`}>
+      <span className="flex h-7 w-7 flex-none items-center justify-center rounded-lg bg-agent-accent-soft text-agent-accent-dark">
+        <Icon size={14} />
+      </span>
+      {children}
+    </h2>
+  );
+}
+
+// Photo gallery for the printed itinerary — the same "one large hero on the
+// left, the carousel photos in a grid on the right" shape as DepartureDetail.
+// jsx's on-screen HeroGallery, but stripped of the lightbox/hover/back-button
+// interaction a PDF can't use. `heroImageUrl` + `images` come straight off
+// buildDepartureDetail's toPublicPackage (fd_packages.hero_image_url / images).
+//
+// Any image whose URL fails to load (missing/deleted at the source) is
+// dropped via onError rather than left as a fixed-height empty grey frame in
+// the PDF; if nothing loads, the whole block renders nothing — the Puppeteer
+// print page (DepartureItineraryPrint.jsx) already waits on every <img>'s
+// load *or* error event before signalling __PDF_READY__, so the re-render has
+// landed by the time page.pdf() is taken.
+//
+// break-inside-avoid keeps the whole block on one page rather than splitting a
+// row of photos across a page break. min-h-0/min-w-0 on every cell is
+// load-bearing for the same reason DepartureDetail.jsx documents at length:
+// without it an <img>'s intrinsic size forces its grid track past the fixed
+// h-64, and object-cover then scales the photo up to fill that inflated box.
+function PhotoGallery({ heroImageUrl, images }) {
+  const candidates = [heroImageUrl, ...(images || [])].filter(Boolean);
+  const [failed, setFailed] = useState({});
+  const markFailed = (url) => setFailed((prev) => (prev[url] ? prev : { ...prev, [url]: true }));
+
+  const usable = candidates.filter((url) => !failed[url]);
+  if (usable.length === 0) return null;
+  const [main, ...rest] = usable;
+  const gridImages = rest.slice(0, 4);
+
+  return (
+    <div className="mb-6 break-inside-avoid">
+      <div className={`grid h-64 gap-3 ${gridImages.length > 0 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+        <div className="h-full min-h-0 w-full min-w-0 overflow-hidden rounded-2xl border border-agent-accent/30">
+          <img
+            src={main}
+            alt=""
+            onError={() => markFailed(main)}
+            className="h-full w-full object-cover object-center"
+          />
+        </div>
+        {gridImages.length > 0 && (
+          <div className="grid h-full min-h-0 w-full min-w-0 grid-cols-2 grid-rows-2 gap-3">
+            {gridImages.map((url, idx) => (
+              <div
+                key={`${url}:${idx}`}
+                className="h-full min-h-0 w-full min-w-0 overflow-hidden rounded-xl border border-agent-accent/30"
+              >
+                <img
+                  src={url}
+                  alt=""
+                  onError={() => markFailed(url)}
+                  className="h-full w-full object-cover object-center"
+                />
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 // Same dot-and-connector bullet list as DepartureDetail.jsx's own
@@ -112,10 +188,15 @@ export default function FdItineraryDocument({ departure }) {
         )}
       </div>
 
+      {/* Package photos — the hero + carousel gallery the on-screen
+          DepartureDetail.jsx shows above the fold (there it's print:hidden;
+          here it's the printed document's own visual anchor). */}
+      <PhotoGallery heroImageUrl={departure.heroImageUrl} images={departure.images} />
+
       {/* Hotel */}
       {departure.hotel && (
-        <div className="mb-6">
-          <h2 className={`mb-2 text-base font-bold ${INK}`}>Hotel</h2>
+        <div className="mb-6 break-inside-avoid">
+          <SectionHeading icon={FaHotel}>Hotel</SectionHeading>
           <div className={`rounded-xl border ${DIVIDER} px-4 py-3 text-sm ${BODY}`}>
             <span className={`font-semibold ${INK}`}>{departure.hotel.name}</span>
             {departure.hotel.city && ` · ${departure.hotel.city}`}
@@ -127,7 +208,7 @@ export default function FdItineraryDocument({ departure }) {
       {/* Day-by-day itinerary — the whole point of this document */}
       {departure.itinerary?.length > 0 && (
         <div className="mb-6">
-          <h2 className={`mb-3 text-base font-bold ${INK}`}>Day-by-Day Itinerary</h2>
+          <SectionHeading icon={FaRegCalendarDays}>Day-by-Day Itinerary</SectionHeading>
           <div className="space-y-2.5">
             {departure.itinerary.map((day) => (
               <DayRow key={day.dayNumber} day={day} />
@@ -143,7 +224,7 @@ export default function FdItineraryDocument({ departure }) {
           <div className={`grid grid-cols-1 gap-5 ${hasBothInclExcl ? `sm:grid-cols-2 sm:divide-x ${DIVIDER}` : ''}`}>
             {inclusionLines.length > 0 && (
               <div className={hasBothInclExcl ? 'sm:pr-6' : ''}>
-                <h3 className={`mb-3 text-base font-bold ${INK}`}>Inclusions</h3>
+                <SectionHeading icon={FaListCheck}>Inclusions</SectionHeading>
                 <ul className="space-y-2 text-sm">
                   {inclusionLines.map((line, idx) => (
                     <li key={idx} className={`flex items-start gap-2 ${BODY}`}>
@@ -156,7 +237,7 @@ export default function FdItineraryDocument({ departure }) {
             )}
             {exclusionLines.length > 0 && (
               <div className={hasBothInclExcl ? 'sm:pl-6' : ''}>
-                <h3 className={`mb-3 text-base font-bold ${INK}`}>Exclusions</h3>
+                <SectionHeading icon={FaCircleXmark}>Exclusions</SectionHeading>
                 <ul className="space-y-2 text-sm">
                   {exclusionLines.map((line, idx) => (
                     <li key={idx} className={`flex items-start gap-2 ${BODY}`}>
@@ -179,7 +260,7 @@ export default function FdItineraryDocument({ departure }) {
           on each heading keeps a heading from being stranded at a page break. */}
       {hasTerms && (
         <div className={`mt-6 rounded-2xl border ${DIVIDER} p-5`}>
-          <h3 className={`mb-3 text-base font-bold ${INK}`}>Booking Terms &amp; Conditions</h3>
+          <SectionHeading icon={FaRegFileLines}>Booking Terms &amp; Conditions</SectionHeading>
           <div
             className={`text-sm leading-relaxed ${BODY} [&_a]:text-agent-accent-dark [&_a]:underline [&_blockquote]:mb-2 [&_blockquote]:border-l-4 [&_blockquote]:pl-3 [&_blockquote]:italic [&_h1]:mb-2 [&_h1]:mt-3 [&_h1]:break-inside-avoid [&_h1]:text-xl [&_h1]:font-bold [&_h2]:mb-2 [&_h2]:mt-3 [&_h2]:break-inside-avoid [&_h2]:text-lg [&_h2]:font-bold [&_h3]:mb-1.5 [&_h3]:mt-2 [&_h3]:break-inside-avoid [&_h3]:text-base [&_h3]:font-bold [&_hr]:my-4 [&_img]:max-w-full [&_img]:rounded-md [&_li]:break-inside-avoid [&_ol]:mb-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:mb-2 [&_table]:w-full [&_table]:border-collapse [&_td]:p-2 [&_th]:p-2 [&_th]:font-semibold [&_ul]:mb-2 [&_ul]:list-disc [&_ul]:pl-5`}
             dangerouslySetInnerHTML={{ __html: sanitizeHtml(termsHtml) }}

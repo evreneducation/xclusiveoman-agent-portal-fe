@@ -190,9 +190,13 @@ export function LoginModal({
   restrictTo,
   showSignUp = true,
 }) {
-  const [step, setStep] = useState('email'); // 'email' | 'otp'
+  const [step, setStep] = useState('email'); // 'email' | 'otp' | 'mfa'
   const [email, setEmail] = useState('');
   const [otp, setOtp] = useState('');
+  // Set when verify-otp comes back `mfaRequired` (admin console, global 2FA
+  // toggle on) — the short-lived token that stands in for a session between
+  // the emailed-code step and the authenticator-code step below.
+  const [mfaToken, setMfaToken] = useState('');
   const [error, setError] = useState('');
   // The backend's own request-otp success message (e.g. "A sign-in code has
   // been sent to you@example.com.") — shown verbatim rather than a
@@ -241,6 +245,41 @@ export function LoginModal({
     );
   }
 
+  // Shared tail of a successful sign-in, from either the plain verify-otp
+  // response or the verify-mfa one (admin 2FA) — same portal-scoping checks
+  // and same hard navigation. Returns nothing; on a rejected account it sets
+  // an error and leaves the form where it is.
+  function finishLogin(user) {
+    // Portal scoping (restrictTo) — refuse a wrong-portal account here
+    // and point it at the right login, rather than cross-redirecting.
+    if (restrictTo === 'admin' && !isAdminUser(user)) {
+      setError('This login is for Xclusive Oman staff. Travel agents sign in at the Agent Portal.');
+      pointToOtherPortal();
+      return;
+    }
+    if (restrictTo === 'agent' && !user.agencyId) {
+      setError('This login is for travel agents. Xclusive Oman staff sign in at the staff login.');
+      pointToOtherPortal();
+      return;
+    }
+
+    const destination = isTeamUser(user)
+      ? teamDestination
+      : isAdminUser(user)
+        ? adminDestination
+        : user.agencyId
+          ? agentDestination
+          : null; // agency_id-less but not a recognized admin/team role — a custom role with no portal built for it yet (Employees.jsx's Add modal "Other" branch)
+
+    if (!destination) {
+      setError("This account isn't set up for portal access yet. Contact your administrator.");
+      return;
+    }
+    // Hard navigation — see this file's own top comment for why a plain
+    // React Router navigate() isn't safe here.
+    window.location.replace(destination);
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
@@ -258,38 +297,25 @@ export function LoginModal({
         // step back to 'email' synchronously), this stale completion must
         // not silently snap them back to the OTP step out from under them.
         setStep('otp');
+      } else if (step === 'otp') {
+        const resp = await loginApi.post('/auth/verify-otp', { email, otp }, { skipAuth: true });
+
+        // Admin console with the global 2FA toggle on — no session yet, one
+        // more step. Carry the token forward and swap the emailed-code
+        // field for the authenticator-code field.
+        if (resp.mfaRequired) {
+          setMfaToken(resp.mfaToken);
+          setOtp('');
+          setStep('mfa');
+          return;
+        }
+
+        finishLogin(resp.user);
+        return;
       } else {
-        const { user } = await loginApi.post('/auth/verify-otp', { email, otp }, { skipAuth: true });
-
-        // Portal scoping (restrictTo) — refuse a wrong-portal account here
-        // and point it at the right login, rather than cross-redirecting.
-        if (restrictTo === 'admin' && !isAdminUser(user)) {
-          setError('This login is for Xclusive Oman staff. Travel agents sign in at the Agent Portal.');
-          pointToOtherPortal();
-          return;
-        }
-        if (restrictTo === 'agent' && !user.agencyId) {
-          setError('This login is for travel agents. Xclusive Oman staff sign in at the staff login.');
-          pointToOtherPortal();
-          return;
-        }
-
-        const destination = isTeamUser(user)
-          ? teamDestination
-          : isAdminUser(user)
-            ? adminDestination
-            : user.agencyId
-              ? agentDestination
-              : null; // agency_id-less but not a recognized admin/team role — a custom role with no portal built for it yet (Employees.jsx's Add modal "Other" branch)
-
-        if (!destination) {
-          // finally below still runs on this early return and clears submitting.
-          setError("This account isn't set up for portal access yet. Contact your administrator.");
-          return;
-        }
-        // Hard navigation — see this file's own top comment for why a plain
-        // React Router navigate() isn't safe here.
-        window.location.replace(destination);
+        // step === 'mfa' — authenticator code, admin 2FA only.
+        const { user } = await loginApi.post('/auth/verify-mfa', { mfaToken, code: otp }, { skipAuth: true });
+        finishLogin(user);
         return;
       }
     } catch (err) {
@@ -320,6 +346,7 @@ export function LoginModal({
   function handleChangeEmail() {
     setStep('email');
     setOtp('');
+    setMfaToken('');
     setError('');
     setInfoMessage('');
     setWrongPortalHint(null);
@@ -327,7 +354,8 @@ export function LoginModal({
   }
 
   const otpExpired = step === 'otp' && remainingSeconds <= 0;
-  const canSubmit = step === 'email' ? email.trim().length > 0 : otp.length === 6 && !otpExpired;
+  const canSubmit =
+    step === 'email' ? email.trim().length > 0 : otp.length === 6 && !otpExpired;
 
   return (
     <div className="flex min-h-screen bg-[#0b1424]">
@@ -393,7 +421,11 @@ export function LoginModal({
               Welcome back
             </h2>
             <p className="mt-1.5 text-sm text-slate-500">
-              {step === 'email' ? 'Sign in to continue to your dashboard.' : 'Enter the code we just emailed you.'}
+              {step === 'email'
+                ? 'Sign in to continue to your dashboard.'
+                : step === 'otp'
+                  ? 'Enter the code we just emailed you.'
+                  : 'Enter the code from your authenticator app.'}
             </p>
           </div>
 
@@ -410,7 +442,7 @@ export function LoginModal({
                   type="email"
                   required
                   autoFocus={step === 'email'}
-                  disabled={step === 'otp'}
+                  disabled={step !== 'email'}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="Enter Your Email"
@@ -421,7 +453,7 @@ export function LoginModal({
                 <p className="text-xs text-slate-500">
                   We'll email you a 6-digit sign-in code — no password needed.
                 </p>
-              ) : (
+              ) : step === 'otp' ? (
                 <div>
                   <div className="mb-1.5 flex items-center justify-between">
                     <label className="block text-[11px] font-semibold uppercase text-slate-500">Verification code</label>
@@ -459,6 +491,37 @@ export function LoginModal({
                     {infoMessage || `Sent to ${email}.`} It expires 5 minutes after each send.
                   </p>
                 </div>
+              ) : (
+                // step === 'mfa' — admin console, global 2FA toggle on. The
+                // emailed code already checked out; this is the second
+                // factor. No resend/countdown here — the code is generated
+                // on the user's own device, not sent.
+                <div>
+                  <div className="mb-1.5 flex items-center justify-between">
+                    <label className="block text-[11px] font-semibold uppercase text-slate-500">
+                      Authenticator code
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleChangeEmail}
+                      className="text-[11px] font-semibold hover:underline"
+                      style={{ color: ACCENT }}
+                    >
+                      Start over
+                    </button>
+                  </div>
+                  <LoginOtpInput
+                    required
+                    autoFocus
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    placeholder="••••••"
+                  />
+                  <p className="mt-2 text-xs text-slate-500">
+                    Open Google Authenticator, Authy, or your TOTP app and enter the current 6-digit code for Xclusive
+                    Oman.
+                  </p>
+                </div>
               )}
 
               {error && (
@@ -488,7 +551,9 @@ export function LoginModal({
                     : 'Sign In'
                   : submitting
                     ? 'Verifying…'
-                    : 'Verify & Sign In'}
+                    : step === 'mfa'
+                      ? 'Verify code'
+                      : 'Verify & Sign In'}
               </button>
             </form>
 

@@ -19,7 +19,7 @@ import FdItineraryDocument from '../components/FdItineraryDocument.jsx';
 // bites). Mirrors ItineraryPrint.jsx, which had/has the same bug.
 const BASE_URL = '/api';
 
-function waitForImages() {
+function settleImageSet() {
   const images = Array.from(document.images);
   return Promise.all(
     images.map(
@@ -30,7 +30,23 @@ function waitForImages() {
           img.addEventListener('error', resolve, { once: true }); // a broken image shouldn't hang the PDF forever
         })
     )
-  );
+  ).then(() => images.length);
+}
+
+// Settles once every <img> currently in the document has loaded or errored
+// *and* that pass didn't itself change how many images are on the page — a
+// broken image can trigger a re-render that swaps in a different <img> (see
+// FdItineraryDocument.jsx's PhotoGallery onError fallback), and that new one
+// still needs to be waited on. Bounded so a pathological render can't loop
+// forever.
+async function waitForImages() {
+  let last = -1;
+  for (let pass = 0; pass < 5; pass += 1) {
+    const count = await settleImageSet();
+    if (count === last) return;
+    last = count;
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+  }
 }
 
 // Standalone print target for the FD departure itinerary's server-side PDF
