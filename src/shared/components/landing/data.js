@@ -101,7 +101,7 @@ export const TRANSFERS = [
 
 export const FOOTER_LINKS = {
   itineraries: ['Nizwa Heritage Trail', 'Muscat City & Grand Mosque', 'Wahiba Sands Desert Safari', 'Wadi Shab Adventure'],
-  partners: ['Sign Up For Trade Access', 'Log In', 'Trade Portal', 'Become a Partner'],
+  partners: ['Sign Up For Trade Access', 'Log In', 'B2B Portal', 'Become a Partner'],
 };
 
 export const CONTACT = {
