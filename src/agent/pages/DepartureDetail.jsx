@@ -54,6 +54,15 @@ const MUTED = 'text-agent-muted';
 const DIVIDER = 'border-agent-line-light';
 const SEATS_RED = '#EF4A3D';
 
+// Part-payment policy — mirrors the backend
+// (booking.service.js#computeFdDepositDue, 0077_booking_deposit_due.sql).
+// Within 15 days of departure the whole booking value is due up front;
+// earlier than that, only this flat deposit is due now. Display-only here —
+// the booking API response (amountDueNow) is the source of truth once the
+// booking exists.
+const FULL_PAYMENT_LEAD_DAYS = 15;
+const DEPOSIT_AMOUNT = 5000;
+
 function sanitizeHtml(html) {
   return DOMPurify.sanitize(html || '', { USE_PROFILES: { html: true } });
 }
@@ -1287,6 +1296,14 @@ export default function DepartureDetail() {
     [departure, selectedAddonIds]
   );
   const total = departure ? (departure.ratePerPax + addonTotalPerPax) * pax : 0;
+  // Days from today to the picked departure date, rounded up — drives
+  // whether Confirm Booking will ask for the full amount or just the
+  // deposit (same rule the backend applies at booking creation).
+  const daysUntilDeparture = selectedDate
+    ? Math.ceil((new Date(selectedDate.date).getTime() - Date.now()) / 86400000)
+    : null;
+  const requiresFullPayment = daysUntilDeparture != null && daysUntilDeparture < FULL_PAYMENT_LEAD_DAYS;
+  const depositDueNow = requiresFullPayment ? total : Math.min(DEPOSIT_AMOUNT, total);
   const seatsLeft = getSeatsLeft(departure?.departureDates);
   // Booking panel's own seats-left bar tracks the currently-selected date
   // specifically (not the header's package-wide max above) — falls back to
@@ -1609,7 +1626,19 @@ export default function DepartureDetail() {
                   </p>
                   <p className={INK}>Status: {bookingResult.status}</p>
                   <p className={INK}>Total: {formatCurrency(bookingResult.totalPrice)}</p>
-                  {bookingResult.balanceDueDate && (
+                  {bookingResult.amountDueNow != null && (
+                    <p className={`font-semibold ${INK}`}>
+                      Due now: {formatCurrency(bookingResult.amountDueNow)}
+                    </p>
+                  )}
+                  {bookingResult.remainingBalance > 0 && (
+                    <p className={`text-xs ${MUTED}`}>
+                      Remaining balance {formatCurrency(bookingResult.remainingBalance)}
+                      {bookingResult.balanceDueDate &&
+                        ` · due ${new Date(bookingResult.balanceDueDate).toLocaleDateString()}`}
+                    </p>
+                  )}
+                  {!(bookingResult.remainingBalance > 0) && bookingResult.balanceDueDate && (
                     <p className={`text-xs ${MUTED}`}>
                       Balance due {new Date(bookingResult.balanceDueDate).toLocaleDateString()}
                     </p>
@@ -1694,6 +1723,27 @@ export default function DepartureDetail() {
                       <span>Total Estimate</span>
                       <span>{formatCurrency(total)}</span>
                     </div>
+                  </div>
+
+                  {/* Part-payment terms — full amount within 15 days of
+                      departure, otherwise a ₹5,000 deposit now with the
+                      balance collected later. */}
+                  <div className={`mb-3 rounded-xl border ${DIVIDER} bg-agent-accent-soft/40 p-3 text-xs`}>
+                    <div className={`flex justify-between font-semibold ${INK}`}>
+                      <span>{requiresFullPayment ? 'Payable now' : 'Deposit payable now'}</span>
+                      <span>{formatCurrency(depositDueNow)}</span>
+                    </div>
+                    {!requiresFullPayment && (
+                      <div className={`mt-1 flex justify-between ${MUTED}`}>
+                        <span>Balance payable later</span>
+                        <span>{formatCurrency(total - depositDueNow)}</span>
+                      </div>
+                    )}
+                    <p className={`mt-1.5 ${MUTED}`}>
+                      {requiresFullPayment
+                        ? 'This departure is within 15 days, so the full amount is due to confirm.'
+                        : 'Departure is more than 15 days away — pay the deposit now and settle the balance closer to travel.'}
+                    </p>
                   </div>
 
                   <ErrorText>{travelerError || bookingError}</ErrorText>
