@@ -33,6 +33,7 @@ import ContentManagement from './pages/ContentManagement.jsx';
 import CmsPageEditor from './pages/CmsPageEditor.jsx';
 import ReviewsManagement from './pages/ReviewsManagement.jsx';
 import TermsAndConditions from './pages/TermsAndConditions.jsx';
+import Security from './pages/Security.jsx';
 
 export default function App() {
   return (
@@ -75,6 +76,7 @@ export default function App() {
               <Route path="support" element={<Support />} />
               <Route path="support/:ticketId" element={<SupportTicketDetail />} />
               <Route path="terms" element={<TermsAndConditions />} />
+              <Route path="security" element={<Security />} />
               {/* Admin Reviews Management (Task 21 — Item 33) — ops_admin/
                   super_admin gated on the backend (reviewsAdmin.routes.js);
                   no extra frontend route guard here, same as FD Operations
