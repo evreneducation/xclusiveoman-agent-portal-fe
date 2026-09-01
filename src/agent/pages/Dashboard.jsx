@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
 import { Link } from 'react-router-dom';
-import { LuMail, LuPhone } from 'react-icons/lu';
+import { LuChevronLeft, LuChevronRight, LuMail, LuPhone } from 'react-icons/lu';
 import { FaCircleCheck } from 'react-icons/fa6';
 import { api } from '../api/client.js';
 import { Button, Card } from '../components/ui.jsx';
@@ -34,7 +34,7 @@ const PLACEHOLDER_DEAL = {
 };
 
 // How long each slide holds before auto-advancing to the next deal.
-const DEAL_ROTATE_MS = 5000;
+const DEAL_ROTATE_MS = 4000;
 
 function RelationshipManagerCard({ rm }) {
   if (!rm) {
@@ -137,6 +137,10 @@ export default function Dashboard() {
   const currentDeal = dealSlides[activeDeal % dealSlides.length];
   const currentDealImage = currentDeal.imageUrl ?? currentDeal.image_url;
 
+  function goToDeal(offset) {
+    setActiveDeal((i) => (i + offset + dealSlides.length) % dealSlides.length);
+  }
+
   useEffect(() => {
     Promise.all([
       api.get('/agencies/me'),
@@ -212,9 +216,11 @@ export default function Dashboard() {
       <h2 className="mb-4 text-3xl font-extrabold text-agent-ink">Deals For You</h2>
       {/* Admin-curated deals (AdminLayout.jsx's own "Deals" tab, GET /deals),
           auto-rotating every DEAL_ROTATE_MS when there's more than one —
-          falls back to the single static PLACEHOLDER_DEAL slide (dots still
-          rendered, just non-interactive with only one slide) whenever the
-          admin hasn't uploaded any yet. */}
+          falls back to the single static PLACEHOLDER_DEAL slide (arrows/dots
+          hidden entirely, nothing to navigate to) whenever the admin hasn't
+          uploaded any yet. Arrows/dots both call the same goToDeal/
+          setActiveDeal state the auto-rotate interval drives, so a manual
+          click doesn't fight the timer — it just jumps early. */}
       <div className="relative mb-8 h-56 overflow-hidden rounded-2xl bg-[#0B1130] shadow-sm sm:h-72 lg:h-80">
         <img
           src={currentDealImage}
@@ -231,17 +237,35 @@ export default function Dashboard() {
           <h3 className="text-3xl font-extrabold text-white sm:text-4xl lg:text-5xl">{currentDeal.title}</h3>
         </div>
         {dealSlides.length > 1 && (
-          <div className="absolute inset-x-0 bottom-4 flex justify-center gap-1.5">
-            {dealSlides.map((slide, i) => (
-              <button
-                key={slide.id || i}
-                type="button"
-                onClick={() => setActiveDeal(i)}
-                aria-label={`Show slide ${i + 1}`}
-                className={`h-1.5 rounded-full transition-all ${i === activeDeal ? 'w-4 bg-white' : 'w-1.5 bg-white/50'}`}
-              />
-            ))}
-          </div>
+          <>
+            <button
+              type="button"
+              onClick={() => goToDeal(-1)}
+              aria-label="Previous deal"
+              className="absolute left-3 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-black/30 text-white transition hover:bg-black/50"
+            >
+              <LuChevronLeft size={20} />
+            </button>
+            <button
+              type="button"
+              onClick={() => goToDeal(1)}
+              aria-label="Next deal"
+              className="absolute right-3 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-black/30 text-white transition hover:bg-black/50"
+            >
+              <LuChevronRight size={20} />
+            </button>
+            <div className="absolute inset-x-0 bottom-4 flex justify-center gap-1.5">
+              {dealSlides.map((slide, i) => (
+                <button
+                  key={slide.id || i}
+                  type="button"
+                  onClick={() => setActiveDeal(i)}
+                  aria-label={`Show slide ${i + 1}`}
+                  className={`h-1.5 rounded-full transition-all ${i === activeDeal ? 'w-4 bg-white' : 'w-1.5 bg-white/50'}`}
+                />
+              ))}
+            </div>
+          </>
         )}
       </div>
 

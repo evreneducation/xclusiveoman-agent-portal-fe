@@ -1173,12 +1173,6 @@ function MealDaysTrigger({ addon, itineraryDayNumbers, target, dayNumbers, price
                 );
               })}
             </div>
-
-            {pricePerDay != null && (
-              <p className={`mt-2.5 text-[11px] ${MUTED}`}>
-                {formatCurrency(pricePerDay)} × {chosen.length} day{chosen.length === 1 ? '' : 's'} = {formatCurrency(pricePerDay * chosen.length)} / pax
-              </p>
-            )}
           </motion.div>
         )}
       </AnimatePresence>
