@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api/client.js';
 import { getSocket } from '../lib/socket.js';
 import { NotificationBell } from '../../shared/components/NotificationBell.jsx';
+import { resolveNotificationPath } from '../lib/notificationRoutes.js';
 import ReviewPromptGate from './ReviewPromptGate.jsx';
 import { Button } from './ui.jsx';
 import {
@@ -58,23 +59,6 @@ const NAV_ITEMS = [
   { to: '/agent/support', label: 'Contact & Support', Icon: SupportIcon },
   { to: '/agent/profile', label: 'Profile', Icon: ProfileIcon },
 ];
-
-// Agent Notification UI (Task 2) — maps a notification's referenceType to an
-// in-portal detail route (doc §11.8's related_entity_type, using the same
-// entity strings already written into audit_logs by miceRfqs.controller.js
-// / packageRequests.controller.js). No business module creates notifications
-// yet, but the routing needs to be ready for when they do. Only entities
-// with an existing detail route are listed — e.g. bookings has no
-// /agent/bookings/:id route yet, so it's deliberately left out for now.
-const REFERENCE_ROUTES = {
-  mice_rfq: (id) => `/agent/mice-requests/${id}`,
-  package_request: (id) => `/agent/fit-requests/${id}`,
-};
-
-function resolveNotificationPath(referenceType, referenceId) {
-  if (!referenceType || !referenceId) return null;
-  return REFERENCE_ROUTES[referenceType]?.(referenceId) || null;
-}
 
 // A path matches a nav item either on its own `to` (exact or as a prefix)
 // or on any of its `matchPrefixes` — see the merged "My Requests / Quotes"

@@ -470,16 +470,16 @@ function DayHotelSection({ city, hotels, currentHotelId, currentOccupancy, paxAd
   );
 }
 
-// Tours and Transfers are marked required (matching the "*" convention used
-// elsewhere in this builder, e.g. "City *") — validateStep(2) below blocks
-// moving past Itinerary until every day has at least one of each. Extras
-// stay optional. `required` only decorates the field label — kept separate
-// from `label` itself so the lowercased "No {label} available…" empty-state
+// Tours are marked required (matching the "*" convention used elsewhere in
+// this builder, e.g. "City *") — validateStep(2) below blocks moving past
+// Itinerary until every day has at least one. Transfers and Activities stay
+// optional. `required` only decorates the field label — kept separate from
+// `label` itself so the lowercased "No {label} available…" empty-state
 // message below doesn't pick up a stray asterisk.
 const DAY_SECTION_META = {
   tour: { label: 'Tours', addLabel: '+ Add tour', required: true },
-  transfer: { label: 'Transfers', addLabel: '+ Add transfer', required: true },
-  activity: { label: 'Extras', addLabel: '+ Add extra' },
+  transfer: { label: 'Transfers', addLabel: '+ Add transfer' },
+  activity: { label: 'Activities', addLabel: '+ Add activity' },
 };
 
 // A day's tours/transfers/extras section — multi-add, filtered to that
@@ -979,15 +979,14 @@ function validateStep(step, { form, cityDays, itineraryItems, travelers, dayCoun
     // Hotel selection now happens per day inside Itinerary (was its own
     // Trip Details gate before) — still mandatory before moving on.
     if (!itineraryItems.some((it) => it.type === 'hotel')) return 'Select at least one hotel in your itinerary.';
-    // Every day needs at least one tour and one transfer of its own, not
-    // just somewhere in the trip — mirrors the day-by-day granularity the
-    // rest of Itinerary already works at (hotel is trip-wide since the same
-    // hotel usually covers a whole city stay; tours/transfers are what
-    // actually varies day to day).
+    // Every day needs at least one tour of its own, not just somewhere in
+    // the trip — mirrors the day-by-day granularity the rest of Itinerary
+    // already works at (hotel is trip-wide since the same hotel usually
+    // covers a whole city stay; tours are what actually varies day to day).
+    // Transfers are optional — not every day needs its own.
     for (let day = 1; day <= dayCount; day++) {
       const dayItems = itemsForDay(itineraryItems, day);
       if (!dayItems.some((it) => it.type === 'tour')) return `Day ${day} needs at least one tour.`;
-      if (!dayItems.some((it) => it.type === 'transfer')) return `Day ${day} needs at least one transfer.`;
     }
     return '';
   }

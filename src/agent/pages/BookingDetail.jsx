@@ -205,7 +205,7 @@ export default function BookingDetail() {
   if (error && !data) {
     return (
       <div className="mx-auto max-w-4xl p-5 lg:p-8">
-        <Link to="/bookings" className="text-sm text-agent-accent hover:underline">
+        <Link to="/agent/bookings" className="text-sm text-agent-accent hover:underline">
           ← Back to Bookings
         </Link>
         <ErrorText>{error}</ErrorText>
@@ -217,7 +217,7 @@ export default function BookingDetail() {
 
   return (
     <div className="mx-auto max-w-4xl p-5 lg:p-8">
-      <Link to="/bookings" className="text-sm text-agent-accent hover:underline">
+      <Link to="/agent/bookings" className="text-sm text-agent-accent hover:underline">
         ← Back to Bookings
       </Link>
 

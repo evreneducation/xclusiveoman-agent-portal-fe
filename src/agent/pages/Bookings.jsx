@@ -61,7 +61,7 @@ export default function Bookings() {
                 {/* Documents (Task 14) only exist for FD bookings today — see
                     documents.model.js's own FD-only scoping. */}
                 {b.sourceType === 'fd_package' && (
-                  <Link to={`/bookings/${b.id}`} className="text-agent-accent hover:underline">
+                  <Link to={`/agent/bookings/${b.id}`} className="text-agent-accent hover:underline">
                     Documents
                   </Link>
                 )}
