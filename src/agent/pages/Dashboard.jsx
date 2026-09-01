@@ -23,15 +23,18 @@ const CONFIRMED_BOOKING_STATUSES = new Set([
   'deposit_paid', 'confirmed', 'balance_due', 'fully_paid', 'amendment_requested', 'completed',
 ]);
 
-// "Deals For You" — no admin-curated deals content/endpoint exists yet, so
-// this is a single static placeholder slide (real photo, hardcoded copy)
-// standing in for that section until real data drives it. Swap this out
-// (and the single-slide render below) once that's built.
+// "Deals For You" — falls back to this single static slide (real photo,
+// hardcoded copy) whenever the admin-curated Deals list (AdminLayout.jsx's
+// own "Deals" tab, GET /deals) is empty or still loading, so the section
+// never renders looking broken/blank before the admin has uploaded anything.
 const PLACEHOLDER_DEAL = {
   title: 'Magical Muscat',
   duration: '4N | 5D',
   imageUrl: 'https://images.unsplash.com/photo-1763377220339-de687c3efad4?auto=format&fit=crop&w=1600&q=80',
 };
+
+// How long each slide holds before auto-advancing to the next deal.
+const DEAL_ROTATE_MS = 5000;
 
 function RelationshipManagerCard({ rm }) {
   if (!rm) {
@@ -109,6 +112,30 @@ export default function Dashboard() {
   const [stats, setStats] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  // null while loading — kept separate from `deals`'s eventual empty-array
+  // state so the slide below can fall back to PLACEHOLDER_DEAL in both
+  // cases without telling them apart.
+  const [deals, setDeals] = useState(null);
+  const [activeDeal, setActiveDeal] = useState(0);
+
+  useEffect(() => {
+    api
+      .get('/deals')
+      .then(({ deals: d }) => setDeals(d))
+      .catch(() => setDeals([]));
+  }, []);
+
+  // Only rotates once there are at least two real deals to cycle between —
+  // a single deal (or the placeholder fallback) just sits still.
+  useEffect(() => {
+    if (!deals || deals.length < 2) return;
+    const id = setInterval(() => setActiveDeal((i) => (i + 1) % deals.length), DEAL_ROTATE_MS);
+    return () => clearInterval(id);
+  }, [deals]);
+
+  const dealSlides = deals && deals.length > 0 ? deals : [PLACEHOLDER_DEAL];
+  const currentDeal = dealSlides[activeDeal % dealSlides.length];
+  const currentDealImage = currentDeal.imageUrl ?? currentDeal.image_url;
 
   useEffect(() => {
     Promise.all([
@@ -183,24 +210,39 @@ export default function Dashboard() {
       </div>
 
       <h2 className="mb-4 text-3xl font-extrabold text-agent-ink">Deals For You</h2>
-      {/* Single static placeholder slide (see PLACEHOLDER_DEAL above) — the
-          dot row is purely decorative for now, matching the reference
-          design's carousel chrome, until real deals content exists to
-          actually cycle through. */}
-      <div className="relative mb-8 h-56 overflow-hidden rounded-2xl shadow-sm sm:h-72 lg:h-80">
-        <img src={PLACEHOLDER_DEAL.imageUrl} alt={PLACEHOLDER_DEAL.title} className="h-full w-full object-cover" />
+      {/* Admin-curated deals (AdminLayout.jsx's own "Deals" tab, GET /deals),
+          auto-rotating every DEAL_ROTATE_MS when there's more than one —
+          falls back to the single static PLACEHOLDER_DEAL slide (dots still
+          rendered, just non-interactive with only one slide) whenever the
+          admin hasn't uploaded any yet. */}
+      <div className="relative mb-8 h-56 overflow-hidden rounded-2xl bg-[#0B1130] shadow-sm sm:h-72 lg:h-80">
+        <img
+          src={currentDealImage}
+          alt={currentDeal.title}
+          className="absolute inset-0 h-full w-full object-cover object-center"
+        />
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-black/40" />
-        <div className="absolute inset-x-0 top-4 text-center text-xs font-semibold uppercase tracking-widest text-white/90">
-          {PLACEHOLDER_DEAL.duration}
-        </div>
+        {currentDeal.duration && (
+          <div className="absolute inset-x-0 top-4 text-center text-xs font-semibold uppercase tracking-widest text-white/90">
+            {currentDeal.duration}
+          </div>
+        )}
         <div className="absolute inset-x-0 bottom-10 px-6 text-center">
-          <h3 className="text-3xl font-extrabold text-white sm:text-4xl lg:text-5xl">{PLACEHOLDER_DEAL.title}</h3>
+          <h3 className="text-3xl font-extrabold text-white sm:text-4xl lg:text-5xl">{currentDeal.title}</h3>
         </div>
-        <div className="absolute inset-x-0 bottom-4 flex justify-center gap-1.5">
-          {[0, 1, 2, 3].map((i) => (
-            <span key={i} className={`h-1.5 rounded-full transition-all ${i === 0 ? 'w-4 bg-white' : 'w-1.5 bg-white/50'}`} />
-          ))}
-        </div>
+        {dealSlides.length > 1 && (
+          <div className="absolute inset-x-0 bottom-4 flex justify-center gap-1.5">
+            {dealSlides.map((slide, i) => (
+              <button
+                key={slide.id || i}
+                type="button"
+                onClick={() => setActiveDeal(i)}
+                aria-label={`Show slide ${i + 1}`}
+                className={`h-1.5 rounded-full transition-all ${i === activeDeal ? 'w-4 bg-white' : 'w-1.5 bg-white/50'}`}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Custom header instead of Card's own `label` prop (small uppercase

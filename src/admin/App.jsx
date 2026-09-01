@@ -14,6 +14,7 @@ import TourEditor from './pages/TourEditor.jsx';
 import ActivityEditor from './pages/ActivityEditor.jsx';
 import TransferEditor from './pages/TransferEditor.jsx';
 import MiceCatalog from './pages/MiceCatalog.jsx';
+import Deals from './pages/Deals.jsx';
 import NeftVerification from './pages/NeftVerification.jsx';
 import QuoteInbox from './pages/QuoteInbox.jsx';
 import QuoteInboxDetail from './pages/QuoteInboxDetail.jsx';
@@ -61,6 +62,7 @@ export default function App() {
               <Route path="catalog/activities/:id" element={<ActivityEditor />} />
               <Route path="catalog/transfers/:id" element={<TransferEditor />} />
               <Route path="mice-catalog" element={<MiceCatalog />} />
+              <Route path="deals" element={<Deals />} />
               <Route path="quote-inbox" element={<QuoteInbox />} />
               <Route path="quote-inbox/:id" element={<QuoteInboxDetail />} />
               <Route path="mice-requests" element={<MiceRequests />} />
