@@ -10,7 +10,7 @@ import { ActivityImagesUpload } from '../components/ActivityImagesUpload.jsx';
 import { validateActivityForm } from '../lib/activityForm.js';
 import { TransferImagesUpload } from '../components/TransferImagesUpload.jsx';
 import { TRANSFER_TYPE_OPTIONS, validateTransferForm } from '../lib/transferForm.js';
-import { OMAN_OVERVIEW_MIN_CHARS, countChars, validateOmanOverviewForm } from '../lib/omanOverviewForm.js';
+import { OMAN_OVERVIEW_MIN_WORDS, OMAN_OVERVIEW_MAX_WORDS, countWords, validateOmanOverviewForm } from '../lib/omanOverviewForm.js';
 import { RichTextEditor } from '../../shared/components/RichTextEditor.jsx';
 import { ImageUpload } from '../../shared/components/ImageUpload.jsx';
 
@@ -885,7 +885,8 @@ function OmanOverviewForm({ editingItem, onSaved, onCancelEdit }) {
     return url;
   }
 
-  const charCount = countChars(form.description);
+  const wordCount = countWords(form.description);
+  const wordCountInRange = wordCount >= OMAN_OVERVIEW_MIN_WORDS && wordCount <= OMAN_OVERVIEW_MAX_WORDS;
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -924,9 +925,11 @@ function OmanOverviewForm({ editingItem, onSaved, onCancelEdit }) {
         </div>
         <div>
           <div className="mb-1 flex items-center justify-between">
-            <FieldLabel>Description * (min {OMAN_OVERVIEW_MIN_CHARS} characters)</FieldLabel>
-            <span className={`text-xs font-semibold ${charCount >= OMAN_OVERVIEW_MIN_CHARS ? 'text-[#227647]' : 'text-muted'}`}>
-              {charCount} / {OMAN_OVERVIEW_MIN_CHARS} characters
+            <FieldLabel>
+              Description * ({OMAN_OVERVIEW_MIN_WORDS}–{OMAN_OVERVIEW_MAX_WORDS} words)
+            </FieldLabel>
+            <span className={`text-xs font-semibold ${wordCountInRange ? 'text-[#227647]' : 'text-muted'}`}>
+              {wordCount} / {OMAN_OVERVIEW_MAX_WORDS} words
             </span>
           </div>
           <RichTextEditor size="lg" value={form.description} onChange={(html) => update('description', html)} />
