@@ -5,7 +5,7 @@
 // a divergent copy.
 import { isEmptyHtml } from '../../shared/components/RichTextEditor.jsx';
 
-export const TOUR_REQUIRED_FIELDS = ['name', 'city', 'description', 'duration', 'category', 'price'];
+export const TOUR_REQUIRED_FIELDS = ['name', 'city', 'description', 'duration', 'category', 'price', 'pickupTime'];
 
 // description is rich text now — its empty state is `<p></p>`, not `''`.
 const HTML_FIELDS = new Set(['description']);

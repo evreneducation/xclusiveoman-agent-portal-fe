@@ -14,6 +14,7 @@ import {
   LuChevronDown,
   LuChevronLeft,
   LuChevronRight,
+  LuAlarmClock,
   LuClock,
   LuDownload,
   LuHotel,
@@ -748,12 +749,12 @@ function groupAddonsByType(addons) {
 // control — Cancel just closes, Add(/Remove once already selected) toggles
 // the add-on via the same onToggle the checklist rows use, then closes.
 //
-// `infoLines` shows whichever of duration/city/route the catalog row
-// actually has (activities/tours have duration, transfers have city,
-// flights have neither but do have source/destination) — the reference this
-// was built from shows a fixed "Duration : … / Pickup Time : …" pair, but
-// there's no pickup-time field anywhere in this app's catalog schema, so
-// that's real available fields instead of a fabricated one.
+// `infoLines` shows whichever of duration/city/pickup time/route the catalog
+// row actually has (activities/tours have duration + pickup time, transfers
+// have city + optionally pickup time, flights have neither but do have
+// source/destination) — see 0078_pickup_time.sql on the backend. Pickup
+// time is pushed right after city so it renders directly below it in the
+// stacked badge list below.
 function AddonDetailModal({ addon, selected, onToggle, onClose }) {
   const [detail, setDetail] = useState(null);
   const [detailError, setDetailError] = useState('');
@@ -784,8 +785,10 @@ function AddonDetailModal({ addon, selected, onToggle, onClose }) {
   const images = detail?.images || [];
   const [mainImage, ...restImages] = images;
   const infoLines = [];
+  const pickupTime = detail?.pickupTime ?? detail?.pickup_time;
   if (detail?.duration) infoLines.push({ label: 'Duration', value: detail.duration, icon: LuClock });
   if (detail?.city) infoLines.push({ label: 'City', value: detail.city, icon: LuMapPin });
+  if (pickupTime) infoLines.push({ label: 'Pickup Time', value: formatTime(pickupTime), icon: LuAlarmClock });
   if (detail?.source || detail?.destination) {
     infoLines.push({ label: 'Route', value: `${detail.source} → ${detail.destination}`, icon: LuPlane });
   }
@@ -878,7 +881,7 @@ function AddonDetailModal({ addon, selected, onToggle, onClose }) {
               <h3 className={`text-2xl font-extrabold ${INK}`}>{addon.name}</h3>
               {infoLines.length > 0 && (
                 <div className="flex flex-col items-end gap-1.5">
-                  {infoLines.slice(0, 2).map((line) => (
+                  {infoLines.slice(0, 3).map((line) => (
                     <span
                       key={line.label}
                       className="inline-flex items-center gap-1.5 rounded-full bg-agent-accent-soft px-3 py-1 text-xs font-semibold text-agent-accent-dark"

@@ -351,6 +351,7 @@ function MiceTourForm({ onCreated }) {
         duration: form.duration,
         category: form.category,
         price: Number(form.price),
+        pickupTime: form.pickupTime,
         images,
         isMiceEnabled: !!form.isMiceEnabled,
         // 0072_tours_activities_transfers_status.sql — same "fully validated
@@ -398,6 +399,10 @@ function MiceTourForm({ onCreated }) {
               value={form.price ?? ''}
               onChange={(e) => update('price', e.target.value)}
             />
+          </div>
+          <div>
+            <FieldLabel>Pickup time *</FieldLabel>
+            <TextInput type="time" required value={form.pickupTime || ''} onChange={(e) => update('pickupTime', e.target.value)} />
           </div>
           <div className="sm:col-span-2">
             <FieldLabel>Description *</FieldLabel>
@@ -510,6 +515,7 @@ function MiceActivityForm({ onCreated }) {
         name: form.name,
         city: form.city,
         duration: form.duration,
+        pickupTime: form.pickupTime,
         description: form.description,
         images,
         isMiceEnabled: !!form.isMiceEnabled,
@@ -554,6 +560,10 @@ function MiceActivityForm({ onCreated }) {
               value={form.pricePerPax ?? ''}
               onChange={(e) => update('pricePerPax', e.target.value)}
             />
+          </div>
+          <div>
+            <FieldLabel>Pickup time</FieldLabel>
+            <TextInput type="time" value={form.pickupTime || ''} onChange={(e) => update('pickupTime', e.target.value)} />
           </div>
           <div className="sm:col-span-2">
             <FieldLabel>Description</FieldLabel>
@@ -671,6 +681,7 @@ function MiceTransferForm({ onCreated }) {
         images,
         isMiceEnabled: !!form.isMiceEnabled,
         ...(form.price !== '' && form.price !== undefined ? { price: Number(form.price) } : {}),
+        ...(form.pickupTime ? { pickupTime: form.pickupTime } : {}),
         status: 'published',
       };
       const { transfer } = await api.post('/admin/transfers', payload);
@@ -720,6 +731,10 @@ function MiceTransferForm({ onCreated }) {
               value={form.price ?? ''}
               onChange={(e) => update('price', e.target.value)}
             />
+          </div>
+          <div>
+            <FieldLabel>Pickup time</FieldLabel>
+            <TextInput type="time" value={form.pickupTime || ''} onChange={(e) => update('pickupTime', e.target.value)} />
           </div>
           <div className="sm:col-span-2">
             <FieldLabel>Description</FieldLabel>
