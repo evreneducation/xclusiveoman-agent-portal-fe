@@ -13,7 +13,11 @@ export default function ProtectedRoute() {
   }
 
   if (status === 'anonymous') {
-    return <Navigate to="/admin" replace />;
+    // "/" (the public landing page), not "/admin" — an unauthenticated
+    // visitor (including one who just logged out) lands on the marketing
+    // site, not straight back at the login form; LoginModal's own Home
+    // button is the way back here from there.
+    return <Navigate to="/" replace />;
   }
 
   return <Outlet />;
