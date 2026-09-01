@@ -56,6 +56,16 @@ function RelationshipManagerCard({ rm }) {
         <div className="mt-1 text-sm text-agent-muted">
           {rm.email} {rm.phone ? `· ${rm.phone}` : ''}
         </div>
+        {rm.whatsappNumber && (
+          <a
+            href={`https://wa.me/${rm.whatsappNumber.replace(/[^\d]/g, '')}`}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-[#2f7d32] bg-[#eef7ee] px-3 py-1.5 text-[11px] font-semibold text-[#2f7d32]"
+          >
+            💬 Chat on WhatsApp
+          </a>
+        )}
       </div>
     </div>
   );
