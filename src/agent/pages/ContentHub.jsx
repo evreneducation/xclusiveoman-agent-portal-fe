@@ -25,24 +25,6 @@ const TABS = [
   { key: 'transfers', label: 'Transfers', endpoint: '/transfers' },
 ];
 
-// Every catalog table's price lives on a differently-named column (hotels:
-// price_per_night, activities: price_per_pax, tours/transfers: a flat
-// price) — coalescing both the camelCase (already-transformed) and
-// snake_case (raw SELECT *) spellings of each, since which one a given
-// endpoint returns isn't consistent across this codebase's own pages.
-function priceLabel(tab, item) {
-  if (tab === 'hotels') {
-    const price = item.pricePerNight ?? item.price_per_night;
-    return price != null ? `₹${Number(price).toLocaleString('en-IN')} / night` : 'On request';
-  }
-  if (tab === 'activities') {
-    const price = item.pricePerPax ?? item.price_per_pax;
-    return price != null ? `₹${Number(price).toLocaleString('en-IN')} / pax` : 'On request';
-  }
-  // tours + transfers — a flat price, same field name either way.
-  return item.price != null ? `₹${Number(item.price).toLocaleString('en-IN')}` : 'On request';
-}
-
 // City + a second, tab-specific descriptor line — duration for tours/
 // activities, vehicle type for transfers, star category for hotels.
 function subtitle(tab, item) {
@@ -134,10 +116,6 @@ function CatalogCard({ tab, item }) {
             {rating.toFixed(1)} Rating{reviewCount != null && ` (${reviewCount})`}
           </div>
         )}
-        <div className="mt-3 border-t border-agent-line-light pt-2">
-          <div className="text-[10px] font-medium text-agent-muted">Starting at</div>
-          <div className="text-base font-extrabold text-agent-ink-dark">{priceLabel(tab, item)}</div>
-        </div>
       </div>
     </div>
   );
