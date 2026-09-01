@@ -14,7 +14,7 @@ export function ActivityImagesUpload({ activityId, images, onChange }) {
 
   return (
     <ImageUpload
-      label="Images"
+      label="Images *"
       multiple
       value={images}
       onChange={onChange}

@@ -55,6 +55,19 @@ export function QuotesIcon(props) {
   );
 }
 
+// Stacked layers — distinct from DashboardIcon's uneven-rect grid, since
+// both now sit in the same sidebar and shouldn't read as near-duplicates at
+// a glance.
+export function ContentHubIcon(props) {
+  return (
+    <svg {...base} {...props}>
+      <path d="m12 3 9 5-9 5-9-5z" />
+      <path d="m3 13 9 5 9-5" />
+      <path d="m3 18 9 5 9-5" />
+    </svg>
+  );
+}
+
 export function BookingsIcon(props) {
   return (
     <svg {...base} {...props}>

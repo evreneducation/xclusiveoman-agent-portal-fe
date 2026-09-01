@@ -14,7 +14,7 @@ export function TransferImagesUpload({ transferId, images, onChange }) {
 
   return (
     <ImageUpload
-      label="Images"
+      label="Images *"
       multiple
       value={images}
       onChange={onChange}

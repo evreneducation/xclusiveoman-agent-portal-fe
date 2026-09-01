@@ -21,6 +21,7 @@ import {
   LuReceipt,
   LuScale,
   LuShieldCheck,
+  LuTag,
   LuTruck,
   LuUserCheck,
   LuWallet,
@@ -89,6 +90,12 @@ const NAV_ITEMS = [
       { to: '/admin/mice-catalog', label: 'MICE Catalog Manager', Icon: LuPresentation },
     ],
   },
+  // Deals — admin-uploaded promo card photos feeding the agent dashboard's
+  // "Deals For You" carousel (agent/pages/Dashboard.jsx), which up to now
+  // only ever showed one hardcoded placeholder slide. Flat top-level item,
+  // same as Marketing Center/Terms & Conditions below, since it isn't part
+  // of either Product or MICE catalog management.
+  { key: 'deals', to: '/admin/deals', label: 'Deals', Icon: LuTag },
   {
     key: 'quotes-pricing',
     label: 'Quotes & Pricing',
