@@ -55,7 +55,7 @@
 // unmounts AgentApp and mounts AdminApp fresh) alike.
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { FiCheckCircle, FiMail } from 'react-icons/fi';
+import { FiCheckCircle, FiHome, FiMail } from 'react-icons/fi';
 import { createApiClient } from '../api/createApiClient.js';
 
 // A fresh, dedicated client — not shared with (and never touching the
@@ -400,6 +400,17 @@ export function LoginModal({
         className="relative flex flex-1 items-center justify-center overflow-y-auto px-4 py-10"
       >
         <div className="w-full max-w-[400px]">
+          {/* Way back to the public site — this page is otherwise a dead
+              end (ProtectedRoute's own anonymous-visitor redirect lands
+              here, and there's no other nav on this screen at all). */}
+          <Link
+            to="/"
+            className="mb-6 inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 transition hover:text-slate-700"
+          >
+            <FiHome size={15} />
+            Home
+          </Link>
+
           {/* Compact header shown only when the visual panel above is
               hidden (mobile/tablet) — desktop already carries the logo and
               headline on the left. */}
