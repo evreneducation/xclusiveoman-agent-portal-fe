@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { LuStar } from 'react-icons/lu';
+import { LuFileText, LuStar } from 'react-icons/lu';
 import { api } from '../api/client.js';
 import { Card, ErrorText, Tag } from '../components/ui.jsx';
 
@@ -12,7 +12,13 @@ import { Card, ErrorText, Tag } from '../components/ui.jsx';
 // corporate client — this page is read-only, not a picker feeding into any
 // builder. `status=published` alongside it excludes admin drafts, same
 // convention MiceBuilder.jsx's own catalog fetches already follow.
+//
+// "Oman Overview" — admin-uploaded PDFs (MiceCatalog.jsx's own first tab,
+// same order as here) — sits first since it's the one tab that isn't a
+// filtered catalog browse at all (no mice/status columns on that table, see
+// its own endpoint handling in the effect below).
 const TABS = [
+  { key: 'oman-overviews', label: 'Oman Overview', endpoint: '/oman-overviews' },
   { key: 'hotels', label: 'Hotels', endpoint: '/hotels' },
   { key: 'tours', label: 'Tours', endpoint: '/tours' },
   { key: 'activities', label: 'Activities', endpoint: '/activities' },
@@ -62,6 +68,54 @@ function CatalogImage({ url }) {
   );
 }
 
+// Plain-text preview of the admin-authored rich-text description (which
+// runs 500+ words per omanOverviewSchema — see MiceCatalog.jsx) — the full
+// write-up lives in the PDF itself, so this card only needs a taste of it
+// alongside the actual download/view action.
+function stripHtmlSnippet(html, maxLen = 220) {
+  const text = String(html || '')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return text.length > maxLen ? `${text.slice(0, maxLen).trim()}…` : text;
+}
+
+// Same grid-card shell as CatalogCard below (image block + name + a
+// footer action), not a distinct layout — a document card in place of a
+// photographed catalog item just swaps the placeholder for a PDF icon and
+// the price/rating footer for a "Download PDF" button, and drops back into
+// the exact same grid. Labeled "Download", not "View" — Cloudinary's own
+// PDF/ZIP delivery restriction on this account (401 on resource_type:
+// 'image') means this link can only be served as a forced-download raw
+// file, not an inline in-browser preview; see this repo's own notes from
+// diagnosing that for what it'd take to switch this to a real preview.
+function OmanOverviewCard({ item }) {
+  const pdfUrl = item.pdfUrl ?? item.pdf_url;
+  return (
+    <div className="group overflow-hidden rounded-2xl border border-agent-line-light bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+      <div className="relative flex aspect-[4/3] flex-none items-center justify-center overflow-hidden bg-[linear-gradient(135deg,#0B1130_0%,#181f45_100%)]">
+        <LuFileText size={40} className="text-white/40" />
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent" />
+      </div>
+      <div className="p-4">
+        <div className="truncate text-sm font-bold text-agent-ink">{item.name}</div>
+        <div className="mt-0.5 line-clamp-2 text-xs text-agent-muted">{stripHtmlSnippet(item.description)}</div>
+        <div className="mt-3 border-t border-agent-line-light pt-2">
+          <a
+            href={pdfUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex w-full items-center justify-center gap-1.5 rounded-full bg-agent-accent px-4 py-2 text-xs font-semibold text-agent-ink-dark shadow-sm shadow-agent-accent/30 transition hover:opacity-90"
+          >
+            <LuFileText size={13} />
+            Download PDF
+          </a>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CatalogCard({ tab, item }) {
   const rating = item.rating ? Number(item.rating) : null;
   const reviewCount = item.reviewCount ?? item.review_count;
@@ -90,17 +144,21 @@ function CatalogCard({ tab, item }) {
 }
 
 export default function ContentHub() {
-  const [tab, setTab] = useState('hotels');
+  const [tab, setTab] = useState('oman-overviews');
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const isOmanOverview = tab === 'oman-overviews';
 
   useEffect(() => {
     const meta = TABS.find((t) => t.key === tab);
     setLoading(true);
     setError('');
+    // Oman Overview has no mice/status columns to filter by (it isn't a
+    // per-item-curated catalog table at all — see TABS' own comment above).
+    const query = tab === 'oman-overviews' ? '' : '?mice=true&status=published';
     api
-      .get(`${meta.endpoint}?mice=true&status=published`)
+      .get(`${meta.endpoint}${query}`)
       .then((res) => setItems(res[meta.key] || []))
       .catch((err) => setError(err.message || `Unable to load ${meta.label.toLowerCase()}`))
       .finally(() => setLoading(false));
@@ -113,8 +171,8 @@ export default function ContentHub() {
       <div>
         <h2 className="mb-1 text-2xl font-bold text-agent-ink">Content Hub</h2>
         <p className="text-sm text-agent-muted">
-          Browse the MICE-curated Hotels, Tours, Activities, and Transfers your admin team has published — handy
-          reference content when pitching a corporate client.
+          Oman Overview documents, plus the MICE-curated Hotels, Tours, Activities, and Transfers your admin team has
+          published — handy reference content when pitching a corporate client.
         </p>
       </div>
 
@@ -131,15 +189,21 @@ export default function ContentHub() {
 
       {!loading && !error && items.length === 0 && (
         <Card className="border-white text-center">
-          <p className="text-sm text-agent-muted">No MICE-curated {activeLabel.toLowerCase()} published yet.</p>
+          <p className="text-sm text-agent-muted">
+            {isOmanOverview ? 'No Oman Overview documents published yet.' : `No MICE-curated ${activeLabel.toLowerCase()} published yet.`}
+          </p>
         </Card>
       )}
 
       {!loading && items.length > 0 && (
         <div className="grid items-start gap-5 [grid-template-columns:repeat(auto-fill,minmax(260px,1fr))]">
-          {items.map((item) => (
-            <CatalogCard key={item.id} tab={tab} item={item} />
-          ))}
+          {items.map((item) =>
+            isOmanOverview ? (
+              <OmanOverviewCard key={item.id} item={item} />
+            ) : (
+              <CatalogCard key={item.id} tab={tab} item={item} />
+            )
+          )}
         </div>
       )}
     </div>

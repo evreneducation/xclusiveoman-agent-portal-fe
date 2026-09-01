@@ -10,7 +10,9 @@ import { ActivityImagesUpload } from '../components/ActivityImagesUpload.jsx';
 import { validateActivityForm } from '../lib/activityForm.js';
 import { TransferImagesUpload } from '../components/TransferImagesUpload.jsx';
 import { TRANSFER_TYPE_OPTIONS, validateTransferForm } from '../lib/transferForm.js';
+import { OMAN_OVERVIEW_MIN_CHARS, countChars, validateOmanOverviewForm } from '../lib/omanOverviewForm.js';
 import { RichTextEditor } from '../../shared/components/RichTextEditor.jsx';
+import { ImageUpload } from '../../shared/components/ImageUpload.jsx';
 
 // Activities and transfers now get their own dedicated forms too
 // (MiceActivityForm / MiceTransferForm, below — mirroring MiceHotelForm /
@@ -27,6 +29,9 @@ const ENTITY_FIELDS = {
 };
 
 const TABS = [
+  // First tab — mirrors the agent portal's own Content Hub, where this same
+  // "Oman Overview" tab (ContentHub.jsx) also sits first.
+  { key: 'oman-overviews', label: 'Oman Overview' },
   { key: 'hotels', label: 'MICE Hotels' },
   { key: 'tours', label: 'Tours' },
   { key: 'activities', label: 'Activities' },
@@ -825,6 +830,192 @@ function MiceTransfersTab() {
   );
 }
 
+// Content Hub "Oman Overview" — a required PDF plus a substantial written
+// overview (500+ words, validateOmanOverviewForm/omanOverviewSchema), always
+// fully valid up front like Flights (no draft state). Unlike the MICE-scoped
+// tabs above, this isn't curated per-item — every entry here shows up in
+// every agent's Content Hub unconditionally, so there's no isMiceEnabled
+// checkbox and no "MICE-enabled" filter on the list fetch.
+const EMPTY_OMAN_OVERVIEW_FORM = { name: '', description: '', pdfUrl: '' };
+
+// The shared ImageUpload picker (shared/components/ImageUpload.jsx) defaults
+// to images — this is the same "narrow it to just PDF" override
+// Register.jsx's own IATA/License picker already does for its own
+// acceptedTypes, just PDF-only instead of image-or-PDF.
+const PDF_ONLY_ACCEPTED_TYPES = ['application/pdf'];
+
+function omanOverviewToForm(item) {
+  return {
+    name: item.name || '',
+    description: item.description || '',
+    pdfUrl: item.pdfUrl ?? item.pdf_url ?? '',
+  };
+}
+
+// Re-mounted (key={editingItem?.id || 'new'} in OmanOverviewsTab below) on
+// every edit/cancel-edit — same convention FlightForm already uses — so a
+// half-typed entry never ends up submitted against the wrong row just
+// because the admin switched what they were editing mid-typing.
+function OmanOverviewForm({ editingItem, onSaved, onCancelEdit }) {
+  const [form, setForm] = useState(() => (editingItem ? omanOverviewToForm(editingItem) : EMPTY_OMAN_OVERVIEW_FORM));
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  function update(key, value) {
+    setForm((f) => ({ ...f, [key]: value }));
+  }
+
+  // Same shared picker every other catalog upload uses (ActivityImagesUpload
+  // etc.), restricted to PDF only via acceptedTypes — see its own POST
+  // /admin/oman-overviews/pdf single-file endpoint (catalog.controller.js).
+  async function uploadPdf(file) {
+    const formData = new FormData();
+    formData.append('pdf', file);
+    const { url } = await api.postForm('/admin/oman-overviews/pdf', formData);
+    return url;
+  }
+
+  const charCount = countChars(form.description);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    const validationError = validateOmanOverviewForm(form);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+    setError('');
+    setSubmitting(true);
+    try {
+      const payload = { name: form.name.trim(), description: form.description, pdfUrl: form.pdfUrl };
+      const { 'oman-overview': saved } = editingItem
+        ? await api.patch(`/admin/oman-overviews/${editingItem.id}`, payload)
+        : await api.post('/admin/oman-overviews', payload);
+      onSaved(saved);
+      if (!editingItem) setForm(EMPTY_OMAN_OVERVIEW_FORM);
+    } catch (err) {
+      setError(err.message || 'Unable to save Oman Overview');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Card label={editingItem ? 'Edit Oman Overview' : 'Add Oman Overview'} className="mt-4 border-white">
+      <form onSubmit={handleSubmit} className="space-y-3">
+        <div>
+          <FieldLabel>Name *</FieldLabel>
+          <TextInput required value={form.name} onChange={(e) => update('name', e.target.value)} />
+        </div>
+        <div>
+          <div className="mb-1 flex items-center justify-between">
+            <FieldLabel>Description * (min {OMAN_OVERVIEW_MIN_CHARS} characters)</FieldLabel>
+            <span className={`text-xs font-semibold ${charCount >= OMAN_OVERVIEW_MIN_CHARS ? 'text-[#227647]' : 'text-muted'}`}>
+              {charCount} / {OMAN_OVERVIEW_MIN_CHARS} characters
+            </span>
+          </div>
+          <RichTextEditor size="lg" value={form.description} onChange={(html) => update('description', html)} />
+        </div>
+        <ImageUpload
+          label="PDF document"
+          required
+          value={form.pdfUrl}
+          onChange={(url) => update('pdfUrl', url)}
+          onUpload={uploadPdf}
+          acceptedTypes={PDF_ONLY_ACCEPTED_TYPES}
+          acceptHint="PDF"
+        />
+        <ErrorText>{error}</ErrorText>
+        <div className="flex items-center gap-3">
+          <Button variant="accent" type="submit" disabled={submitting}>
+            {submitting ? 'Saving…' : editingItem ? 'Save changes' : 'Add Oman Overview'}
+          </Button>
+          {editingItem && (
+            <button type="button" onClick={onCancelEdit} className="text-xs font-semibold text-[#666] hover:underline">
+              Cancel
+            </button>
+          )}
+        </div>
+      </form>
+    </Card>
+  );
+}
+
+function OmanOverviewsTab() {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [editingItem, setEditingItem] = useState(null);
+
+  function load() {
+    setLoading(true);
+    api
+      .get('/oman-overviews')
+      .then((data) => setItems(data['oman-overviews']))
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(load, []);
+
+  async function handleDelete(id) {
+    await api.del(`/admin/oman-overviews/${id}`);
+    setItems((list) => list.filter((i) => i.id !== id));
+    if (editingItem?.id === id) setEditingItem(null);
+  }
+
+  function handleSaved(saved) {
+    setItems((list) => (list.some((i) => i.id === saved.id) ? list.map((i) => (i.id === saved.id ? saved : i)) : [saved, ...list]));
+    setEditingItem(null);
+  }
+
+  return (
+    <div>
+      {loading ? (
+        <p className="text-xs text-muted">Loading…</p>
+      ) : (
+        <Table
+          columns={['Name', 'PDF', '']}
+          rows={items}
+          renderRow={(item) => (
+            <tr key={item.id} className="border-b border-line-light last:border-0">
+              <td className="px-3 py-2 font-semibold">{item.name}</td>
+              <td className="px-3 py-2">
+                {/* "Download", not "View" — Cloudinary's own PDF/ZIP delivery
+                    restriction on this account forces this link to be a
+                    download rather than an inline preview; see
+                    ContentHub.jsx's own OmanOverviewCard comment. */}
+                <a href={item.pdfUrl ?? item.pdf_url} target="_blank" rel="noreferrer" className="text-accent hover:underline">
+                  Download PDF
+                </a>
+              </td>
+              <td className="px-3 py-2 text-right">
+                <div className="flex justify-end gap-3">
+                  <button onClick={() => setEditingItem(item)} className="text-accent hover:underline">
+                    Edit
+                  </button>
+                  <button onClick={() => handleDelete(item.id)} className="text-[#a5162d] hover:underline">
+                    Delete
+                  </button>
+                </div>
+              </td>
+            </tr>
+          )}
+        />
+      )}
+      {!loading && items.length === 0 && (
+        <p className="mt-3 rounded-lg border border-line-light bg-panel px-3 py-3 text-xs text-muted">
+          No Oman Overview documents yet — add one below.
+        </p>
+      )}
+      <OmanOverviewForm
+        key={editingItem?.id || 'new'}
+        editingItem={editingItem}
+        onSaved={handleSaved}
+        onCancelEdit={() => setEditingItem(null)}
+      />
+    </div>
+  );
+}
+
 // Only ever called with entity="experiences" now that activities/transfers
 // have their own dedicated tabs above — experiences has no is_mice_enabled
 // column (doc §12.3 / catalog.model.js) and isn't consumed by the Agent MICE
@@ -885,7 +1076,7 @@ function SimpleEntityTab({ entity }) {
 }
 
 export default function MiceCatalog() {
-  const [tab, setTab] = useState('hotels');
+  const [tab, setTab] = useState('oman-overviews');
 
   return (
     <div className="min-h-screen bg-[#F4F7FF]">
@@ -913,7 +1104,9 @@ export default function MiceCatalog() {
           ))}
         </div>
 
-        {tab === 'hotels' ? (
+        {tab === 'oman-overviews' ? (
+          <OmanOverviewsTab />
+        ) : tab === 'hotels' ? (
           <MiceHotelsTab />
         ) : tab === 'tours' ? (
           <MiceToursTab />
