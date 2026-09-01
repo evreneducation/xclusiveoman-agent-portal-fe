@@ -24,6 +24,7 @@ function buildDraftPayload(form, images) {
   if (form.category) payload.category = form.category;
   if (form.price) payload.price = Number(form.price);
   if (form.suitableAgeMin) payload.suitableAgeMin = Number(form.suitableAgeMin);
+  if (form.pickupTime) payload.pickupTime = form.pickupTime;
   if (images.length > 0) payload.images = images;
   return payload;
 }
@@ -72,6 +73,7 @@ export default function TourEditor() {
           category: tour.category || '',
           price: tour.price ?? '',
           suitableAgeMin: tour.suitable_age_min ?? '',
+          pickupTime: tour.pickupTime ? tour.pickupTime.slice(0, 5) : tour.pickup_time ? tour.pickup_time.slice(0, 5) : '',
           isBestseller: !!tour.is_bestseller,
         });
         setImages(tour.images || []);
@@ -217,6 +219,7 @@ export default function TourEditor() {
         duration: form.duration,
         category: form.category,
         price: Number(form.price),
+        pickupTime: form.pickupTime,
         images,
         ...(form.suitableAgeMin !== '' && form.suitableAgeMin !== undefined
           ? { suitableAgeMin: Number(form.suitableAgeMin) }
@@ -285,6 +288,10 @@ export default function TourEditor() {
                 <div>
                   <FieldLabel>Suitable age (min)</FieldLabel>
                   <TextInput type="number" value={form.suitableAgeMin ?? ''} onChange={(e) => update('suitableAgeMin', e.target.value)} />
+                </div>
+                <div>
+                  <FieldLabel>Pickup time *</FieldLabel>
+                  <TextInput type="time" required value={form.pickupTime || ''} onChange={(e) => update('pickupTime', e.target.value)} />
                 </div>
                 <div className="sm:col-span-2">
                   <FieldLabel>Description *</FieldLabel>

@@ -1,9 +1,7 @@
 import { useEffect, useState } from 'react';
 import { LuUserCheck, LuBuilding2, LuMail } from 'react-icons/lu';
 import { api } from '../api/client.js';
-import { Badge, Card, EmptyState, ErrorText, LoadingState, PageHeader, TextInput } from '../components/ui.jsx';
-
-const TIER_TONE = { gold: 'amber', silver: 'grey', bronze: 'grey' };
+import { Card, EmptyState, ErrorText, LoadingState, PageHeader, TextInput } from '../components/ui.jsx';
 
 // GET /admin/agencies — auto-scoped server-side to just this RM's own book
 // (admin.controller.js#getAgencies: req.user.role === 'relationship_manager'
@@ -58,7 +56,6 @@ export default function ApprovedAgents() {
                   </p>
                 </div>
               </div>
-              {a.tier && <Badge tone={TIER_TONE[a.tier] || 'grey'}>{a.tier}</Badge>}
             </div>
             <div className="mt-3 space-y-1 border-t border-team-line-light pt-3 text-[11px] text-team-muted">
               <div className="flex items-center gap-1.5">

@@ -76,7 +76,7 @@ function SidebarContent({ onNavigate, collapsed = false }) {
   return (
     <>
       <div
-        className={`flex items-center border-b border-black/10 ${collapsed ? 'justify-center px-2 py-4' : 'justify-between px-6 py-6'}`}
+        className={`flex items-center border-b border-black/10 bg-agent-panel ${collapsed ? 'justify-center px-2 py-4' : 'justify-between px-6 py-6'}`}
       >
         <img
           src={collapsed ? '/logo_scroll_closed.png' : '/Xclusive_Oman_Logo_2.png'}

@@ -1,9 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api/client.js';
-import { Badge, Button, Card, ErrorText, FieldLabel, TextInput } from '../components/ui.jsx';
-
-const TIER_LABEL = { gold: 'Gold', silver: 'Silver', bronze: 'Bronze' };
+import { Button, Card, ErrorText, FieldLabel, TextInput } from '../components/ui.jsx';
 
 // AUTH-6 "Company profile management" — reuses the existing GET/PATCH
 // /agencies/me endpoint (already called by Dashboard.jsx for read access).
@@ -73,7 +71,6 @@ export default function Profile() {
       <Card label="Account status" className="border-white">
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <span>Status: <span className="font-semibold capitalize">{agency?.status}</span></span>
-          {agency?.tier && <Badge tone="teal">{TIER_LABEL[agency.tier]} tier</Badge>}
         </div>
         <p className="mt-2 text-xs text-agent-muted">
           Signed in as {user?.fullName} ({user?.email}) — {user?.role?.replace(/_/g, ' ')}
