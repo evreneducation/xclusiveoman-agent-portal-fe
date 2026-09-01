@@ -30,15 +30,22 @@ import {
 // Agent — Notification Center (20) -> Payment & Transaction History (26) ->
 // Agent — Contact & Support (27). Labels drop the redundant "Agent —" prefix
 // the doc uses only to disambiguate admin vs. agent screens in one shared
-// document. My Bookings / My MICE Requests / Profile have no dedicated
-// wireframe screen — kept in their existing, logically-adjacent slots.
+// document. My Bookings / Profile have no dedicated wireframe screen — kept
+// in their existing, logically-adjacent slots. "My MICE Requests" used to be
+// its own nav item/page (MyMiceRequests.jsx) — merged into "My Requests /
+// Quotes" (FitRequests.jsx), which now lists both kinds with a kind filter
+// and a MICE pill per card, rather than keeping two near-identical list
+// pages side by side.
 const NAV_ITEMS = [
   { to: '/agent/dashboard', label: 'Dashboard', Icon: DashboardIcon },
   { to: '/agent/departures', label: 'Fixed Group Departures', Icon: DeparturesIcon },
   { to: '/agent/package-builder', label: 'Package Builder', Icon: BuilderIcon },
-  { to: '/agent/fit-requests', label: 'My Requests / Quotes', Icon: QuotesIcon },
+  // matchPrefixes — /agent/mice-requests/:id (the MICE proposal detail
+  // route, still its own page — see FitRequests.jsx's own top comment) has
+  // no nav item of its own since the MICE Requests list merged into this
+  // one; without this it would highlight nothing in the sidebar/top bar.
+  { to: '/agent/fit-requests', label: 'My Requests / Quotes', Icon: QuotesIcon, matchPrefixes: ['/agent/mice-requests'] },
   { to: '/agent/mice-builder', label: 'Corporate Enquiry', Icon: BuilderIcon },
-  { to: '/agent/mice-requests', label: 'My MICE Requests', Icon: QuotesIcon },
   { to: '/agent/bookings', label: 'Bookings', Icon: BookingsIcon },
   { to: '/agent/transactions', label: 'Payment & Transaction History', Icon: PaymentsIcon },
   { to: '/agent/notifications', label: 'Notification Center', Icon: NotificationsIcon },
@@ -61,6 +68,14 @@ const REFERENCE_ROUTES = {
 function resolveNotificationPath(referenceType, referenceId) {
   if (!referenceType || !referenceId) return null;
   return REFERENCE_ROUTES[referenceType]?.(referenceId) || null;
+}
+
+// A path matches a nav item either on its own `to` (exact or as a prefix)
+// or on any of its `matchPrefixes` — see the merged "My Requests / Quotes"
+// item's own comment above for why that second part exists.
+function isNavItemActive(item, pathname) {
+  if (pathname === item.to || pathname.startsWith(`${item.to}/`)) return true;
+  return (item.matchPrefixes || []).some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
 
 const EXPANDED_WIDTH = 288; // w-72
@@ -91,8 +106,9 @@ function SidebarContent({ onNavigate, collapsed = false }) {
       </div>
 
       <nav className="flex-1 space-y-1.5 overflow-y-auto overflow-x-hidden px-3 py-5">
-        {NAV_ITEMS.map(({ to, label, Icon }) => {
-          const active = pathname === to || pathname.startsWith(`${to}/`);
+        {NAV_ITEMS.map((item) => {
+          const { to, label, Icon } = item;
+          const active = isNavItemActive(item, pathname);
           return (
             <Link
               key={to}
@@ -167,7 +183,7 @@ export default function AgentLayout() {
   // content — hovering over it expands it, moving the mouse away collapses
   // it back.
   const [collapsed, setCollapsed] = useState(true);
-  const activeItem = NAV_ITEMS.find((item) => pathname === item.to || pathname.startsWith(`${item.to}/`));
+  const activeItem = NAV_ITEMS.find((item) => isNavItemActive(item, pathname));
 
   return (
     <div className="flex min-h-screen bg-agent-bg">
