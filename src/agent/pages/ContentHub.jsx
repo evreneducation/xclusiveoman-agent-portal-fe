@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { LuFileText, LuStar } from 'react-icons/lu';
+import { LuFileText } from 'react-icons/lu';
 import { api } from '../api/client.js';
 import { Card, ErrorText, Tag } from '../components/ui.jsx';
 
@@ -110,8 +110,6 @@ function OmanOverviewCard({ item }) {
 }
 
 function CatalogCard({ tab, item }) {
-  const rating = item.rating ? Number(item.rating) : null;
-  const reviewCount = item.reviewCount ?? item.review_count;
   return (
     <div className="group overflow-hidden rounded-2xl border border-agent-line-light bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
       <div className="relative aspect-[4/3] flex-none overflow-hidden bg-[linear-gradient(135deg,#0B1130_0%,#181f45_100%)]">
@@ -121,12 +119,6 @@ function CatalogCard({ tab, item }) {
       <div className="p-4">
         <div className="truncate text-sm font-bold text-agent-ink">{item.name}</div>
         <div className="mt-0.5 truncate text-xs text-agent-muted">{subtitle(tab, item) || '—'}</div>
-        {rating != null && (
-          <div className="mt-1.5 flex items-center gap-1.5 text-xs text-agent-muted">
-            <LuStar size={13} className="flex-none text-agent-accent-dark" />
-            {rating.toFixed(1)} Rating{reviewCount != null && ` (${reviewCount})`}
-          </div>
-        )}
       </div>
     </div>
   );
