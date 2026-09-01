@@ -64,19 +64,30 @@ function stripHtmlSnippet(html, maxLen = 220) {
 
 // Same grid-card shell as CatalogCard below (image block + name + a
 // footer action), not a distinct layout — a document card in place of a
-// photographed catalog item just swaps the placeholder for a PDF icon and
-// the price/rating footer for a "Download PDF" button, and drops back into
-// the exact same grid. Labeled "Download", not "View" — Cloudinary's own
+// photographed catalog item just swaps CatalogImage's photo for the admin's
+// own cover_image_url (0083_oman_overview_cover_image.sql — falls back to a
+// plain PDF icon for any legacy row saved before that field existed) and the
+// price/rating footer for a "Download PDF" button, and drops back into the
+// exact same grid. Labeled "Download", not "View" — Cloudinary's own
 // PDF/ZIP delivery restriction on this account (401 on resource_type:
 // 'image') means this link can only be served as a forced-download raw
 // file, not an inline in-browser preview; see this repo's own notes from
 // diagnosing that for what it'd take to switch this to a real preview.
 function OmanOverviewCard({ item }) {
   const pdfUrl = item.pdfUrl ?? item.pdf_url;
+  const coverImageUrl = item.coverImageUrl ?? item.cover_image_url;
   return (
     <div className="group overflow-hidden rounded-2xl border border-agent-line-light bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
       <div className="relative flex aspect-[4/3] flex-none items-center justify-center overflow-hidden bg-[linear-gradient(135deg,#0B1130_0%,#181f45_100%)]">
-        <LuFileText size={40} className="text-white/40" />
+        {coverImageUrl ? (
+          <img
+            src={coverImageUrl}
+            alt=""
+            className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-110"
+          />
+        ) : (
+          <LuFileText size={40} className="text-white/40" />
+        )}
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent" />
       </div>
       <div className="p-4">

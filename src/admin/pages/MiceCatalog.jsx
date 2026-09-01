@@ -836,7 +836,7 @@ function MiceTransfersTab() {
 // tabs above, this isn't curated per-item — every entry here shows up in
 // every agent's Content Hub unconditionally, so there's no isMiceEnabled
 // checkbox and no "MICE-enabled" filter on the list fetch.
-const EMPTY_OMAN_OVERVIEW_FORM = { name: '', description: '', pdfUrl: '' };
+const EMPTY_OMAN_OVERVIEW_FORM = { name: '', description: '', pdfUrl: '', coverImageUrl: '' };
 
 // The shared ImageUpload picker (shared/components/ImageUpload.jsx) defaults
 // to images — this is the same "narrow it to just PDF" override
@@ -849,6 +849,7 @@ function omanOverviewToForm(item) {
     name: item.name || '',
     description: item.description || '',
     pdfUrl: item.pdfUrl ?? item.pdf_url ?? '',
+    coverImageUrl: item.coverImageUrl ?? item.cover_image_url ?? '',
   };
 }
 
@@ -875,6 +876,15 @@ function OmanOverviewForm({ editingItem, onSaved, onCancelEdit }) {
     return url;
   }
 
+  // Same shared picker, default image-only acceptedTypes — see its own POST
+  // /admin/oman-overviews/cover-image single-file endpoint.
+  async function uploadCoverImage(file) {
+    const formData = new FormData();
+    formData.append('image', file);
+    const { url } = await api.postForm('/admin/oman-overviews/cover-image', formData);
+    return url;
+  }
+
   const charCount = countChars(form.description);
 
   async function handleSubmit(e) {
@@ -887,7 +897,12 @@ function OmanOverviewForm({ editingItem, onSaved, onCancelEdit }) {
     setError('');
     setSubmitting(true);
     try {
-      const payload = { name: form.name.trim(), description: form.description, pdfUrl: form.pdfUrl };
+      const payload = {
+        name: form.name.trim(),
+        description: form.description,
+        pdfUrl: form.pdfUrl,
+        coverImageUrl: form.coverImageUrl,
+      };
       const { 'oman-overview': saved } = editingItem
         ? await api.patch(`/admin/oman-overviews/${editingItem.id}`, payload)
         : await api.post('/admin/oman-overviews', payload);
@@ -916,6 +931,14 @@ function OmanOverviewForm({ editingItem, onSaved, onCancelEdit }) {
           </div>
           <RichTextEditor size="lg" value={form.description} onChange={(html) => update('description', html)} />
         </div>
+        <ImageUpload
+          label="Cover image"
+          required
+          value={form.coverImageUrl}
+          onChange={(url) => update('coverImageUrl', url)}
+          onUpload={uploadCoverImage}
+          hint="Shown on the agent's Oman Overview card in place of a plain document icon."
+        />
         <ImageUpload
           label="PDF document"
           required
@@ -973,10 +996,17 @@ function OmanOverviewsTab() {
         <p className="text-xs text-muted">Loading…</p>
       ) : (
         <Table
-          columns={['Name', 'PDF', '']}
+          columns={['Cover', 'Name', 'PDF', '']}
           rows={items}
           renderRow={(item) => (
             <tr key={item.id} className="border-b border-line-light last:border-0">
+              <td className="px-3 py-2">
+                <img
+                  src={item.coverImageUrl ?? item.cover_image_url}
+                  alt=""
+                  className="h-12 w-16 rounded-md border border-line-light object-cover"
+                />
+              </td>
               <td className="px-3 py-2 font-semibold">{item.name}</td>
               <td className="px-3 py-2">
                 {/* "Download", not "View" — Cloudinary's own PDF/ZIP delivery

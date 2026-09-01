@@ -22,5 +22,6 @@ export function validateOmanOverviewForm(form) {
     return `Description must be at least ${OMAN_OVERVIEW_MIN_CHARS} characters (currently ${chars}).`;
   }
   if (!form.pdfUrl) return 'Upload a PDF document.';
+  if (!form.coverImageUrl) return 'Upload a cover image.';
   return '';
 }
