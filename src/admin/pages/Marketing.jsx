@@ -17,9 +17,9 @@ import { Badge, Button, Card, Checkbox, ErrorText, FieldLabel, Select, Table, Ta
 // /admin/marketing/channels/:provider/test-connection) and wires Compose's
 // own Channel status display to the same backend-verified data. Task 10
 // makes Audience Segments real — a browse/preview surface over the exact
-// same four segments Compose's AudienceSection and the backend's
+// same three segments Compose's AudienceSection and the backend's
 // resolveAudience() already define, via GET /admin/agencies (extended to
-// forward tier/country, which listAgencies() already accepted).
+// forward country, which listAgencies() already accepted).
 const TABS = [
   { key: 'compose', label: 'Compose' },
   { key: 'history', label: 'Campaign History' },
@@ -77,15 +77,9 @@ const PROVIDER_STATUS_META = {
 // Static UI enum — the audience *segment kinds*, not the agency data itself.
 const AUDIENCE_OPTIONS = [
   { value: 'all', label: 'All Agents' },
-  { value: 'tier', label: 'By Tier' },
   { value: 'country', label: 'By Country' },
   { value: 'inactive_30d', label: 'Inactive 30+ days' },
 ];
-
-// Same tier values as the `agency_tier` Postgres enum (agencies.model.js /
-// migrations/0002_agencies.sql) — mirrors the local `TIERS` constant
-// AgentApprovals.jsx already uses for its own tier picker.
-const TIERS = ['gold', 'silver', 'bronze'];
 
 // How many days of no activity counts as "inactive" for that segment —
 // matches the segment's own "30+ days" label and the backend's own
@@ -259,12 +253,11 @@ function formatEnumLabel(value) {
     .join(' ');
 }
 
-// Same four segments AudienceSection/ComposeTab's own `audienceLabel` render
+// Same three segments AudienceSection/ComposeTab's own `audienceLabel` render
 // (below) — a standalone version here since History displays an arbitrary
 // *stored* audienceType/audienceValue pair read back from the database,
 // rather than the in-progress selection ComposeTab tracks in its own state.
 function formatAudienceLabel(audienceType, audienceValue) {
-  if (audienceType === 'tier') return `By Tier — ${formatEnumLabel(audienceValue)}`;
   if (audienceType === 'country') return `By Country — ${audienceValue || '—'}`;
   if (audienceType === 'inactive_30d') return `Inactive ${INACTIVE_SINCE_DAYS}+ days`;
   return 'All Agents';
@@ -779,15 +772,13 @@ function useApprovedAgencies() {
 // Audience — who a campaign would go to. Entirely channel-independent (the
 // same segment picker and counts apply whether Email or WhatsApp is
 // selected — "works for both channels", not that it changes per channel).
-// Fully controlled by ComposeTab now (audienceType/tier/country + the fetched
+// Fully controlled by ComposeTab now (audienceType/country + the fetched
 // agency data) so Send Campaign's confirmation modal can read the exact same
 // selection and recipient count this card is showing — but the state itself
 // stays its own separate slice, never merged into Channel's.
 function AudienceSection({
   audienceType,
   onAudienceTypeChange,
-  tier,
-  onTierChange,
   onCountryChange,
   countryOptions,
   effectiveCountry,
@@ -808,19 +799,6 @@ function AudienceSection({
             ))}
           </Select>
         </div>
-
-        {audienceType === 'tier' && (
-          <div>
-            <FieldLabel>Tier</FieldLabel>
-            <Select value={tier} onChange={(e) => onTierChange(e.target.value)}>
-              {TIERS.map((t) => (
-                <option key={t} value={t}>
-                  {t.charAt(0).toUpperCase() + t.slice(1)}
-                </option>
-              ))}
-            </Select>
-          </div>
-        )}
 
         {audienceType === 'country' &&
           (countryOptions.length === 0 && !loading ? (
@@ -1105,7 +1083,6 @@ function ComposeTab() {
   const [provider, setProvider] = useState(PROVIDER_OPTIONS.email[0].value);
 
   const [audienceType, setAudienceType] = useState('all');
-  const [tier, setTier] = useState(TIERS[0]);
   const [country, setCountry] = useState('');
 
   const [subject, setSubject] = useState('');
@@ -1149,11 +1126,9 @@ function ComposeTab() {
   const recipientCount =
     audienceType === 'all'
       ? agencies.length
-      : audienceType === 'tier'
-        ? agencies.filter((a) => a.tier === tier).length
-        : audienceType === 'country'
-          ? agencies.filter((a) => a.country === effectiveCountry).length
-          : inactiveCount;
+      : audienceType === 'country'
+        ? agencies.filter((a) => a.country === effectiveCountry).length
+        : inactiveCount;
 
   const isEmail = channel === 'email';
   const isSchedule = scheduleMode === 'later';
@@ -1182,7 +1157,6 @@ function ComposeTab() {
     setChannel('email');
     setProvider(PROVIDER_OPTIONS.email[0].value);
     setAudienceType('all');
-    setTier(TIERS[0]);
     setCountry('');
     setSubject('');
     setSubjectTouched(false);
@@ -1204,7 +1178,7 @@ function ComposeTab() {
         channel,
         provider,
         audienceType,
-        audienceValue: audienceType === 'tier' ? tier : audienceType === 'country' ? effectiveCountry : undefined,
+        audienceValue: audienceType === 'country' ? effectiveCountry : undefined,
         subject: isEmail ? subject.trim() : undefined,
         body,
         replyToAccountManager,
@@ -1239,7 +1213,7 @@ function ComposeTab() {
         channel,
         provider,
         audienceType,
-        audienceValue: audienceType === 'tier' ? tier : audienceType === 'country' ? effectiveCountry : undefined,
+        audienceValue: audienceType === 'country' ? effectiveCountry : undefined,
         subject: isEmail ? subject.trim() : undefined,
         body,
         replyToAccountManager,
@@ -1275,13 +1249,11 @@ function ComposeTab() {
   }
 
   const audienceLabel =
-    audienceType === 'tier'
-      ? `By Tier — ${tier.charAt(0).toUpperCase() + tier.slice(1)}`
-      : audienceType === 'country'
-        ? `By Country — ${effectiveCountry || '—'}`
-        : audienceType === 'inactive_30d'
-          ? 'Inactive 30+ days'
-          : 'All Agents';
+    audienceType === 'country'
+      ? `By Country — ${effectiveCountry || '—'}`
+      : audienceType === 'inactive_30d'
+        ? 'Inactive 30+ days'
+        : 'All Agents';
 
   return (
     <div className="space-y-4">
@@ -1320,8 +1292,6 @@ function ComposeTab() {
       <AudienceSection
         audienceType={audienceType}
         onAudienceTypeChange={setAudienceType}
-        tier={tier}
-        onTierChange={setTier}
         onCountryChange={setCountry}
         countryOptions={countryOptions}
         effectiveCountry={effectiveCountry}
@@ -1541,13 +1511,13 @@ function ChannelSettingsTab() {
 
 // --- Audience Segments (Task 10) ---
 //
-// Same four segments Compose's own AudienceSection/audienceLabel and the
+// Same three segments Compose's own AudienceSection/audienceLabel and the
 // backend's resolveAudience() (services/marketingSend.service.js, via
 // models/marketingCampaigns.model.js) already define — this tab is a
 // browse/preview surface over that exact same definition, not a second one.
 // Every count and every recipient list here comes from GET /admin/agencies
-// (extended, Task 10, to forward tier/country query params — listAgencies()
-// itself already accepted them, being the one function resolveAudience()
+// (extended, Task 10, to forward a country query param — listAgencies()
+// itself already accepted it, being the one function resolveAudience()
 // also calls), the same endpoint Compose's own useApprovedAgencies() hook
 // (above) already uses for its own live preview count — so a segment's
 // shown count/members here can never drift from what sending a campaign to
@@ -1576,14 +1546,13 @@ const AGENCY_STATUS_TONE = {
 function buildSegmentQueryString(type, value, search) {
   const params = new URLSearchParams();
   params.set('status', 'approved');
-  if (type === 'tier') params.set('tier', value);
   if (type === 'country') params.set('country', value);
   if (type === 'inactive_30d') params.set('inactiveSinceDays', String(INACTIVE_SINCE_DAYS));
   if (search) params.set('search', search);
   return params.toString();
 }
 
-// One segment's matching agencies — Agency/Owner/Email/Country/Tier/Status
+// One segment's matching agencies — Agency/Owner/Email/Country/Status
 // (requirement 7), real backend data only, same "never mock recipients"
 // posture Campaign History's own RecipientsModal already takes. Search
 // re-queries the backend on every change (same pattern CampaignHistoryTab's
@@ -1626,7 +1595,7 @@ function SegmentDetailModal({ segment, onClose }) {
       ) : (
         <>
           <Table
-            columns={['Agency', 'Owner', 'Email', 'Country', 'Tier', 'Status']}
+            columns={['Agency', 'Owner', 'Email', 'Country', 'Status']}
             rows={agencies}
             renderRow={(a) => (
               <tr key={a.id} className="border-b border-line-light last:border-0">
@@ -1634,7 +1603,6 @@ function SegmentDetailModal({ segment, onClose }) {
                 <td className="px-3 py-2">{a.ownerName || '—'}</td>
                 <td className="px-3 py-2">{a.ownerEmail || '—'}</td>
                 <td className="px-3 py-2">{a.country || '—'}</td>
-                <td className="px-3 py-2">{a.tier ? formatEnumLabel(a.tier) : '—'}</td>
                 <td className="px-3 py-2">
                   <Badge tone={AGENCY_STATUS_TONE[a.status] || 'grey'}>{formatEnumLabel(a.status)}</Badge>
                 </td>
@@ -1681,10 +1649,10 @@ function SegmentRow({ label, description, criteria, count, loading, onView }) {
 // Audience Segments tab (Task 10) — replaces the old "Coming soon"
 // placeholder. Reuses useApprovedAgencies() (above, already established by
 // ComposeTab's own Audience card) for the overview: the full approved-agency
-// list backs "All Agents" (its own length) and the By Tier/By Country
-// groupings (grouping a plain equality column already present on every real
-// returned row — not a separately invented calculation, the same server
-// data just displayed two ways), and `inactiveCount` is the real, dedicated
+// list backs "All Agents" (its own length) and the By Country grouping
+// (grouping a plain equality column already present on every real returned
+// row — not a separately invented calculation, the same server data just
+// displayed two ways), and `inactiveCount` is the real, dedicated
 // inactiveSinceDays=30 server request that hook already makes — "inactive"
 // is real cross-table business logic (agencies.model.js#listAgencies) that
 // only the backend can correctly compute, never approximated in the
@@ -1694,11 +1662,6 @@ function SegmentRow({ label, description, criteria, count, loading, onView }) {
 function AudienceSegmentsTab() {
   const { agencies, inactiveCount, loading, error } = useApprovedAgencies();
   const [activeSegment, setActiveSegment] = useState(null);
-
-  const tierCounts = TIERS.reduce((acc, t) => {
-    acc[t] = agencies.filter((a) => a.tier === t).length;
-    return acc;
-  }, {});
 
   const countryCounts = agencies.reduce((acc, a) => {
     if (!a.country) return acc;
@@ -1718,31 +1681,12 @@ function AudienceSegmentsTab() {
           <Card label="All Agents" className="border-white">
             <SegmentRow
               label="All Agents"
-              description="Every approved agency, regardless of tier, country, or recent activity."
+              description="Every approved agency, regardless of country or recent activity."
               criteria="Approved agencies"
               count={agencies.length}
               loading={loading}
               onView={() => setActiveSegment({ type: 'all', label: 'All Agents', criteria: 'Approved agencies' })}
             />
-          </Card>
-
-          <Card label="By Tier" className="border-white">
-            {TIERS.map((t) => {
-              const tierLabel = `By Tier — ${t.charAt(0).toUpperCase() + t.slice(1)}`;
-              return (
-                <SegmentRow
-                  key={t}
-                  label={tierLabel}
-                  description={`Approved agencies assigned the ${t} tier.`}
-                  criteria={`Approved agencies · tier = ${t}`}
-                  count={tierCounts[t]}
-                  loading={loading}
-                  onView={() =>
-                    setActiveSegment({ type: 'tier', value: t, label: tierLabel, criteria: `Approved agencies · tier = ${t}` })
-                  }
-                />
-              );
-            })}
           </Card>
 
           <Card label="By Country" className="border-white">

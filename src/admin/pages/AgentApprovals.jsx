@@ -12,8 +12,6 @@ const STATUS_TABS = [
   { value: 'suspended', label: 'Suspended' },
 ];
 
-const TIERS = ['gold', 'silver', 'bronze'];
-
 const STATUS_BADGE = {
   pending: 'amber',
   approved: 'green',
@@ -55,22 +53,22 @@ function FieldTile({ label, children }) {
 }
 
 // What the panel actually lets an admin *do* next depends entirely on the
-// agency's current status — a pending agency gets the tier/credit + Approve/
-// Reject decision; an already-approved one only gets Deactivate; a suspended
+// agency's current status — a pending agency gets the credit limit +
+// Approve/Reject decision; an already-approved one only gets Deactivate; a suspended
 // one only gets Reactivate; a rejected one has no further action here. Each
 // status renders its own single, unambiguous action instead of always
 // showing the pending-decision form (which is what made an already-approved
 // agency still show an "Approve Agency" button).
 const DECISION_COPY = {
   approved: {
-    hint: 'This agency is active and can sign in, browse, and book. Deactivating suspends their access without deleting their data — their tier and credit limit are kept for when they\'re reactivated.',
+    hint: 'This agency is active and can sign in, browse, and book. Deactivating suspends their access without deleting their data — their credit limit is kept for when they\'re reactivated.',
     actionLabel: 'Deactivate Agency',
     actionLabelBusy: 'Deactivating…',
     nextStatus: 'suspended',
     actionVariant: 'danger',
   },
   suspended: {
-    hint: 'This agency is suspended and cannot sign in. Reactivating restores their previous tier and credit limit.',
+    hint: 'This agency is suspended and cannot sign in. Reactivating restores their previous credit limit.',
     actionLabel: 'Reactivate Agency',
     actionLabelBusy: 'Reactivating…',
     nextStatus: 'approved',
@@ -83,13 +81,11 @@ const DECISION_COPY = {
 };
 
 function DecisionPanel({ agency, onDecided }) {
-  const [tier, setTier] = useState(agency.tier || 'gold');
   const [creditLimit, setCreditLimit] = useState(agency.creditLimit ?? '');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState('');
 
   useEffect(() => {
-    setTier(agency.tier || 'gold');
     setCreditLimit(agency.creditLimit ?? '');
     setError('');
   }, [agency.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -100,7 +96,6 @@ function DecisionPanel({ agency, onDecided }) {
     try {
       const payload = { status };
       if (status === 'approved') {
-        payload.tier = tier;
         if (creditLimit !== '') payload.creditLimit = Number(creditLimit);
         // No rmUserId here — the backend assigns the next Relationship
         // Manager automatically (round-robin) the moment status flips to
@@ -123,16 +118,6 @@ function DecisionPanel({ agency, onDecided }) {
       <div className="space-y-4 text-sm">
         {isPending && (
           <>
-            <div>
-              <FieldLabel>Assign tier</FieldLabel>
-              <div className="flex flex-wrap gap-2">
-                {TIERS.map((t) => (
-                  <button key={t} type="button" onClick={() => setTier(t)}>
-                    <Tag active={tier === t}>{t[0].toUpperCase() + t.slice(1)}</Tag>
-                  </button>
-                ))}
-              </div>
-            </div>
             <div>
               <FieldLabel>Credit limit (INR)</FieldLabel>
               <TextInput
@@ -192,7 +177,6 @@ function AgencyProfileModal({ agency, onClose }) {
         <FieldTile label="Country">{agency.country}</FieldTile>
         <FieldTile label="License / IATA no.">{agency.licenseNumber || '—'}</FieldTile>
         <FieldTile label="Relationship Manager">{agency.rmName || '—'}</FieldTile>
-        {agency.tier && <FieldTile label="Current tier"><span className="capitalize">{agency.tier}</span></FieldTile>}
         {agency.creditLimit != null && (
           <FieldTile label="Credit limit">₹{Number(agency.creditLimit).toLocaleString('en-IN')}</FieldTile>
         )}
@@ -216,7 +200,6 @@ function AgencyDetailsModal({ agency, isSuperAdmin, onClose, onDecided }) {
           <FieldTile label="Type">{agency.type === 'mice_company' ? 'MICE Company' : 'Travel Agent'}</FieldTile>
           <FieldTile label="Country">{agency.country}</FieldTile>
           <FieldTile label="License / IATA no.">{agency.licenseNumber || '—'}</FieldTile>
-          {agency.tier && <FieldTile label="Current tier"><span className="capitalize">{agency.tier}</span></FieldTile>}
           {agency.creditLimit != null && (
             <FieldTile label="Credit limit">₹{Number(agency.creditLimit).toLocaleString('en-IN')}</FieldTile>
           )}

@@ -2,10 +2,8 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client.js';
-import { Badge, Button, Card } from '../components/ui.jsx';
+import { Button, Card } from '../components/ui.jsx';
 import { formatCurrency } from '../../shared/fdPackage/index.js';
-
-const TIER_LABEL = { gold: 'Gold', silver: 'Silver', bronze: 'Bronze' };
 
 // A request is "open" once it's left Draft and hasn't reached a terminal
 // outcome yet; "awaiting pricing" narrows that to before the admin has
@@ -124,7 +122,6 @@ export default function Dashboard() {
               Signed in as {user?.fullName} ({user?.email})
             </p>
           </div>
-          {agency?.tier && <Badge tone="teal">{TIER_LABEL[agency.tier]}</Badge>}
         </div>
       </div>
 

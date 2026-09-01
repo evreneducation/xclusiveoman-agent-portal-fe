@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
-import { Badge, Button, Card, Select, Table, TextInput } from '../components/ui.jsx';
+import { Button, Card, Table, TextInput } from '../components/ui.jsx';
 import { formatCurrency } from '../../shared/fdPackage/index.js';
 
 // Admin Analytics & Reporting (Task 19 — Screen 18, ANL-1). Every number on
@@ -10,13 +10,6 @@ import { formatCurrency } from '../../shared/fdPackage/index.js';
 // visualization below is a plain CSS bar chart (a row of divs with
 // percentage heights), which is enough for one series over ≤12 months and
 // avoids pulling in a dependency for a single chart.
-
-const TIER_OPTIONS = [
-  { value: '', label: 'All tiers' },
-  { value: 'gold', label: 'Gold' },
-  { value: 'silver', label: 'Silver' },
-  { value: 'bronze', label: 'Bronze' },
-];
 
 const CREATED_VIA_LABEL = { self_service: 'Self-service', manual_admin: 'Manual (admin)' };
 
@@ -100,7 +93,6 @@ function SalesMixBreakdown({ salesMix, loading }) {
 export default function Analytics() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
-  const [tier, setTier] = useState('');
   const [country, setCountry] = useState('');
 
   const [summary, setSummaryData] = useState(null);
@@ -117,7 +109,6 @@ export default function Analytics() {
     const params = new URLSearchParams();
     if (dateFrom) params.set('dateFrom', dateFrom);
     if (dateTo) params.set('dateTo', dateTo);
-    if (tier) params.set('tier', tier);
     if (country) params.set('country', country);
     Object.entries(extra).forEach(([k, v]) => params.set(k, v));
     return params.toString();
@@ -153,7 +144,7 @@ export default function Analytics() {
   useEffect(() => {
     loadAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dateFrom, dateTo, tier, country, agenciesPage]);
+  }, [dateFrom, dateTo, country, agenciesPage]);
 
   function updateFilter(setter) {
     return (v) => {
@@ -169,7 +160,7 @@ export default function Analytics() {
         <p className="mb-5 text-sm text-muted">Sales, revenue, and agency performance — server-aggregated from real booking data.</p>
 
         <Card className="mb-5 border-white">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <div>
               <TextInput type="date" value={dateFrom} onChange={(e) => updateFilter(setDateFrom)(e.target.value)} />
               <p className="mt-1 text-[10px] text-muted">From</p>
@@ -178,13 +169,6 @@ export default function Analytics() {
               <TextInput type="date" value={dateTo} onChange={(e) => updateFilter(setDateTo)(e.target.value)} />
               <p className="mt-1 text-[10px] text-muted">To</p>
             </div>
-            <Select value={tier} onChange={(e) => updateFilter(setTier)(e.target.value)}>
-              {TIER_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </Select>
             <TextInput placeholder="Filter by country…" value={country} onChange={(e) => updateFilter(setCountry)(e.target.value)} />
           </div>
         </Card>
@@ -220,12 +204,11 @@ export default function Analytics() {
           ) : (
             <>
               <Table
-                columns={['Agency', 'Tier', 'Country', 'Bookings', 'Revenue']}
+                columns={['Agency', 'Country', 'Bookings', 'Revenue']}
                 rows={agencies}
                 renderRow={(a) => (
                   <tr key={a.agencyId} className="border-b border-line-light last:border-0">
                     <td className="px-3 py-2 font-semibold">{a.agencyName}</td>
-                    <td className="px-3 py-2">{a.tier ? <Badge tone="grey">{a.tier}</Badge> : '—'}</td>
                     <td className="px-3 py-2">{a.country || '—'}</td>
                     <td className="px-3 py-2">{a.bookingCount}</td>
                     <td className="px-3 py-2 font-semibold">{formatCurrency(a.revenue)}</td>
