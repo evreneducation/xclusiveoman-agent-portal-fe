@@ -58,9 +58,9 @@ const SEATS_RED = '#EF4A3D';
 // Part-payment policy — mirrors the backend
 // (booking.service.js#computeFdDepositDue, 0077_booking_deposit_due.sql).
 // Within 15 days of departure the whole booking value is due up front;
-// earlier than that, only this flat deposit is due now. Display-only here —
-// the booking API response (amountDueNow) is the source of truth once the
-// booking exists.
+// earlier than that, only this deposit (× pax, not a flat amount regardless
+// of group size) is due now. Display-only here — the booking API response
+// (amountDueNow) is the source of truth once the booking exists.
 const FULL_PAYMENT_LEAD_DAYS = 15;
 const DEPOSIT_AMOUNT = 5000;
 
@@ -1533,7 +1533,10 @@ export default function DepartureDetail() {
     ? Math.ceil((new Date(selectedDate.date).getTime() - Date.now()) / 86400000)
     : null;
   const requiresFullPayment = daysUntilDeparture != null && daysUntilDeparture < FULL_PAYMENT_LEAD_DAYS;
-  const depositDueNow = requiresFullPayment ? total : Math.min(DEPOSIT_AMOUNT, total);
+  // Per-pax deposit (₹5,000 × pax, not a flat ₹5,000 regardless of group
+  // size) — mirrors booking.service.js#computeFdDepositDue on the backend,
+  // the actual source of truth this is only previewing.
+  const depositDueNow = requiresFullPayment ? total : Math.min(DEPOSIT_AMOUNT * pax, total);
   const seatsLeft = getSeatsLeft(departure?.departureDates);
   // Booking panel's own seats-left bar tracks the currently-selected date
   // specifically (not the header's package-wide max above) — falls back to
@@ -2066,8 +2069,8 @@ export default function DepartureDetail() {
                   </div>
 
                   {/* Part-payment terms — full amount within 15 days of
-                      departure, otherwise a ₹5,000 deposit now with the
-                      balance collected later. */}
+                      departure, otherwise a ₹5,000-per-pax deposit now with
+                      the balance collected later. */}
                   <div className={`mb-3 rounded-xl border ${DIVIDER} bg-agent-accent-soft/40 p-3 text-xs`}>
                     <div className={`flex justify-between font-semibold ${INK}`}>
                       <span>{requiresFullPayment ? 'Payable now' : 'Deposit payable now'}</span>
