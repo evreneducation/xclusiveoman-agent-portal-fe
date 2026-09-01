@@ -101,7 +101,7 @@ function OmanOverviewCard({ item }) {
             className="inline-flex w-full items-center justify-center gap-1.5 rounded-full bg-agent-accent px-4 py-2 text-xs font-semibold text-agent-ink-dark shadow-sm shadow-agent-accent/30 transition hover:opacity-90"
           >
             <LuFileText size={13} />
-            Download PDF
+            View PDF
           </a>
         </div>
       </div>
