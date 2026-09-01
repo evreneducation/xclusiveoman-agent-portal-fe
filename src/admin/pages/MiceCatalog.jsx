@@ -548,13 +548,19 @@ function MiceActivityForm({ onCreated }) {
             <TextInput required value={form.city || ''} onChange={(e) => update('city', e.target.value)} />
           </div>
           <div>
-            <FieldLabel>Duration</FieldLabel>
-            <TextInput placeholder="e.g. 3 hrs" value={form.duration || ''} onChange={(e) => update('duration', e.target.value)} />
+            <FieldLabel>Duration *</FieldLabel>
+            <TextInput
+              required
+              placeholder="e.g. 3 hrs"
+              value={form.duration || ''}
+              onChange={(e) => update('duration', e.target.value)}
+            />
           </div>
           <div>
-            <FieldLabel>Price per pax (INR)</FieldLabel>
+            <FieldLabel>Price per pax (INR) *</FieldLabel>
             <TextInput
               type="number"
+              required
               min="0"
               step="0.01"
               value={form.pricePerPax ?? ''}
@@ -562,11 +568,11 @@ function MiceActivityForm({ onCreated }) {
             />
           </div>
           <div>
-            <FieldLabel>Pickup time</FieldLabel>
-            <TextInput type="time" value={form.pickupTime || ''} onChange={(e) => update('pickupTime', e.target.value)} />
+            <FieldLabel>Pickup time *</FieldLabel>
+            <TextInput type="time" required value={form.pickupTime || ''} onChange={(e) => update('pickupTime', e.target.value)} />
           </div>
           <div className="sm:col-span-2">
-            <FieldLabel>Description</FieldLabel>
+            <FieldLabel>Description *</FieldLabel>
             <RichTextEditor size="sm" value={form.description || ''} onChange={(html) => update('description', html)} />
           </div>
           <ActivityImagesUpload activityId={null} images={images} onChange={setImages} />
@@ -646,10 +652,13 @@ function MiceActivitiesTab() {
 
 // Matches the backend's transferSchema (validation/schemas.js) exactly — the
 // MICE Catalog creates rows in the same `transfers` table the Product
-// Catalog Transfer form (TransferEditor.jsx) does. Images are optional here
-// (transferSchema doesn't require them, unlike hotels/tours), but the upload
-// itself needs its own form to host the picker, same reasoning as
-// MiceHotelForm / MiceTourForm above.
+// Catalog Transfer form (TransferEditor.jsx) does. transferSchema itself
+// leaves every field optional (drafts must be able to save half-filled),
+// but this form always submits status: 'published' straight away, so
+// catalog.routes.js's requireTransferPublishFields gate is what actually
+// runs here — name/type/city/vehicleClass/description/a positive price/at
+// least one image are all required before the POST succeeds, same as
+// MiceActivityForm above.
 const MICE_TRANSFER_DEFAULTS = { isMiceEnabled: true };
 
 function MiceTransferForm({ onCreated }) {
@@ -715,17 +724,18 @@ function MiceTransferForm({ onCreated }) {
             </Select>
           </div>
           <div>
-            <FieldLabel>Vehicle class</FieldLabel>
-            <TextInput value={form.vehicleClass || ''} onChange={(e) => update('vehicleClass', e.target.value)} />
+            <FieldLabel>Vehicle class *</FieldLabel>
+            <TextInput required value={form.vehicleClass || ''} onChange={(e) => update('vehicleClass', e.target.value)} />
           </div>
           <div>
-            <FieldLabel>City</FieldLabel>
-            <TextInput value={form.city || ''} onChange={(e) => update('city', e.target.value)} />
+            <FieldLabel>City *</FieldLabel>
+            <TextInput required value={form.city || ''} onChange={(e) => update('city', e.target.value)} />
           </div>
           <div>
-            <FieldLabel>Price (INR)</FieldLabel>
+            <FieldLabel>Price (INR) *</FieldLabel>
             <TextInput
               type="number"
+              required
               min="0"
               step="0.01"
               value={form.price ?? ''}
@@ -737,7 +747,7 @@ function MiceTransferForm({ onCreated }) {
             <TextInput type="time" value={form.pickupTime || ''} onChange={(e) => update('pickupTime', e.target.value)} />
           </div>
           <div className="sm:col-span-2">
-            <FieldLabel>Description</FieldLabel>
+            <FieldLabel>Description *</FieldLabel>
             <RichTextEditor size="sm" value={form.description || ''} onChange={(html) => update('description', html)} />
           </div>
           <TransferImagesUpload transferId={null} images={images} onChange={setImages} />

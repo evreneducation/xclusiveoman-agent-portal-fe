@@ -12,6 +12,7 @@ import {
   BookingsIcon,
   BuilderIcon,
   CloseIcon,
+  ContentHubIcon,
   DashboardIcon,
   DeparturesIcon,
   LogoutIcon,
@@ -35,7 +36,11 @@ import {
 // its own nav item/page (MyMiceRequests.jsx) — merged into "My Requests /
 // Quotes" (FitRequests.jsx), which now lists both kinds with a kind filter
 // and a MICE pill per card, rather than keeping two near-identical list
-// pages side by side.
+// pages side by side. "MICE Content Hub / Curation Screen (07-08)" above
+// was documented here for a long time but never actually built — that's now
+// ContentHub.jsx, slotted right after Corporate Enquiry since it's the same
+// MICE-curation content, just read-only browsing rather than an itinerary
+// picker.
 const NAV_ITEMS = [
   { to: '/agent/dashboard', label: 'Dashboard', Icon: DashboardIcon },
   { to: '/agent/departures', label: 'Fixed Group Departures', Icon: DeparturesIcon },
@@ -46,6 +51,7 @@ const NAV_ITEMS = [
   // one; without this it would highlight nothing in the sidebar/top bar.
   { to: '/agent/fit-requests', label: 'My Requests / Quotes', Icon: QuotesIcon, matchPrefixes: ['/agent/mice-requests'] },
   { to: '/agent/mice-builder', label: 'Corporate Enquiry', Icon: BuilderIcon },
+  { to: '/agent/content-hub', label: 'Content Hub', Icon: ContentHubIcon },
   { to: '/agent/bookings', label: 'Bookings', Icon: BookingsIcon },
   { to: '/agent/transactions', label: 'Payment & Transaction History', Icon: PaymentsIcon },
   { to: '/agent/notifications', label: 'Notification Center', Icon: NotificationsIcon },

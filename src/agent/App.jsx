@@ -14,6 +14,7 @@ import FitRequests from './pages/FitRequests.jsx';
 import QuoteDetail from './pages/QuoteDetail.jsx';
 import MiceBuilder from './pages/MiceBuilder.jsx';
 import MiceProposalDetail from './pages/MiceProposalDetail.jsx';
+import ContentHub from './pages/ContentHub.jsx';
 import Bookings from './pages/Bookings.jsx';
 import BookingDetail from './pages/BookingDetail.jsx';
 import Payment from './pages/Payment.jsx';
@@ -63,6 +64,7 @@ export default function App() {
                 land there instead. The detail route is untouched. */}
             <Route path="mice-requests" element={<Navigate to="/agent/fit-requests" replace />} />
             <Route path="mice-requests/:id" element={<MiceProposalDetail />} />
+            <Route path="content-hub" element={<ContentHub />} />
             <Route path="bookings" element={<Bookings />} />
             <Route path="bookings/:bookingId" element={<BookingDetail />} />
             <Route path="payments/return" element={<PaymentReturn />} />
