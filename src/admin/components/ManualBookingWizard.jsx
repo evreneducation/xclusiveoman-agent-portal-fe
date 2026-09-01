@@ -225,7 +225,6 @@ export default function ManualBookingWizard({ onClose, onCreated }) {
                       <span className="font-semibold">{a.name}</span>
                       {a.ownerName && <span className={agencyId === a.id ? 'text-white/70' : 'text-muted'}> · {a.ownerName}</span>}
                     </span>
-                    {a.tier && <Badge tone="grey">{a.tier}</Badge>}
                   </button>
                 ))}
               {agencies.length === 0 && <p className="text-sm text-muted">No approved agencies found.</p>}

@@ -2,10 +2,8 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client.js';
-import { Badge, Button, Card } from '../components/ui.jsx';
+import { Button, Card } from '../components/ui.jsx';
 import { formatCurrency } from '../../shared/fdPackage/index.js';
-
-const TIER_LABEL = { gold: 'Gold', silver: 'Silver', bronze: 'Bronze' };
 
 // A request is "open" once it's left Draft and hasn't reached a terminal
 // outcome yet; "awaiting pricing" narrows that to before the admin has
@@ -56,6 +54,16 @@ function RelationshipManagerCard({ rm }) {
         <div className="mt-1 text-sm text-agent-muted">
           {rm.email} {rm.phone ? `· ${rm.phone}` : ''}
         </div>
+        {rm.whatsappNumber && (
+          <a
+            href={`https://wa.me/${rm.whatsappNumber.replace(/[^\d]/g, '')}`}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-[#2f7d32] bg-[#eef7ee] px-3 py-1.5 text-[11px] font-semibold text-[#2f7d32]"
+          >
+            💬 Chat on WhatsApp
+          </a>
+        )}
       </div>
     </div>
   );
@@ -114,7 +122,6 @@ export default function Dashboard() {
               Signed in as {user?.fullName} ({user?.email})
             </p>
           </div>
-          {agency?.tier && <Badge tone="teal">{TIER_LABEL[agency.tier]}</Badge>}
         </div>
       </div>
 

@@ -92,7 +92,7 @@ export default function Register() {
           <h2 className="mt-3 text-xl font-bold text-slate-900">Registration submitted</h2>
           <p className="mt-2 text-sm leading-relaxed text-slate-500">
             Thanks — your registration is now <span className="font-semibold text-slate-900">Pending Approval</span>. A
-            Super Admin will review it, assign your tier, and you'll be able to sign in once approved.
+            Super Admin will review it, and you'll be able to sign in once approved.
           </p>
           <Link to="/agent" className="mt-6 block">
             <AuthButton type="button">Back to Sign In</AuthButton>

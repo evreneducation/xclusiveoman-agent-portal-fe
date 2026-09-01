@@ -22,6 +22,7 @@ function buildDraftPayload(form, images) {
   if (form.duration) payload.duration = form.duration;
   if (!isEmptyHtml(form.description)) payload.description = form.description;
   if (form.pricePerPax !== '' && form.pricePerPax !== undefined) payload.pricePerPax = Number(form.pricePerPax);
+  if (form.pickupTime) payload.pickupTime = form.pickupTime;
   if (images.length > 0) payload.images = images;
   return payload;
 }
@@ -67,6 +68,7 @@ export default function ActivityEditor() {
           city: activity.city || '',
           duration: activity.duration || '',
           pricePerPax: activity.pricePerPax ?? activity.price_per_pax ?? '',
+          pickupTime: (activity.pickupTime ?? activity.pickup_time)?.slice(0, 5) || '',
           description: activity.description || '',
           isBestseller: !!(activity.isBestseller ?? activity.is_bestseller),
         });
@@ -210,6 +212,7 @@ export default function ActivityEditor() {
         name: form.name,
         city: form.city,
         duration: form.duration,
+        pickupTime: form.pickupTime,
         description: form.description,
         images,
         isBestseller: !!form.isBestseller,
@@ -270,6 +273,10 @@ export default function ActivityEditor() {
                     value={form.pricePerPax ?? ''}
                     onChange={(e) => update('pricePerPax', e.target.value)}
                   />
+                </div>
+                <div>
+                  <FieldLabel>Pickup time *</FieldLabel>
+                  <TextInput type="time" required value={form.pickupTime || ''} onChange={(e) => update('pickupTime', e.target.value)} />
                 </div>
                 <div className="sm:col-span-2">
                   <FieldLabel>Description *</FieldLabel>

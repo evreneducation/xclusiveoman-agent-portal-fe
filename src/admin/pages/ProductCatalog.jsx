@@ -591,6 +591,7 @@ function TourPreviewModal({ tour, onClose }) {
         <FieldTile label="Duration">{tour.duration || '—'}</FieldTile>
         <FieldTile label="Category">{tour.category || '—'}</FieldTile>
         <FieldTile label="Price">{formatCurrency(tour.price)}</FieldTile>
+        <FieldTile label="Pickup time">{formatTime(tour.pickupTime ?? tour.pickup_time) || '—'}</FieldTile>
         <FieldTile label="Suitable age (min)">{tour.suitable_age_min ?? '—'}</FieldTile>
         <FieldTile label="Bestseller">{tour.is_bestseller ? 'Yes' : 'No'}</FieldTile>
       </div>
@@ -744,6 +745,7 @@ function ActivityPreviewModal({ activity, onClose }) {
         <FieldTile label="City">{activity.city || '—'}</FieldTile>
         <FieldTile label="Duration">{activity.duration || '—'}</FieldTile>
         <FieldTile label="Price per pax">{formatCurrency(pricePerPax)}</FieldTile>
+        <FieldTile label="Pickup time">{formatTime(activity.pickupTime ?? activity.pickup_time) || '—'}</FieldTile>
         <FieldTile label="Bestseller">{isBestseller ? 'Yes' : 'No'}</FieldTile>
       </div>
       {!isEmptyHtml(activity.description) && (
@@ -897,6 +899,7 @@ function TransferPreviewModal({ transfer, onClose }) {
         <FieldTile label="Vehicle class">{vehicleClass || '—'}</FieldTile>
         <FieldTile label="City">{transfer.city || '—'}</FieldTile>
         <FieldTile label="Price">{formatCurrency(transfer.price)}</FieldTile>
+        <FieldTile label="Pickup time">{formatTime(transfer.pickupTime ?? transfer.pickup_time) || '—'}</FieldTile>
       </div>
       {!isEmptyHtml(transfer.description) && (
         <div className="mt-4">

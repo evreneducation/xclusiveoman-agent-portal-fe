@@ -25,6 +25,7 @@ function buildDraftPayload(form, images) {
   if (form.city) payload.city = form.city;
   if (!isEmptyHtml(form.description)) payload.description = form.description;
   if (form.price !== '' && form.price !== undefined) payload.price = Number(form.price);
+  if (form.pickupTime) payload.pickupTime = form.pickupTime;
   if (images.length > 0) payload.images = images;
   return payload;
 }
@@ -71,6 +72,7 @@ export default function TransferEditor() {
           vehicleClass: transfer.vehicleClass || transfer.vehicle_class || '',
           city: transfer.city || '',
           price: transfer.price ?? '',
+          pickupTime: (transfer.pickupTime ?? transfer.pickup_time)?.slice(0, 5) || '',
           description: transfer.description || '',
         });
         setImages(transfer.images || []);
@@ -217,6 +219,7 @@ export default function TransferEditor() {
         description: form.description,
         images,
         ...(form.price !== '' && form.price !== undefined ? { price: Number(form.price) } : {}),
+        ...(form.pickupTime ? { pickupTime: form.pickupTime } : {}),
         status: 'published',
       };
       if (!transferIdRef.current) {
@@ -282,6 +285,10 @@ export default function TransferEditor() {
                     value={form.price ?? ''}
                     onChange={(e) => update('price', e.target.value)}
                   />
+                </div>
+                <div>
+                  <FieldLabel>Pickup time</FieldLabel>
+                  <TextInput type="time" value={form.pickupTime || ''} onChange={(e) => update('pickupTime', e.target.value)} />
                 </div>
                 <div className="sm:col-span-2">
                   <FieldLabel>Description *</FieldLabel>

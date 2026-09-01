@@ -6,7 +6,7 @@
 // (publish) — the Save-as-Draft path stays lenient.
 import { isEmptyHtml } from '../../shared/components/RichTextEditor.jsx';
 
-export const ACTIVITY_REQUIRED_FIELDS = ['name', 'city', 'description', 'duration', 'pricePerPax'];
+export const ACTIVITY_REQUIRED_FIELDS = ['name', 'city', 'description', 'duration', 'pricePerPax', 'pickupTime'];
 
 // description is rich text — its empty state is `<p></p>`, not `''`.
 const HTML_FIELDS = new Set(['description']);
