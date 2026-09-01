@@ -1049,6 +1049,209 @@ function AddonSelect({ type, addons, selectedAddonIds, onToggle, onViewDetails }
   );
 }
 
+// Lunch/Dinner day count + picker — sits where "View Details" used to be on
+// a meal row, showing the current day count as a small pill. Clicking it
+// opens a floating popover (own open state + outside-click/Escape-to-close,
+// same convention as AddonSelect's own dropdown) containing a +/- stepper
+// (capped at the package's own day-by-day itinerary length — it can never
+// cover more days than the trip actually has) and one toggle chip per
+// itinerary day so the agent can pick exactly which ones. Lunch and Dinner
+// are separate fd_addons rows (one per meal_type —
+// 0075_fd_meal_addons.sql), so each meal row gets its own independent
+// instance of this, keyed by addon.id. `pricePerDay` is fetched lazily
+// (fetchMealPricePerDay in the page component) since the addon list itself
+// only carries the old whole-package snapshot price, not the per-day rate
+// this UI now needs.
+function MealDaysTrigger({ addon, itineraryDayNumbers, target, dayNumbers, pricePerDay, onTargetChange, onToggleDay }) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef(null);
+  const chosen = dayNumbers || [];
+  const maxDays = itineraryDayNumbers.length;
+  const atCap = chosen.length >= target;
+
+  useEffect(() => {
+    if (!open) return;
+    function handlePointerDown(e) {
+      if (containerRef.current && !containerRef.current.contains(e.target)) setOpen(false);
+    }
+    function handleKeyDown(e) {
+      if (e.key === 'Escape') setOpen(false);
+    }
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [open]);
+
+  return (
+    <div ref={containerRef} className="relative flex flex-none items-center gap-2">
+      {/* Increase/decrease counter — always visible on the row once this
+          meal is checked, no click-to-reveal needed for the count itself.
+          Fixed width + centered so it lines up under the "Number of Days"
+          header (MealAddonList) regardless of how wide the row's name is. */}
+      <div className={`flex w-28 flex-none items-center justify-center gap-1 rounded-full border ${DIVIDER} py-0.5`}>
+        <button
+          type="button"
+          onClick={() => onTargetChange(target - 1)}
+          disabled={target <= 1}
+          aria-label={`Fewer ${addon.name} days`}
+          className="flex h-5 w-5 flex-none items-center justify-center rounded-full text-agent-ink-dark transition-colors hover:bg-agent-bg disabled:opacity-30"
+        >
+          <LuMinus size={11} />
+        </button>
+        <span className={`w-4 flex-none text-center text-xs font-bold ${INK}`}>{target}</span>
+        <button
+          type="button"
+          onClick={() => onTargetChange(target + 1)}
+          disabled={target >= maxDays}
+          aria-label={`More ${addon.name} days`}
+          className="flex h-5 w-5 flex-none items-center justify-center rounded-full text-agent-ink-dark transition-colors hover:bg-agent-bg disabled:opacity-30"
+        >
+          <LuPlus size={11} />
+        </button>
+      </div>
+
+      {/* Opens the floating day-checkbox panel — a labeled "Select Days"
+          button (not just an arrow icon) sitting to the right of the
+          counter. Fixed width (w-24) so MealAddonList's header can reserve
+          an identical-width spacer after "Number of Days" — otherwise that
+          heading, having nothing after it, would sit flush against the
+          header's right edge while the counter above stays pushed left of
+          this trailing button, throwing the two out of alignment. */}
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-label={`Choose which days ${addon.name} applies to`}
+        className={`flex w-24 flex-none items-center justify-center rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+          open ? 'border-agent-accent bg-agent-accent-soft text-agent-accent-dark' : 'border-agent-accent/50 text-agent-accent-dark hover:bg-agent-accent-soft'
+        }`}
+      >
+        Select Days
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.15 }}
+            className={`absolute right-0 top-full z-30 mt-1.5 w-64 rounded-xl border ${DIVIDER} bg-white p-3.5 shadow-lg`}
+          >
+            <p className={`mb-2 text-[11px] font-semibold ${MUTED}`}>
+              Selected days: {chosen.length} of {target}
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {itineraryDayNumbers.map((dayNumber) => {
+                const checked = chosen.includes(dayNumber);
+                const disabled = !checked && atCap;
+                return (
+                  <button
+                    key={dayNumber}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => onToggleDay(dayNumber)}
+                    className={`flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                      checked
+                        ? 'border-agent-accent bg-agent-accent-soft text-agent-accent-dark'
+                        : disabled
+                          ? `${DIVIDER} text-agent-muted opacity-40`
+                          : `${DIVIDER} text-agent-ink-dark hover:bg-agent-bg`
+                    }`}
+                  >
+                    <span
+                      className={`flex h-3 w-3 flex-none items-center justify-center rounded-full border-2 ${
+                        checked ? 'border-agent-accent bg-agent-accent' : `${DIVIDER} bg-white`
+                      }`}
+                    >
+                      {checked && <LuCheck size={7} className="text-white" />}
+                    </span>
+                    Day {dayNumber}
+                  </button>
+                );
+              })}
+            </div>
+
+            {pricePerDay != null && (
+              <p className={`mt-2.5 text-[11px] ${MUTED}`}>
+                {formatCurrency(pricePerDay)} × {chosen.length} day{chosen.length === 1 ? '' : 's'} = {formatCurrency(pricePerDay * chosen.length)} / pax
+              </p>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// Meals category's own row list — Lunch/Dinner are always exactly the two
+// possible rows (one fd_addons row per meal_type per package), so this skips
+// AddonSelect's whole searchable-dropdown-for-a-big-catalog pattern in favor
+// of a plain always-visible list, each row pairing the usual checkbox
+// toggle with a MealDaysTrigger on the right (in the exact slot "View
+// Details" occupies for every other add-on type).
+function MealAddonList({ addons, selectedAddonIds, onToggle, itineraryDayNumbers, mealDayTarget, mealDayNumbers, mealPricePerDay, onTargetChange, onToggleDay }) {
+  return (
+    <div className={`rounded-xl border ${DIVIDER} bg-white`}>
+      {/* "Number of Days" sits above the Lunch/Dinner rows, aligned over
+          where their +/- counters render (MealDaysTrigger), the same way
+          "Meals" itself labels the checkbox+name column to its left. */}
+      <div className={`flex items-center gap-2.5 border-b px-4 py-2 ${DIVIDER}`}>
+        <p className={`flex-1 text-xs font-semibold uppercase tracking-wide ${MUTED}`}>Meals</p>
+        {/* w-28 + text-center matches MealDaysTrigger's own counter width
+            below, so this sits centered directly above it; whitespace-nowrap
+            keeps it on one line even though it's a touch wider than w-28
+            (it's just overflow past the header row, not something the
+            counter's own layout below needs to accommodate). */}
+        <p className={`w-28 flex-none whitespace-nowrap text-center text-xs font-semibold uppercase tracking-wide ${MUTED}`}>
+          Number of Days
+        </p>
+        {/* Labels the trailing "Select Days" button below — same fixed
+            width (w-24) as that button, so it sits centered directly above
+            it (mirrors "Number of Days" above the counter just before it). */}
+        <p className={`w-24 flex-none whitespace-nowrap text-center text-xs font-semibold uppercase tracking-wide ${MUTED}`}>
+          Days
+        </p>
+      </div>
+      {addons.map((addon) => {
+        const checked = selectedAddonIds.includes(addon.id);
+        return (
+          <div
+            key={addon.id}
+            className={`flex items-center gap-2.5 border-b px-4 py-2.5 last:border-b-0 ${DIVIDER} ${
+              checked ? 'bg-agent-accent-soft/40' : ''
+            }`}
+          >
+            <button type="button" onClick={() => onToggle(addon.id)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
+              <span
+                className={`flex h-4 w-4 flex-none items-center justify-center rounded-full border-2 ${
+                  checked ? 'border-agent-accent bg-agent-accent' : `${DIVIDER} bg-white`
+                }`}
+              >
+                {checked && <LuCheck size={10} className="text-white" />}
+              </span>
+              <span className={`min-w-0 truncate text-sm ${INK}`}>{addon.name}</span>
+            </button>
+            {checked && (
+              <MealDaysTrigger
+                addon={addon}
+                itineraryDayNumbers={itineraryDayNumbers}
+                target={mealDayTarget[addon.id] || 1}
+                dayNumbers={mealDayNumbers[addon.id] || []}
+                pricePerDay={mealPricePerDay[addon.id]}
+                onTargetChange={(next) => onTargetChange(addon.id, next)}
+                onToggleDay={(dayNumber) => onToggleDay(addon.id, dayNumber)}
+              />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // Single-select searchable dropdown for departure city / departure date —
 // same visual language as AddonSelect above (search-box trigger that doubles
 // as a live filter, checked item floats to the top of the list), but
@@ -1214,6 +1417,16 @@ export default function DepartureDetail() {
   const [children, setChildren] = useState(0);
   const pax = adults + children;
   const [selectedAddonIds, setSelectedAddonIds] = useState([]);
+  // Lunch/Dinner day-selection (MealAddonList / MealDaysTrigger) — three parallel maps keyed
+  // by the meal's fd_addons id (0080_booking_addon_days.sql): the stepper's
+  // target day count, the actual chosen itinerary day numbers (capped at
+  // that target), and the meal's real per-day price (fetched lazily once a
+  // meal is selected — see fetchMealPricePerDay — since departure.addons
+  // only carries the old whole-package snapshot price). All three are
+  // cleared for an addon the moment it's deselected (toggleAddon below).
+  const [mealDayTarget, setMealDayTarget] = useState({});
+  const [mealDayNumbers, setMealDayNumbers] = useState({});
+  const [mealPricePerDay, setMealPricePerDay] = useState({});
   // Which add-on's "View Details" popup (AddonDetailModal) is open, if any
   // — one piece of state shared across every AddonSelect category box below
   // so opening one always closes any other.
@@ -1291,12 +1504,26 @@ export default function DepartureDetail() {
   }
 
   const selectedDate = departure?.departureDates?.find((d) => d.id === departureDateId);
+  // Itinerary day numbers available for the meal day-picker's checkboxes and
+  // its stepper's upper bound — the same array departure.itinerary already
+  // carries (ItineraryTimeline above), so no extra fetch is needed.
+  const itineraryDayNumbers = useMemo(() => (departure?.itinerary || []).map((d) => d.dayNumber), [departure]);
   const addonTotalPerPax = useMemo(
     () =>
       (departure?.addons || [])
         .filter((a) => selectedAddonIds.includes(a.id))
-        .reduce((sum, a) => sum + a.pricePerPax, 0),
-    [departure, selectedAddonIds]
+        .reduce((sum, a) => {
+          // Meals price per selected day now (mealPricePerDay × how many
+          // days were actually checked), not the flat whole-package
+          // snapshot every other add-on type still uses.
+          if (a.type === 'meal') {
+            const perDay = mealPricePerDay[a.id];
+            const days = mealDayNumbers[a.id]?.length || 0;
+            return sum + (perDay != null ? perDay * days : 0);
+          }
+          return sum + a.pricePerPax;
+        }, 0),
+    [departure, selectedAddonIds, mealDayNumbers, mealPricePerDay]
   );
   const total = departure ? (departure.ratePerPax + addonTotalPerPax) * pax : 0;
   // Days from today to the picked departure date, rounded up — drives
@@ -1316,15 +1543,94 @@ export default function DepartureDetail() {
   const seatsFilledPct =
     selectedSeatsTotal > 0 ? Math.min(100, Math.max(0, ((selectedSeatsTotal - selectedSeatsLeft) / selectedSeatsTotal) * 100)) : 0;
 
+  // Fetches a meal's real per-day price (meals.price_per_day) the first
+  // time it's selected — departure.addons only carries the old
+  // whole-package snapshot (pricePerPax), which the day-picker's live total
+  // and addonTotalPerPax above both need broken back out to a per-day rate.
+  // Same GET /:entity/:id route AddonDetailModal already uses for every
+  // other add-on type's own detail fetch.
+  async function fetchMealPricePerDay(addon) {
+    try {
+      const { meal } = await api.get(`/meals/${addon.catalogId}`);
+      setMealPricePerDay((p) => ({ ...p, [addon.id]: Number(meal.pricePerDay ?? meal.price_per_day ?? 0) }));
+    } catch {
+      // Leave unset — the day-picker still works, it just can't show a live
+      // per-day price until this succeeds (or the agent retries by
+      // deselecting/reselecting the meal).
+    }
+  }
+
   function toggleAddon(addonId) {
-    setSelectedAddonIds((ids) => (ids.includes(addonId) ? ids.filter((i) => i !== addonId) : [...ids, addonId]));
+    const wasSelected = selectedAddonIds.includes(addonId);
+    setSelectedAddonIds((ids) => (wasSelected ? ids.filter((i) => i !== addonId) : [...ids, addonId]));
+
+    const addon = departure?.addons?.find((a) => a.id === addonId);
+    if (addon?.type !== 'meal') return;
+
+    if (wasSelected) {
+      // Deselecting a meal clears its day-picker state entirely — re-adding
+      // it later starts fresh rather than resurrecting a stale selection.
+      setMealDayTarget((t) => {
+        const { [addonId]: _drop, ...rest } = t;
+        return rest;
+      });
+      setMealDayNumbers((d) => {
+        const { [addonId]: _drop, ...rest } = d;
+        return rest;
+      });
+    } else {
+      setMealDayTarget((t) => ({ ...t, [addonId]: t[addonId] ?? 1 }));
+      if (mealPricePerDay[addonId] == null) fetchMealPricePerDay(addon);
+    }
+  }
+
+  // Lowering the stepper below the number of days already checked trims the
+  // excess off the end (day numbers are kept sorted ascending) rather than
+  // leaving an inconsistent "3 chosen, target is 2" state on screen.
+  function updateMealTarget(addonId, nextTarget) {
+    const target = Math.max(1, Math.min(itineraryDayNumbers.length, nextTarget));
+    setMealDayTarget((t) => ({ ...t, [addonId]: target }));
+    setMealDayNumbers((d) => {
+      const current = d[addonId] || [];
+      if (current.length <= target) return d;
+      return { ...d, [addonId]: current.slice(0, target) };
+    });
+  }
+
+  function toggleMealDay(addonId, dayNumber) {
+    const target = mealDayTarget[addonId] || 1;
+    setMealDayNumbers((d) => {
+      const current = d[addonId] || [];
+      if (current.includes(dayNumber)) {
+        return { ...d, [addonId]: current.filter((n) => n !== dayNumber) };
+      }
+      if (current.length >= target) return d; // stepper cap already reached
+      return { ...d, [addonId]: [...current, dayNumber].sort((a, b) => a - b) };
+    });
   }
 
   // Step 1 (Departure Details) -> Step 2 (Traveler Details). Departure
   // date/pax/add-ons stay exactly as selected — same component, same state,
   // nothing gets reset by switching steps.
+  // A selected Lunch/Dinner add-on with no itinerary days actually checked
+  // yet (MealDaysTrigger's target defaults to 1, but nothing's chosen until
+  // the agent taps a day chip) — blocks both advancing past Step 1 and the
+  // final Confirm Booking, since the backend has nothing to price/persist
+  // without at least one real day number.
+  function incompleteMealAddon() {
+    return (departure?.addons || []).find(
+      (a) => a.type === 'meal' && selectedAddonIds.includes(a.id) && !(mealDayNumbers[a.id]?.length)
+    );
+  }
+
   function handleBookNowClick() {
     if (!departureDateId) return;
+    const incomplete = incompleteMealAddon();
+    if (incomplete) {
+      setBookingError(`Select which day(s) ${incomplete.name} applies to.`);
+      return;
+    }
+    setBookingError('');
     setTravelerError('');
     setBookingStep('travelers');
   }
@@ -1349,14 +1655,30 @@ export default function DepartureDetail() {
       setTravelerError('Enter a name for every traveler.');
       return;
     }
+    const incomplete = incompleteMealAddon();
+    if (incomplete) {
+      setTravelerError(`Select which day(s) ${incomplete.name} applies to.`);
+      return;
+    }
     setTravelerError('');
     setBookingError('');
     setSubmitting(true);
     try {
+      // Only meal-type addon ids carry day numbers — mealDayNumbers is keyed
+      // by every meal addon ever selected during this visit, including ones
+      // since deselected (guarded against above) or never given days
+      // (guarded against by incompleteMealAddon), so this only ever includes
+      // currently-selected, fully-configured meals.
+      const addonDayNumbers = {};
+      for (const addonId of selectedAddonIds) {
+        const days = mealDayNumbers[addonId];
+        if (days?.length) addonDayNumbers[addonId] = days;
+      }
       const { booking } = await api.post(`/departures/${id}/bookings`, {
         departureDateId,
         pax,
         addonIds: selectedAddonIds,
+        addonDayNumbers,
         travelers: travelers.map((t) => ({
           name: t.name.trim(),
           passportNo: t.passportNo.trim() || undefined,
@@ -1577,16 +1899,31 @@ export default function DepartureDetail() {
                 <div
                   className={`grid grid-cols-1 items-start gap-4 ${visibleAddonTypes.length > 1 ? 'sm:grid-cols-2' : ''}`}
                 >
-                  {visibleAddonTypes.map((type) => (
-                    <AddonSelect
-                      key={type}
-                      type={type}
-                      addons={addonsByType[type]}
-                      selectedAddonIds={selectedAddonIds}
-                      onToggle={toggleAddon}
-                      onViewDetails={setDetailAddon}
-                    />
-                  ))}
+                  {visibleAddonTypes.map((type) =>
+                    type === 'meal' ? (
+                      <MealAddonList
+                        key={type}
+                        addons={addonsByType.meal}
+                        selectedAddonIds={selectedAddonIds}
+                        onToggle={toggleAddon}
+                        itineraryDayNumbers={itineraryDayNumbers}
+                        mealDayTarget={mealDayTarget}
+                        mealDayNumbers={mealDayNumbers}
+                        mealPricePerDay={mealPricePerDay}
+                        onTargetChange={updateMealTarget}
+                        onToggleDay={toggleMealDay}
+                      />
+                    ) : (
+                      <AddonSelect
+                        key={type}
+                        type={type}
+                        addons={addonsByType[type]}
+                        selectedAddonIds={selectedAddonIds}
+                        onToggle={toggleAddon}
+                        onViewDetails={setDetailAddon}
+                      />
+                    )
+                  )}
                 </div>
               </Card>
             )}
