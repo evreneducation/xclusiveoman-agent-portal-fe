@@ -113,7 +113,11 @@ export function createApiClient() {
     return fetch(`${BASE_URL}${path}`, { method, headers, credentials: 'include' });
   }
 
-  async function apiBlobRequest(path, options = {}) {
+  // Shared by getBlob/getBlobWithFilename below — the 401-retry + error-JSON
+  // parsing is identical either way, only what happens with a *successful*
+  // response differs (one just wants the Blob, the other also wants the
+  // filename the server chose).
+  async function resolveBlobResponse(path, options = {}) {
     let res = await rawBlobRequest(path, options);
 
     if (res.status === 401 && !options._retried) {
@@ -138,7 +142,26 @@ export function createApiClient() {
       throw error;
     }
 
+    return res;
+  }
+
+  async function apiBlobRequest(path, options = {}) {
+    const res = await resolveBlobResponse(path, options);
     return res.blob();
+  }
+
+  // Every document-download endpoint here (traveler documents, vouchers)
+  // already sets a correctly-named, correctly-extensioned Content-Disposition
+  // header server-side — this reads that back instead of making callers
+  // reconstruct a filename client-side (which is exactly how
+  // shared/documents/downloadDocument.js's callers used to end up saving
+  // files with no extension at all, since they never had the real one).
+  const CONTENT_DISPOSITION_FILENAME_RE = /filename="?([^";]+)"?/i;
+  async function apiBlobRequestWithFilename(path, options = {}) {
+    const res = await resolveBlobResponse(path, options);
+    const disposition = res.headers.get('content-disposition');
+    const match = disposition?.match(CONTENT_DISPOSITION_FILENAME_RE);
+    return { blob: await res.blob(), filename: match?.[1]?.trim() || null };
   }
 
   const api = {
@@ -151,6 +174,10 @@ export function createApiClient() {
     postForm: (path, formData) => apiRequest(path, { method: 'POST', body: formData }),
     // Binary download (e.g. PDF export) — resolves to a Blob, not JSON.
     getBlob: (path) => apiBlobRequest(path, { method: 'GET' }),
+    // Same, but also resolves the filename the server chose (its
+    // Content-Disposition header) — see shared/documents/downloadDocument.js,
+    // the one place that should be saving a document to disk.
+    getBlobWithFilename: (path) => apiBlobRequestWithFilename(path, { method: 'GET' }),
   };
 
   return { api, setAccessToken, getAccessToken, setUnauthorizedHandler, tryRefresh };

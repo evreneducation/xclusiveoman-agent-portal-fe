@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { useToast } from '../../shared/components/ToastProvider.jsx';
+import { downloadDocument } from '../../shared/documents/downloadDocument.js';
 import { Badge, Button, Card, Checkbox, ErrorText, FieldLabel, Table, TextInput, Textarea } from '../components/ui.jsx';
 
 // Admin Booking & Visa Processing (Task 14 — Screen 23, DOC-2..6). Booking
@@ -13,17 +14,6 @@ import { Badge, Button, Card, Checkbox, ErrorText, FieldLabel, Table, TextInput,
 // upload below unlocks and notifies the agent automatically the moment it's
 // saved (travelerDocumentsAdmin.controller.js#notifyAgentDocumentsReadyOnce
 // on the backend); this screen just reflects that it already happened.
-
-function triggerDownload(blob, filename) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}
 
 function Modal({ title, onClose, children, footer }) {
   return (
@@ -133,11 +123,10 @@ export default function BookingDetailAdmin() {
     return selectedRefs.some((r) => `${r.type}:${r.travelerId || ''}` === key);
   }
 
-  async function handleDownload(url, filename) {
+  async function handleDownload(url) {
     setDownloading(url);
     try {
-      const blob = await api.getBlob(url);
-      triggerDownload(blob, filename);
+      await downloadDocument(api, url);
     } catch (err) {
       toast.error(err.message || 'Unable to download this document');
     } finally {
@@ -146,7 +135,7 @@ export default function BookingDetailAdmin() {
   }
 
   async function handleDownloadAll() {
-    await handleDownload(`/admin/bookings/${bookingId}/documents/download-all`, `Booking_${bookingId}.zip`);
+    await handleDownload(`/admin/bookings/${bookingId}/documents/download-all`);
   }
 
   async function handleUploadVoucher() {
@@ -269,10 +258,7 @@ export default function BookingDetailAdmin() {
                         type="button"
                         className="block text-[11px] text-accent hover:underline"
                         onClick={() =>
-                          handleDownload(
-                            `/admin/bookings/${bookingId}/travelers/${t.travelerId}/documents/passport_scan/download`,
-                            `passport_scan_${t.name}`
-                          )
+                          handleDownload(`/admin/bookings/${bookingId}/travelers/${t.travelerId}/documents/passport_scan/download`)
                         }
                       >
                         Download
@@ -288,10 +274,7 @@ export default function BookingDetailAdmin() {
                         type="button"
                         className="block text-[11px] text-accent hover:underline"
                         onClick={() =>
-                          handleDownload(
-                            `/admin/bookings/${bookingId}/travelers/${t.travelerId}/documents/passport_photo/download`,
-                            `passport_photo_${t.name}`
-                          )
+                          handleDownload(`/admin/bookings/${bookingId}/travelers/${t.travelerId}/documents/passport_photo/download`)
                         }
                       >
                         Download
@@ -307,10 +290,7 @@ export default function BookingDetailAdmin() {
                         type="button"
                         className="block text-[11px] text-accent hover:underline"
                         onClick={() =>
-                          handleDownload(
-                            `/admin/bookings/${bookingId}/travelers/${t.travelerId}/documents/visa_copy/download`,
-                            `visa_copy_${t.name}`
-                          )
+                          handleDownload(`/admin/bookings/${bookingId}/travelers/${t.travelerId}/documents/visa_copy/download`)
                         }
                       >
                         Download
@@ -333,7 +313,7 @@ export default function BookingDetailAdmin() {
               <button
                 type="button"
                 className="text-xs text-accent hover:underline"
-                onClick={() => handleDownload(`/admin/bookings/${bookingId}/voucher/download`, 'voucher')}
+                onClick={() => handleDownload(`/admin/bookings/${bookingId}/voucher/download`)}
               >
                 Download
               </button>

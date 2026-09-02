@@ -3,7 +3,10 @@ import { Link, useParams } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { getSocket } from '../lib/socket.js';
 import { useAuth } from '../context/AuthContext.jsx';
+import { LuDownload } from 'react-icons/lu';
 import { Badge, Button, Card, ErrorText } from '../components/ui.jsx';
+import { ImageUpload } from '../../shared/components/ImageUpload.jsx';
+import { downloadDocument } from '../../shared/documents/downloadDocument.js';
 
 // Agent Traveler Document Upload (Task 14 — DOC-1/DOC-6). "After a booking
 // is confirmed, travelers become uploadable"; admin-provided visa/voucher
@@ -11,51 +14,51 @@ import { Badge, Button, Card, ErrorText } from '../components/ui.jsx';
 // them — no separate release step (see travelerDocumentsAdmin.controller.js's
 // own comment on the backend).
 
-function triggerDownload(blob, filename) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
+// Same accept list every other passport/document picker in this app uses
+// (admin's own VisaUploadInline, NEFT slip upload, etc.).
+const DOC_ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+
+// A small pill-style download link, not a bare underlined text link — used
+// right under each upload field (so "download the scan" reads as belonging
+// to the scan field above it, not as a loose row of three unrelated actions
+// at the bottom of the card) and for the visa copy below.
+function DownloadLink({ label, downloading, onClick }) {
+  return (
+    <button
+      type="button"
+      disabled={downloading}
+      onClick={onClick}
+      className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-agent-line-light bg-agent-panel px-3 py-1.5 text-[11px] font-semibold text-agent-ink transition-colors hover:border-agent-accent hover:bg-agent-accent-soft disabled:cursor-not-allowed disabled:opacity-60"
+    >
+      <LuDownload size={12} className="flex-none" />
+      {downloading ? 'Downloading…' : label}
+    </button>
+  );
 }
 
 function TravelerUploadCard({ bookingId, traveler, onUploaded }) {
-  const [scanFile, setScanFile] = useState(null);
-  const [photoFile, setPhotoFile] = useState(null);
-  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [downloadingType, setDownloadingType] = useState('');
 
-  async function handleUpload() {
-    if (!scanFile && !photoFile) {
-      setError('Choose a passport scan and/or a passport-size photo to upload.');
-      return;
-    }
-    setError('');
-    setSubmitting(true);
-    try {
-      const formData = new FormData();
-      if (scanFile) formData.append('passportScan', scanFile);
-      if (photoFile) formData.append('passportPhoto', photoFile);
-      await api.postForm(`/bookings/${bookingId}/travelers/${traveler.travelerId}/documents`, formData);
-      setScanFile(null);
-      setPhotoFile(null);
-      onUploaded();
-    } catch (err) {
-      setError(err.message || 'Unable to upload documents');
-    } finally {
-      setSubmitting(false);
-    }
+  // ImageUpload's `value` is normally a URL it previews as a thumbnail — the
+  // real Cloudinary URL is deliberately never sent to the agent (only
+  // booleans like passportScanUploaded), so 'uploaded' is a plain non-image
+  // sentinel: ImageUpload falls back to its generic document-icon chip +
+  // "Change file" affordance for any value it can't render as an <img>,
+  // which is exactly the "already have one, replace it" state this needs.
+  async function uploadField(fieldName, file) {
+    const formData = new FormData();
+    formData.append(fieldName, file);
+    await api.postForm(`/bookings/${bookingId}/travelers/${traveler.travelerId}/documents`, formData);
+    onUploaded();
+    return 'uploaded';
   }
 
-  async function handleDownload(type, filename) {
+  async function handleDownload(type) {
+    setError('');
     setDownloadingType(type);
     try {
-      const blob = await api.getBlob(`/bookings/${bookingId}/travelers/${traveler.travelerId}/documents/${type}/download`);
-      triggerDownload(blob, filename);
+      await downloadDocument(api, `/bookings/${bookingId}/travelers/${traveler.travelerId}/documents/${type}/download`);
     } catch (err) {
       setError(err.message || 'Unable to download this document');
     } finally {
@@ -74,67 +77,53 @@ function TravelerUploadCard({ bookingId, traveler, onUploaded }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
-          <label className="mb-1 block text-[11px] font-semibold text-agent-muted">Passport scan</label>
-          <input
-            type="file"
-            accept="image/jpeg,image/png,image/webp,application/pdf"
-            onChange={(e) => setScanFile(e.target.files?.[0] || null)}
-            className="w-full text-xs"
+          <ImageUpload
+            label="Passport scan"
+            value={traveler.passportScanUploaded ? 'uploaded' : ''}
+            onChange={() => {}}
+            onUpload={(file) => uploadField('passportScan', file)}
+            acceptedTypes={DOC_ACCEPTED_TYPES}
+            acceptHint="JPG, PNG, WebP, or PDF"
           />
           {traveler.passportScanUploaded && (
-            <button
-              type="button"
-              className="mt-1 text-[11px] text-agent-accent hover:underline"
-              disabled={downloadingType === 'passport_scan'}
-              onClick={() => handleDownload('passport_scan', `passport_scan_${traveler.name}`)}
-            >
-              {downloadingType === 'passport_scan' ? 'Downloading…' : 'Download uploaded scan'}
-            </button>
+            <DownloadLink
+              label="Download scan"
+              downloading={downloadingType === 'passport_scan'}
+              onClick={() => handleDownload('passport_scan')}
+            />
           )}
         </div>
         <div>
-          <label className="mb-1 block text-[11px] font-semibold text-agent-muted">Passport-size photo</label>
-          <input
-            type="file"
-            accept="image/jpeg,image/png,image/webp,application/pdf"
-            onChange={(e) => setPhotoFile(e.target.files?.[0] || null)}
-            className="w-full text-xs"
+          <ImageUpload
+            label="Passport-size photo"
+            value={traveler.passportPhotoUploaded ? 'uploaded' : ''}
+            onChange={() => {}}
+            onUpload={(file) => uploadField('passportPhoto', file)}
+            acceptedTypes={DOC_ACCEPTED_TYPES}
+            acceptHint="JPG, PNG, WebP, or PDF"
           />
           {traveler.passportPhotoUploaded && (
-            <button
-              type="button"
-              className="mt-1 text-[11px] text-agent-accent hover:underline"
-              disabled={downloadingType === 'passport_photo'}
-              onClick={() => handleDownload('passport_photo', `passport_photo_${traveler.name}`)}
-            >
-              {downloadingType === 'passport_photo' ? 'Downloading…' : 'Download uploaded photo'}
-            </button>
+            <DownloadLink
+              label="Download photo"
+              downloading={downloadingType === 'passport_photo'}
+              onClick={() => handleDownload('passport_photo')}
+            />
           )}
         </div>
       </div>
 
-      <Button
-        variant="accent"
-        className="mt-3 !py-1.5 text-xs"
-        disabled={submitting || (!scanFile && !photoFile)}
-        onClick={handleUpload}
-      >
-        {submitting ? 'Uploading…' : 'Upload'}
-      </Button>
-      <ErrorText>{error}</ErrorText>
-
       {traveler.visaCopyDownloadable && (
-        <button
-          type="button"
-          className="mt-2 block text-[11px] text-agent-accent hover:underline"
-          disabled={downloadingType === 'visa_copy'}
-          onClick={() => handleDownload('visa_copy', `visa_copy_${traveler.name}`)}
-        >
-          {downloadingType === 'visa_copy' ? 'Downloading…' : 'Download visa copy'}
-        </button>
+        <div className="mt-4 border-t border-agent-line-light pt-3">
+          <DownloadLink
+            label="Download visa copy"
+            downloading={downloadingType === 'visa_copy'}
+            onClick={() => handleDownload('visa_copy')}
+          />
+        </div>
       )}
+      <ErrorText>{error}</ErrorText>
     </Card>
   );
 }
@@ -185,8 +174,7 @@ export default function BookingDetail() {
     setVoucherDownloading(true);
     setVoucherError('');
     try {
-      const blob = await api.getBlob(`/bookings/${bookingId}/voucher/download`);
-      triggerDownload(blob, 'voucher');
+      await downloadDocument(api, `/bookings/${bookingId}/voucher/download`, 'voucher');
     } catch (err) {
       setVoucherError(err.message || 'Unable to download the voucher');
     } finally {
