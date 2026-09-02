@@ -3,7 +3,12 @@ import { Link, useParams } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { useToast } from '../../shared/components/ToastProvider.jsx';
 import { downloadDocument } from '../../shared/documents/downloadDocument.js';
+import { ImageUpload } from '../../shared/components/ImageUpload.jsx';
 import { Badge, Button, Card, Checkbox, ErrorText, FieldLabel, Table, TextInput, Textarea } from '../components/ui.jsx';
+
+// Same accept list agent/pages/BookingDetail.jsx's own traveler-document
+// pickers use.
+const DOC_ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
 
 // Admin Booking & Visa Processing (Task 14 — Screen 23, DOC-2..6). Booking
 // selection/list (BookingsDocuments.jsx) -> this detail screen -> traveler
@@ -37,43 +42,31 @@ function DocStatus({ uploaded, label }) {
   return <Badge tone={uploaded ? 'green' : 'grey'}>{uploaded ? `${label}: Uploaded` : `${label}: Missing`}</Badge>;
 }
 
-function VisaUploadInline({ bookingId, travelerId, onUploaded }) {
+function VisaUploadInline({ bookingId, travelerId, uploaded, onUploaded }) {
   const toast = useToast();
-  const [file, setFile] = useState(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
 
-  async function handleUpload() {
-    if (!file) return;
-    setSubmitting(true);
-    setError('');
-    try {
-      const formData = new FormData();
-      formData.append('visaCopy', file);
-      await api.postForm(`/admin/bookings/${bookingId}/travelers/${travelerId}/visa-copy`, formData);
-      toast.success('Visa copy uploaded — the agent can download it now.');
-      setFile(null);
-      onUploaded();
-    } catch (err) {
-      setError(err.message || 'Unable to upload visa copy');
-    } finally {
-      setSubmitting(false);
-    }
+  async function uploadVisa(file) {
+    const formData = new FormData();
+    formData.append('visaCopy', file);
+    await api.postForm(`/admin/bookings/${bookingId}/travelers/${travelerId}/visa-copy`, formData);
+    toast.success('Visa copy uploaded — the agent can download it now.');
+    onUploaded();
+    // ImageUpload's `value` is normally a URL it previews as a thumbnail —
+    // the admin has no reason to preview it here (they just uploaded it,
+    // Download above already covers viewing it), so 'uploaded' is a plain
+    // non-image sentinel: falls back to ImageUpload's generic document-icon
+    // chip + "Change file" affordance instead.
+    return 'uploaded';
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <input
-        type="file"
-        accept="image/jpeg,image/png,image/webp,application/pdf"
-        onChange={(e) => setFile(e.target.files?.[0] || null)}
-        className="max-w-[220px] text-xs"
-      />
-      <Button disabled={!file || submitting} onClick={handleUpload} className="!py-1.5 text-xs">
-        {submitting ? 'Uploading…' : 'Upload Visa'}
-      </Button>
-      {error && <span className="text-xs text-[#a5162d]">{error}</span>}
-    </div>
+    <ImageUpload
+      value={uploaded ? 'uploaded' : ''}
+      onChange={() => {}}
+      onUpload={uploadVisa}
+      acceptedTypes={DOC_ACCEPTED_TYPES}
+      acceptHint="JPG, PNG, WebP, or PDF"
+    />
   );
 }
 
@@ -84,10 +77,6 @@ export default function BookingDetailAdmin() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [downloading, setDownloading] = useState('');
-
-  const [voucherFile, setVoucherFile] = useState(null);
-  const [voucherSubmitting, setVoucherSubmitting] = useState(false);
-  const [voucherError, setVoucherError] = useState('');
 
   const [emailOpen, setEmailOpen] = useState(false);
   const [emailTo, setEmailTo] = useState('');
@@ -138,22 +127,13 @@ export default function BookingDetailAdmin() {
     await handleDownload(`/admin/bookings/${bookingId}/documents/download-all`);
   }
 
-  async function handleUploadVoucher() {
-    if (!voucherFile) return;
-    setVoucherSubmitting(true);
-    setVoucherError('');
-    try {
-      const formData = new FormData();
-      formData.append('voucher', voucherFile);
-      await api.postForm(`/admin/bookings/${bookingId}/voucher`, formData);
-      toast.success('Voucher uploaded — the agent can download it now.');
-      setVoucherFile(null);
-      loadDetail();
-    } catch (err) {
-      setVoucherError(err.message || 'Unable to upload voucher');
-    } finally {
-      setVoucherSubmitting(false);
-    }
+  async function uploadVoucher(file) {
+    const formData = new FormData();
+    formData.append('voucher', file);
+    await api.postForm(`/admin/bookings/${bookingId}/voucher`, formData);
+    toast.success('Voucher uploaded — the agent can download it now.');
+    loadDetail();
+    return 'uploaded';
   }
 
   async function handleSendEmail() {
@@ -299,7 +279,12 @@ export default function BookingDetailAdmin() {
                   </div>
                 </td>
                 <td className="px-3 py-3">
-                  <VisaUploadInline bookingId={bookingId} travelerId={t.travelerId} onUploaded={loadDetail} />
+                  <VisaUploadInline
+                    bookingId={bookingId}
+                    travelerId={t.travelerId}
+                    uploaded={t.visaCopyUploaded}
+                    onUploaded={loadDetail}
+                  />
                 </td>
               </tr>
             )}
@@ -319,18 +304,15 @@ export default function BookingDetailAdmin() {
               </button>
             )}
           </div>
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <input
-              type="file"
-              accept="image/jpeg,image/png,image/webp,application/pdf"
-              onChange={(e) => setVoucherFile(e.target.files?.[0] || null)}
-              className="max-w-[260px] text-xs"
+          <div className="mt-3 max-w-sm">
+            <ImageUpload
+              value={voucher.uploaded ? 'uploaded' : ''}
+              onChange={() => {}}
+              onUpload={uploadVoucher}
+              acceptedTypes={DOC_ACCEPTED_TYPES}
+              acceptHint="JPG, PNG, WebP, or PDF"
             />
-            <Button disabled={!voucherFile || voucherSubmitting} onClick={handleUploadVoucher} className="text-xs">
-              {voucherSubmitting ? 'Uploading…' : voucher.uploaded ? 'Replace Voucher' : 'Upload Voucher'}
-            </Button>
           </div>
-          <ErrorText>{voucherError}</ErrorText>
         </Card>
       </div>
 
