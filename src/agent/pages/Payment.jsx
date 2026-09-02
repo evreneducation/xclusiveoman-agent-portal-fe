@@ -1,9 +1,20 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { LuCreditCard, LuLandmark, LuShieldCheck } from 'react-icons/lu';
 import { api } from '../api/client.js';
-import { Button, Card, ErrorText, Tag, TextInput } from '../components/ui.jsx';
+import { Button, Card, ErrorText, TextInput } from '../components/ui.jsx';
 import { usePaymentAttempt } from '../lib/usePaymentAttempt.js';
 import { PaymentAttemptStatus } from '../components/PaymentAttemptStatus.jsx';
+
+// Card vs NEFT — a proper two-option selector (icon + name + a one-line
+// distinguisher) rather than a pair of generic filter pills, since this is
+// the one real decision this page asks the agent to make, not a filter over
+// a list. `hint` is the thing that actually differs between the two
+// (instant vs. manually verified), not a repeat of the label itself.
+const PAYMENT_METHODS = [
+  { key: 'card', label: 'Pay by Card', hint: 'Instant, via secure checkout', Icon: LuCreditCard },
+  { key: 'neft', label: 'Pay via NEFT', hint: 'Bank transfer, verified manually', Icon: LuLandmark },
+];
 
 const CASHFREE_SDK_URL = 'https://sdk.cashfree.com/js/v3/cashfree.js';
 
@@ -95,8 +106,12 @@ function CardPanel({ booking }) {
   const status = payment?.status;
 
   return (
-    <Card label="Option A — Payment Gateway" className="border-white">
-      <p className="mb-3 text-xs text-agent-muted">
+    <Card className="border-white">
+      <div className="mb-1 flex items-center gap-1.5">
+        <LuShieldCheck size={14} className="flex-none text-agent-accent-dark" />
+        <span className="text-[11px] font-semibold uppercase text-agent-accent-dark">Secure checkout</span>
+      </div>
+      <p className="mb-4 text-xs text-agent-muted">
         You'll be redirected to Cashfree's secure checkout to complete card payment.
       </p>
       <ErrorText>{error}</ErrorText>
@@ -133,7 +148,12 @@ function CardPanel({ booking }) {
       )}
 
       {!status && (
-        <Button variant="accent" className="w-full" disabled={!!busy} onClick={startCheckout}>
+        <Button
+          variant="accent"
+          className="w-full !rounded-full py-3 text-sm"
+          disabled={!!busy}
+          onClick={startCheckout}
+        >
           {busy === 'start' ? 'Starting checkout…' : `Pay ₹${dueNow} Now`}
         </Button>
       )}
@@ -173,7 +193,7 @@ function NeftPanel({ booking }) {
 
   if (success) {
     return (
-      <Card label="Option B — NEFT / Bank Transfer" className="border-white">
+      <Card className="border-white">
         <p className="text-sm font-semibold text-[#227647]">Slip submitted for verification.</p>
         <p className="mt-1 text-xs text-agent-muted">Booking confirms once admin verifies the slip.</p>
       </Card>
@@ -181,10 +201,10 @@ function NeftPanel({ booking }) {
   }
 
   return (
-    <Card label="Option B — NEFT / Bank Transfer" className="border-white">
-      <div className="mb-3 space-y-1 text-xs leading-relaxed">
+    <Card className="border-white">
+      <div className="mb-4 rounded-lg border border-agent-line-light bg-agent-panel px-3.5 py-3 text-xs leading-relaxed text-agent-ink">
         <div>Bank: Bank Muscat · A/C: 0123456789 · IFSC/Swift: BMUSOMRXXXX</div>
-        <div>
+        <div className="mt-1">
           Reference to booking: <b>{booking.id.slice(0, 8)}</b>
         </div>
       </div>
@@ -201,7 +221,7 @@ function NeftPanel({ booking }) {
           className="w-full rounded-md border border-agent-line-light bg-white px-3 py-2 text-xs"
         />
         <ErrorText>{error}</ErrorText>
-        <Button variant="accent" type="submit" className="w-full" disabled={submitting}>
+        <Button variant="accent" type="submit" className="w-full !rounded-full py-3 text-sm" disabled={submitting}>
           {submitting ? 'Submitting…' : 'Submit Slip for Verification'}
         </Button>
       </form>
@@ -238,27 +258,31 @@ export default function Payment() {
       <Link to="/agent/dashboard" className="mb-4 inline-block text-xs text-agent-muted hover:text-agent-ink">
         ← Back to dashboard
       </Link>
-      <h2 className="mb-4 text-xl font-bold text-agent-ink">Payment</h2>
+      <h2 className="mb-5 text-2xl font-bold text-agent-ink">Payment</h2>
 
       {(() => {
         const dueNow = booking.amountDueNow ?? booking.balanceDue;
         const remaining = booking.remainingBalance ?? Math.max(0, booking.balanceDue - dueNow);
         const isPartPayment = remaining > 0;
         return (
-          <Card label="Amount due" className="mb-4 border-white">
-            <div className="flex justify-between text-sm">
-              <span>{isPartPayment ? 'Deposit due now' : 'Amount due now'}</span>
-              <b>₹{dueNow}</b>
+          <Card className="mb-5 border-white">
+            <div className="text-[11px] font-semibold uppercase text-agent-accent-dark">
+              {isPartPayment ? 'Deposit due now' : 'Amount due now'}
             </div>
+            <div className="mt-1 text-4xl font-extrabold text-agent-ink-dark">₹{dueNow}</div>
+
             {isPartPayment && (
-              <div className="mt-1 flex justify-between text-xs text-agent-muted">
-                <span>Remaining balance (payable later)</span>
-                <span>₹{remaining}</span>
+              <div className="mt-4 flex items-center justify-between rounded-lg bg-agent-panel px-3.5 py-2.5 text-xs text-agent-muted">
+                <span>Remaining balance, payable later</span>
+                <span className="font-semibold text-agent-ink">₹{remaining}</span>
               </div>
             )}
-            <div className="mt-1 text-xs text-agent-muted">Total booking value: ₹{booking.totalPrice}</div>
+            <div className="mt-3 flex items-center justify-between border-t border-agent-line-light pt-3 text-xs text-agent-muted">
+              <span>Total booking value</span>
+              <span className="font-semibold text-agent-ink">₹{booking.totalPrice}</span>
+            </div>
             {isPartPayment && (
-              <p className="mt-2 text-xs text-agent-muted">
+              <p className="mt-3 text-xs text-agent-muted">
                 Your departure is more than 15 days away, so only a ₹{dueNow} deposit is needed now — the balance is
                 collected closer to travel.
               </p>
@@ -267,13 +291,31 @@ export default function Payment() {
         );
       })()}
 
-      <div className="mb-4 flex gap-2">
-        <button onClick={() => setMethod('card')}>
-          <Tag active={method === 'card'}>Pay by Card</Tag>
-        </button>
-        <button onClick={() => setMethod('neft')}>
-          <Tag active={method === 'neft'}>Pay via NEFT</Tag>
-        </button>
+      <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {PAYMENT_METHODS.map(({ key, label, hint, Icon }) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setMethod(key)}
+            className={`flex items-center gap-3 rounded-xl border px-4 py-3.5 text-left transition ${
+              method === key
+                ? 'border-agent-accent bg-agent-accent-soft'
+                : 'border-agent-line-light bg-white hover:border-agent-line'
+            }`}
+          >
+            <span
+              className={`flex h-9 w-9 flex-none items-center justify-center rounded-full ${
+                method === key ? 'bg-agent-accent text-agent-ink-dark' : 'bg-agent-panel text-agent-muted'
+              }`}
+            >
+              <Icon size={17} />
+            </span>
+            <span className="min-w-0">
+              <span className="block text-sm font-bold text-agent-ink">{label}</span>
+              <span className="block truncate text-[11px] text-agent-muted">{hint}</span>
+            </span>
+          </button>
+        ))}
       </div>
 
       {method === 'card' ? <CardPanel booking={booking} /> : <NeftPanel booking={booking} />}

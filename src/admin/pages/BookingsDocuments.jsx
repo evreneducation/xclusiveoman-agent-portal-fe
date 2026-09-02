@@ -6,7 +6,7 @@ import ManualBookingWizard from '../components/ManualBookingWizard.jsx';
 import { formatCurrency } from '../../shared/fdPackage/index.js';
 
 // Admin Bookings & Documents — Manual Booking Flow (Task 13 — Screen 22) and
-// Client Documents & Visa Processing (Task 14 — Screen 23). FD-only
+// Booking & Visa Processing (Task 14 — Screen 23). FD-only
 // (source_type='fd_package'); see bookingsAdmin.model.js's own comment for
 // why. Each row's "Documents" link opens BookingDetailAdmin.jsx, Task 14's
 // own traveler-document/visa/voucher management screen.
@@ -104,7 +104,7 @@ export default function BookingsDocuments() {
       <div className="mx-auto max-w-6xl p-6 lg:p-10">
         <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="mb-1 text-3xl font-bold">Client Documents & Visa Processing</h2>
+            <h2 className="mb-1 text-3xl font-bold">Booking & Visa Processing</h2>
             <p className="text-sm text-muted">Every Fixed Departure booking, self-service or manually created on an agency's behalf.</p>
           </div>
           <Button variant="accent" onClick={() => setView('wizard')}>

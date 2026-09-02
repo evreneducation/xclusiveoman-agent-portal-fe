@@ -2,17 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { Badge, Button, Card, ErrorText } from '../components/ui.jsx';
-
-function triggerDownload(blob, filename) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}
+import { downloadDocument } from '../../shared/documents/downloadDocument.js';
 
 const DOC_TYPES = [
   { type: 'passport_scan', label: 'Passport Scan', uploadedKey: 'passportScanUploaded' },
@@ -39,12 +29,11 @@ export default function BookingDetail() {
       .catch((err) => setError(err.message || 'Unable to load booking'));
   }, [id]);
 
-  async function handleDownload(path, filename) {
+  async function handleDownload(path) {
     setDownloading(path);
     setError('');
     try {
-      const blob = await api.getBlob(path);
-      triggerDownload(blob, filename);
+      await downloadDocument(api, path);
     } catch (err) {
       setError(err.message || 'Unable to download this document');
     } finally {
@@ -81,7 +70,7 @@ export default function BookingDetail() {
           <Button
             variant="accent"
             disabled={downloading === `/admin/bookings/${id}/voucher/download`}
-            onClick={() => handleDownload(`/admin/bookings/${id}/voucher/download`, 'voucher')}
+            onClick={() => handleDownload(`/admin/bookings/${id}/voucher/download`)}
           >
             {downloading === `/admin/bookings/${id}/voucher/download` ? 'Downloading…' : 'Download Voucher'}
           </Button>
@@ -99,7 +88,7 @@ export default function BookingDetail() {
                 {DOC_TYPES.map((d) => {
                   const path = `/admin/bookings/${id}/travelers/${t.travelerId}/documents/${d.type}/download`;
                   return t[d.uploadedKey] ? (
-                    <Button key={d.type} disabled={downloading === path} onClick={() => handleDownload(path, `${d.type}_${t.name}`)}>
+                    <Button key={d.type} disabled={downloading === path} onClick={() => handleDownload(path)}>
                       {downloading === path ? 'Downloading…' : d.label}
                     </Button>
                   ) : (
