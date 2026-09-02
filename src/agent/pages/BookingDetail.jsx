@@ -7,8 +7,9 @@ import { Badge, Button, Card, ErrorText } from '../components/ui.jsx';
 
 // Agent Traveler Document Upload (Task 14 — DOC-1/DOC-6). "After a booking
 // is confirmed, travelers become uploadable"; admin-provided visa/voucher
-// documents stay locked ("Documents will be available once admin releases
-// them") until the admin's explicit Notify Agent action.
+// documents are downloadable automatically as soon as the admin uploads
+// them — no separate release step (see travelerDocumentsAdmin.controller.js's
+// own comment on the backend).
 
 function triggerDownload(blob, filename) {
   const url = URL.createObjectURL(blob);
@@ -69,9 +70,7 @@ function TravelerUploadCard({ bookingId, traveler, onUploaded }) {
         <div className="flex gap-1.5">
           <Badge tone={traveler.passportScanUploaded ? 'green' : 'grey'}>Scan {traveler.passportScanUploaded ? '✓' : '—'}</Badge>
           <Badge tone={traveler.passportPhotoUploaded ? 'green' : 'grey'}>Photo {traveler.passportPhotoUploaded ? '✓' : '—'}</Badge>
-          <Badge tone={traveler.visaCopyDownloadable ? 'green' : traveler.visaCopyUploaded ? 'amber' : 'grey'}>
-            Visa {traveler.visaCopyDownloadable ? 'Ready' : traveler.visaCopyUploaded ? 'Processing' : '—'}
-          </Badge>
+          <Badge tone={traveler.visaCopyDownloadable ? 'green' : 'grey'}>Visa {traveler.visaCopyDownloadable ? 'Ready' : '—'}</Badge>
         </div>
       </div>
 
@@ -244,12 +243,7 @@ export default function BookingDetail() {
           </div>
 
           <Card label="Booking Voucher" className="mt-4 border-white">
-            {!booking.documentsUnlocked ? (
-              <p className="text-sm text-agent-muted">
-                Documents will be available once admin releases them. You'll be notified in-app and by email as soon as your
-                visa copies and voucher are ready.
-              </p>
-            ) : voucher.downloadable ? (
+            {voucher.downloadable ? (
               <Button disabled={voucherDownloading} onClick={handleVoucherDownload}>
                 {voucherDownloading ? 'Downloading…' : 'Download Voucher'}
               </Button>

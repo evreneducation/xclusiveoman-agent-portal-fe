@@ -4,11 +4,15 @@ import { api } from '../api/client.js';
 import { useToast } from '../../shared/components/ToastProvider.jsx';
 import { Badge, Button, Card, Checkbox, ErrorText, FieldLabel, Table, TextInput, Textarea } from '../components/ui.jsx';
 
-// Admin Client Documents & Visa Processing (Task 14 — Screen 23, DOC-2..6).
-// Booking selection/list (BookingsDocuments.jsx) -> this detail screen ->
-// traveler list -> documents per traveler (passport/photo readonly + visa
-// upload) -> booking-level voucher -> Download / Email to Supplier /
-// Notify Agent, per the task's own proposed structure.
+// Admin Booking & Visa Processing (Task 14 — Screen 23, DOC-2..6). Booking
+// selection/list (BookingsDocuments.jsx) -> this detail screen -> traveler
+// list -> documents per traveler (passport/photo readonly + visa upload) ->
+// booking-level voucher -> Download / Email to Supplier.
+//
+// No manual "Notify Agent" step here anymore — every visa copy/voucher
+// upload below unlocks and notifies the agent automatically the moment it's
+// saved (travelerDocumentsAdmin.controller.js#notifyAgentDocumentsReadyOnce
+// on the backend); this screen just reflects that it already happened.
 
 function triggerDownload(blob, filename) {
   const url = URL.createObjectURL(blob);
@@ -57,7 +61,7 @@ function VisaUploadInline({ bookingId, travelerId, onUploaded }) {
       const formData = new FormData();
       formData.append('visaCopy', file);
       await api.postForm(`/admin/bookings/${bookingId}/travelers/${travelerId}/visa-copy`, formData);
-      toast.success('Visa copy uploaded.');
+      toast.success('Visa copy uploaded — the agent can download it now.');
       setFile(null);
       onUploaded();
     } catch (err) {
@@ -90,7 +94,6 @@ export default function BookingDetailAdmin() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [downloading, setDownloading] = useState('');
-  const [notifying, setNotifying] = useState(false);
 
   const [voucherFile, setVoucherFile] = useState(null);
   const [voucherSubmitting, setVoucherSubmitting] = useState(false);
@@ -154,7 +157,7 @@ export default function BookingDetailAdmin() {
       const formData = new FormData();
       formData.append('voucher', voucherFile);
       await api.postForm(`/admin/bookings/${bookingId}/voucher`, formData);
-      toast.success('Voucher uploaded.');
+      toast.success('Voucher uploaded — the agent can download it now.');
       setVoucherFile(null);
       loadDetail();
     } catch (err) {
@@ -193,19 +196,6 @@ export default function BookingDetailAdmin() {
     }
   }
 
-  async function handleNotifyAgent() {
-    setNotifying(true);
-    try {
-      await api.post(`/admin/bookings/${bookingId}/documents/notify-agent`, {});
-      toast.success('Agent notified — their download buttons are now unlocked.');
-      loadDetail();
-    } catch (err) {
-      toast.error(err.message || 'Unable to notify the agent');
-    } finally {
-      setNotifying(false);
-    }
-  }
-
   if (loading && !data) {
     return (
       <div className="min-h-screen bg-[#F4F7FF] p-10">
@@ -225,7 +215,10 @@ export default function BookingDetailAdmin() {
   }
 
   const { booking, travelers, voucher } = data;
-  const unlocked = !!booking.documentsNotifiedAt;
+  // Purely informational now — whether the agent's already gotten the
+  // one-time "documents ready" notification/email, not a gate on anything
+  // (every upload is downloadable by the agent immediately regardless).
+  const agentNotified = !!booking.documentsNotifiedAt;
   const hasAnyDocument = travelers.some((t) => t.passportScanUploaded || t.passportPhotoUploaded || t.visaCopyUploaded) || voucher.uploaded;
 
   return (
@@ -243,7 +236,7 @@ export default function BookingDetailAdmin() {
               {booking.departureLocation && ` · Ex-${booking.departureLocation}`}
             </p>
           </div>
-          <Badge tone={unlocked ? 'green' : 'amber'}>{unlocked ? 'Documents unlocked' : 'Documents locked'}</Badge>
+          <Badge tone={agentNotified ? 'green' : 'grey'}>{agentNotified ? 'Agent notified' : 'Awaiting documents'}</Badge>
         </div>
 
         <Card label="Actions" className="mb-5 border-white">
@@ -254,13 +247,10 @@ export default function BookingDetailAdmin() {
             <Button disabled={!hasAnyDocument} onClick={() => setEmailOpen(true)}>
               Email to Supplier
             </Button>
-            <Button variant="accent" disabled={notifying || unlocked} onClick={handleNotifyAgent}>
-              {unlocked ? 'Agent already notified ✓' : notifying ? 'Notifying…' : 'Notify Agent'}
-            </Button>
           </div>
           <p className="mt-3 text-xs text-muted">
-            Notifying the agent unlocks their download access to any visa copies and the voucher uploaded here, and sends them an
-            in-app + email notification.
+            Visa copies and the voucher become downloadable to the agent automatically as soon as you upload them below — no
+            separate release step. They're notified in-app and by email the first time anything's ready.
           </p>
         </Card>
 
