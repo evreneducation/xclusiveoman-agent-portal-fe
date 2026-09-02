@@ -2,24 +2,23 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { useToast } from '../../shared/components/ToastProvider.jsx';
+import { downloadDocument } from '../../shared/documents/downloadDocument.js';
+import { ImageUpload } from '../../shared/components/ImageUpload.jsx';
 import { Badge, Button, Card, Checkbox, ErrorText, FieldLabel, Table, TextInput, Textarea } from '../components/ui.jsx';
 
-// Admin Client Documents & Visa Processing (Task 14 — Screen 23, DOC-2..6).
-// Booking selection/list (BookingsDocuments.jsx) -> this detail screen ->
-// traveler list -> documents per traveler (passport/photo readonly + visa
-// upload) -> booking-level voucher -> Download / Email to Supplier /
-// Notify Agent, per the task's own proposed structure.
+// Same accept list agent/pages/BookingDetail.jsx's own traveler-document
+// pickers use.
+const DOC_ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
 
-function triggerDownload(blob, filename) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}
+// Admin Booking & Visa Processing (Task 14 — Screen 23, DOC-2..6). Booking
+// selection/list (BookingsDocuments.jsx) -> this detail screen -> traveler
+// list -> documents per traveler (passport/photo readonly + visa upload) ->
+// booking-level voucher -> Download / Email to Supplier.
+//
+// No manual "Notify Agent" step here anymore — every visa copy/voucher
+// upload below unlocks and notifies the agent automatically the moment it's
+// saved (travelerDocumentsAdmin.controller.js#notifyAgentDocumentsReadyOnce
+// on the backend); this screen just reflects that it already happened.
 
 function Modal({ title, onClose, children, footer }) {
   return (
@@ -43,43 +42,31 @@ function DocStatus({ uploaded, label }) {
   return <Badge tone={uploaded ? 'green' : 'grey'}>{uploaded ? `${label}: Uploaded` : `${label}: Missing`}</Badge>;
 }
 
-function VisaUploadInline({ bookingId, travelerId, onUploaded }) {
+function VisaUploadInline({ bookingId, travelerId, uploaded, onUploaded }) {
   const toast = useToast();
-  const [file, setFile] = useState(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
 
-  async function handleUpload() {
-    if (!file) return;
-    setSubmitting(true);
-    setError('');
-    try {
-      const formData = new FormData();
-      formData.append('visaCopy', file);
-      await api.postForm(`/admin/bookings/${bookingId}/travelers/${travelerId}/visa-copy`, formData);
-      toast.success('Visa copy uploaded.');
-      setFile(null);
-      onUploaded();
-    } catch (err) {
-      setError(err.message || 'Unable to upload visa copy');
-    } finally {
-      setSubmitting(false);
-    }
+  async function uploadVisa(file) {
+    const formData = new FormData();
+    formData.append('visaCopy', file);
+    await api.postForm(`/admin/bookings/${bookingId}/travelers/${travelerId}/visa-copy`, formData);
+    toast.success('Visa copy uploaded — the agent can download it now.');
+    onUploaded();
+    // ImageUpload's `value` is normally a URL it previews as a thumbnail —
+    // the admin has no reason to preview it here (they just uploaded it,
+    // Download above already covers viewing it), so 'uploaded' is a plain
+    // non-image sentinel: falls back to ImageUpload's generic document-icon
+    // chip + "Change file" affordance instead.
+    return 'uploaded';
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <input
-        type="file"
-        accept="image/jpeg,image/png,image/webp,application/pdf"
-        onChange={(e) => setFile(e.target.files?.[0] || null)}
-        className="max-w-[220px] text-xs"
-      />
-      <Button disabled={!file || submitting} onClick={handleUpload} className="!py-1.5 text-xs">
-        {submitting ? 'Uploading…' : 'Upload Visa'}
-      </Button>
-      {error && <span className="text-xs text-[#a5162d]">{error}</span>}
-    </div>
+    <ImageUpload
+      value={uploaded ? 'uploaded' : ''}
+      onChange={() => {}}
+      onUpload={uploadVisa}
+      acceptedTypes={DOC_ACCEPTED_TYPES}
+      acceptHint="JPG, PNG, WebP, or PDF"
+    />
   );
 }
 
@@ -90,11 +77,6 @@ export default function BookingDetailAdmin() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [downloading, setDownloading] = useState('');
-  const [notifying, setNotifying] = useState(false);
-
-  const [voucherFile, setVoucherFile] = useState(null);
-  const [voucherSubmitting, setVoucherSubmitting] = useState(false);
-  const [voucherError, setVoucherError] = useState('');
 
   const [emailOpen, setEmailOpen] = useState(false);
   const [emailTo, setEmailTo] = useState('');
@@ -130,11 +112,10 @@ export default function BookingDetailAdmin() {
     return selectedRefs.some((r) => `${r.type}:${r.travelerId || ''}` === key);
   }
 
-  async function handleDownload(url, filename) {
+  async function handleDownload(url) {
     setDownloading(url);
     try {
-      const blob = await api.getBlob(url);
-      triggerDownload(blob, filename);
+      await downloadDocument(api, url);
     } catch (err) {
       toast.error(err.message || 'Unable to download this document');
     } finally {
@@ -143,25 +124,16 @@ export default function BookingDetailAdmin() {
   }
 
   async function handleDownloadAll() {
-    await handleDownload(`/admin/bookings/${bookingId}/documents/download-all`, `Booking_${bookingId}.zip`);
+    await handleDownload(`/admin/bookings/${bookingId}/documents/download-all`);
   }
 
-  async function handleUploadVoucher() {
-    if (!voucherFile) return;
-    setVoucherSubmitting(true);
-    setVoucherError('');
-    try {
-      const formData = new FormData();
-      formData.append('voucher', voucherFile);
-      await api.postForm(`/admin/bookings/${bookingId}/voucher`, formData);
-      toast.success('Voucher uploaded.');
-      setVoucherFile(null);
-      loadDetail();
-    } catch (err) {
-      setVoucherError(err.message || 'Unable to upload voucher');
-    } finally {
-      setVoucherSubmitting(false);
-    }
+  async function uploadVoucher(file) {
+    const formData = new FormData();
+    formData.append('voucher', file);
+    await api.postForm(`/admin/bookings/${bookingId}/voucher`, formData);
+    toast.success('Voucher uploaded — the agent can download it now.');
+    loadDetail();
+    return 'uploaded';
   }
 
   async function handleSendEmail() {
@@ -193,19 +165,6 @@ export default function BookingDetailAdmin() {
     }
   }
 
-  async function handleNotifyAgent() {
-    setNotifying(true);
-    try {
-      await api.post(`/admin/bookings/${bookingId}/documents/notify-agent`, {});
-      toast.success('Agent notified — their download buttons are now unlocked.');
-      loadDetail();
-    } catch (err) {
-      toast.error(err.message || 'Unable to notify the agent');
-    } finally {
-      setNotifying(false);
-    }
-  }
-
   if (loading && !data) {
     return (
       <div className="min-h-screen bg-[#F4F7FF] p-10">
@@ -225,7 +184,10 @@ export default function BookingDetailAdmin() {
   }
 
   const { booking, travelers, voucher } = data;
-  const unlocked = !!booking.documentsNotifiedAt;
+  // Purely informational now — whether the agent's already gotten the
+  // one-time "documents ready" notification/email, not a gate on anything
+  // (every upload is downloadable by the agent immediately regardless).
+  const agentNotified = !!booking.documentsNotifiedAt;
   const hasAnyDocument = travelers.some((t) => t.passportScanUploaded || t.passportPhotoUploaded || t.visaCopyUploaded) || voucher.uploaded;
 
   return (
@@ -243,7 +205,7 @@ export default function BookingDetailAdmin() {
               {booking.departureLocation && ` · Ex-${booking.departureLocation}`}
             </p>
           </div>
-          <Badge tone={unlocked ? 'green' : 'amber'}>{unlocked ? 'Documents unlocked' : 'Documents locked'}</Badge>
+          <Badge tone={agentNotified ? 'green' : 'grey'}>{agentNotified ? 'Agent notified' : 'Awaiting documents'}</Badge>
         </div>
 
         <Card label="Actions" className="mb-5 border-white">
@@ -254,13 +216,10 @@ export default function BookingDetailAdmin() {
             <Button disabled={!hasAnyDocument} onClick={() => setEmailOpen(true)}>
               Email to Supplier
             </Button>
-            <Button variant="accent" disabled={notifying || unlocked} onClick={handleNotifyAgent}>
-              {unlocked ? 'Agent already notified ✓' : notifying ? 'Notifying…' : 'Notify Agent'}
-            </Button>
           </div>
           <p className="mt-3 text-xs text-muted">
-            Notifying the agent unlocks their download access to any visa copies and the voucher uploaded here, and sends them an
-            in-app + email notification.
+            Visa copies and the voucher become downloadable to the agent automatically as soon as you upload them below — no
+            separate release step. They're notified in-app and by email the first time anything's ready.
           </p>
         </Card>
 
@@ -279,10 +238,7 @@ export default function BookingDetailAdmin() {
                         type="button"
                         className="block text-[11px] text-accent hover:underline"
                         onClick={() =>
-                          handleDownload(
-                            `/admin/bookings/${bookingId}/travelers/${t.travelerId}/documents/passport_scan/download`,
-                            `passport_scan_${t.name}`
-                          )
+                          handleDownload(`/admin/bookings/${bookingId}/travelers/${t.travelerId}/documents/passport_scan/download`)
                         }
                       >
                         Download
@@ -298,10 +254,7 @@ export default function BookingDetailAdmin() {
                         type="button"
                         className="block text-[11px] text-accent hover:underline"
                         onClick={() =>
-                          handleDownload(
-                            `/admin/bookings/${bookingId}/travelers/${t.travelerId}/documents/passport_photo/download`,
-                            `passport_photo_${t.name}`
-                          )
+                          handleDownload(`/admin/bookings/${bookingId}/travelers/${t.travelerId}/documents/passport_photo/download`)
                         }
                       >
                         Download
@@ -317,10 +270,7 @@ export default function BookingDetailAdmin() {
                         type="button"
                         className="block text-[11px] text-accent hover:underline"
                         onClick={() =>
-                          handleDownload(
-                            `/admin/bookings/${bookingId}/travelers/${t.travelerId}/documents/visa_copy/download`,
-                            `visa_copy_${t.name}`
-                          )
+                          handleDownload(`/admin/bookings/${bookingId}/travelers/${t.travelerId}/documents/visa_copy/download`)
                         }
                       >
                         Download
@@ -329,7 +279,12 @@ export default function BookingDetailAdmin() {
                   </div>
                 </td>
                 <td className="px-3 py-3">
-                  <VisaUploadInline bookingId={bookingId} travelerId={t.travelerId} onUploaded={loadDetail} />
+                  <VisaUploadInline
+                    bookingId={bookingId}
+                    travelerId={t.travelerId}
+                    uploaded={t.visaCopyUploaded}
+                    onUploaded={loadDetail}
+                  />
                 </td>
               </tr>
             )}
@@ -343,24 +298,21 @@ export default function BookingDetailAdmin() {
               <button
                 type="button"
                 className="text-xs text-accent hover:underline"
-                onClick={() => handleDownload(`/admin/bookings/${bookingId}/voucher/download`, 'voucher')}
+                onClick={() => handleDownload(`/admin/bookings/${bookingId}/voucher/download`)}
               >
                 Download
               </button>
             )}
           </div>
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <input
-              type="file"
-              accept="image/jpeg,image/png,image/webp,application/pdf"
-              onChange={(e) => setVoucherFile(e.target.files?.[0] || null)}
-              className="max-w-[260px] text-xs"
+          <div className="mt-3 max-w-sm">
+            <ImageUpload
+              value={voucher.uploaded ? 'uploaded' : ''}
+              onChange={() => {}}
+              onUpload={uploadVoucher}
+              acceptedTypes={DOC_ACCEPTED_TYPES}
+              acceptHint="JPG, PNG, WebP, or PDF"
             />
-            <Button disabled={!voucherFile || voucherSubmitting} onClick={handleUploadVoucher} className="text-xs">
-              {voucherSubmitting ? 'Uploading…' : voucher.uploaded ? 'Replace Voucher' : 'Upload Voucher'}
-            </Button>
           </div>
-          <ErrorText>{voucherError}</ErrorText>
         </Card>
       </div>
 

@@ -59,7 +59,7 @@ function resolveNotificationPath(referenceType) {
 // Documentation.pdf §7)'s admin screen sequence: Access & Team (09-11) ->
 // Content Catalog (12-13, 35) -> Quotes & Pricing (14-16) -> Marketing
 // Center (17) -> Sales, Revenue & Profit (18) -> FD Operations Tracker (19)
-// -> Client Documents & Visa Processing (23) -> Merchandising & Finance
+// -> Booking & Visa Processing (23) -> Merchandising & Finance
 // (29-31) -> Support & Helpdesk (28) -> Reviews Management (33) -> Content &
 // CMS Management (34). Labels drop the redundant "Admin —" prefix the doc
 // uses only to disambiguate admin vs. agent screens in one shared document.
@@ -111,7 +111,7 @@ const NAV_ITEMS = [
   {
     key: 'bookings-documents',
     to: '/admin/bookings-documents',
-    label: 'Client Documents & Visa Processing',
+    label: 'Booking & Visa Processing',
     Icon: LuClipboardCheck,
   },
   {

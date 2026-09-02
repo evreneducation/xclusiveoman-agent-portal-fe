@@ -1,28 +1,35 @@
-// Shared login screen used by all portals — same markup, same email-OTP flow
+// Shared login screen used by all portals — same markup, same overall shell
 // — but each mount point scopes it to who is allowed in:
 //   /admin -> admin/staff only  (restrictTo="admin", Sign up hidden)
 //   /agent -> travel agents only (restrictTo="agent")
 //   /team/login -> unrestricted (team roles route themselves)
-// `restrictTo` is sent to POST /auth/request-otp as `portal`: the backend
-// refuses to even generate/send a code for a wrong-portal email, so an agent
-// never receives an OTP from /admin (and vice versa). The verify step keeps
-// its own belt-and-braces role check too. `showSignUp` hides the agency
-// self-registration link on the staff login. Everything else (tagline,
-// fields, footer) is identical everywhere. Portal-agnostic by the same rule
-// NotificationBell.jsx established for this directory: no `agent-*`/admin
-// `ink` Tailwind tokens, no import from either portal's own components/ui.jsx.
+// `restrictTo === 'admin'` also switches the *mechanism*, not just who's
+// allowed in: the Admin Console signs in with email + a real per-account
+// password (users.password_hash, bcrypt — see auth.controller.js#adminLogin)
+// instead of Agent/Team's email-OTP. Both still funnel into the exact same
+// admin-only 2FA step (`mfaRequired`) and the same finishLogin()/
+// hard-navigation tail below once credentials check out. `showSignUp` hides
+// the agency self-registration link on the staff login. Portal-agnostic by
+// the same rule NotificationBell.jsx established for this directory: no
+// `agent-*`/admin `ink` Tailwind tokens, no import from either portal's own
+// components/ui.jsx.
 //
-// Email OTP login (replaces password): step 1 collects just the email and
-// calls POST /auth/request-otp; step 2 (rendered inline, below the email
-// field, once step 1 succeeds) collects the 6-digit code emailed to that
-// address and calls POST /auth/verify-otp, which returns the exact same
-// {accessToken, user} shape the old password POST /auth/login did — so
-// everything below that point (isStaffUser/hard-navigation) is unchanged.
-// Password-based login (POST /auth/login) still exists server-side
-// (auth.controller.js) but nothing here calls it anymore; "Forgot password?"
-// was removed from this form for the same reason — there's no password
-// field on this screen anymore to reset. Sign up is untouched — an
-// agency's own password (set at registration) is unrelated to how an
+// Agent/Team — email OTP: step 'email' collects just the email and calls
+// POST /auth/request-otp; step 'otp' (once that succeeds) collects the
+// 6-digit code emailed to that address and calls POST /auth/verify-otp.
+//
+// Admin — email + password: step 'password' collects both fields together
+// (no separate email-first step — there's nothing to send/wait for) and
+// calls POST /auth/admin-login in one shot.
+//
+// Either path's response is the same {accessToken, user} shape the old
+// password-based POST /auth/login used to return (removed when
+// users.password_hash was first dropped, 0060_drop_password.sql, then
+// reintroduced per-account-only for Admin Console rows by
+// 0084_admin_password.sql — Agent/Team rows still never have one), or
+// `{mfaRequired, mfaToken}` when the Admin Console's global 2FA toggle is
+// on, handled by the shared 'mfa' step further down. Sign up is untouched —
+// an agency's own password (set at registration) is unrelated to how an
 // already-registered user later signs back in here.
 //
 // The actual OTP calls also intentionally do NOT go through either portal's
@@ -55,7 +62,7 @@
 // unmounts AgentApp and mounts AdminApp fresh) alike.
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { FiCheckCircle, FiHome, FiMail } from 'react-icons/fi';
+import { FiCheckCircle, FiHome, FiLock, FiMail } from 'react-icons/fi';
 import { createApiClient } from '../api/createApiClient.js';
 
 // A fresh, dedicated client — not shared with (and never touching the
@@ -190,8 +197,14 @@ export function LoginModal({
   restrictTo,
   showSignUp = true,
 }) {
-  const [step, setStep] = useState('email'); // 'email' | 'otp' | 'mfa'
+  // Admin starts on 'password' (email + password together, one step, no
+  // send-and-wait); Agent/Team start on 'email' (OTP flow). Either can reach
+  // 'mfa' (Admin Console 2FA only).
+  const isAdminLogin = restrictTo === 'admin';
+  const credentialsStep = isAdminLogin ? 'password' : 'email';
+  const [step, setStep] = useState(credentialsStep); // 'email' | 'password' | 'otp' | 'mfa'
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [otp, setOtp] = useState('');
   // Set when verify-otp comes back `mfaRequired` (admin console, global 2FA
   // toggle on) — the short-lived token that stands in for a session between
@@ -297,6 +310,21 @@ export function LoginModal({
         // step back to 'email' synchronously), this stale completion must
         // not silently snap them back to the OTP step out from under them.
         setStep('otp');
+      } else if (step === 'password') {
+        // Admin Console only — email + this account's own password, in one
+        // call (auth.controller.js#adminLogin). Same mfaRequired/
+        // finishLogin tail as the OTP path below once it checks out.
+        const resp = await loginApi.post('/auth/admin-login', { email, password }, { skipAuth: true });
+
+        if (resp.mfaRequired) {
+          setMfaToken(resp.mfaToken);
+          setOtp('');
+          setStep('mfa');
+          return;
+        }
+
+        finishLogin(resp.user);
+        return;
       } else if (step === 'otp') {
         const resp = await loginApi.post('/auth/verify-otp', { email, otp }, { skipAuth: true });
 
@@ -321,8 +349,9 @@ export function LoginModal({
     } catch (err) {
       // The backend's own message — request-otp distinguishes
       // not-registered/inactive/wrong-portal/sent (auth.controller.js#
-      // requestLoginOtp), verify-otp its own invalid/expired/too-many-
-      // attempts cases; either way this is that exact response verbatim.
+      // requestLoginOtp), verify-otp/admin-login their own invalid/expired/
+      // too-many-attempts/incorrect-credentials cases; either way this is
+      // that exact response verbatim.
       setError(err.message || 'Something went wrong');
       if (err.data?.error === 'wrong_portal') pointToOtherPortal();
     } finally {
@@ -344,8 +373,9 @@ export function LoginModal({
   }
 
   function handleChangeEmail() {
-    setStep('email');
+    setStep(credentialsStep);
     setOtp('');
+    setPassword('');
     setMfaToken('');
     setError('');
     setInfoMessage('');
@@ -355,7 +385,11 @@ export function LoginModal({
 
   const otpExpired = step === 'otp' && remainingSeconds <= 0;
   const canSubmit =
-    step === 'email' ? email.trim().length > 0 : otp.length === 6 && !otpExpired;
+    step === 'email'
+      ? email.trim().length > 0
+      : step === 'password'
+        ? email.trim().length > 0 && password.length > 0
+        : otp.length === 6 && !otpExpired;
 
   return (
     <div className="flex min-h-screen bg-[#0b1424]">
@@ -432,7 +466,7 @@ export function LoginModal({
               Welcome back
             </h2>
             <p className="mt-1.5 text-sm text-slate-500">
-              {step === 'email'
+              {step === 'email' || step === 'password'
                 ? 'Sign in to continue to your dashboard.'
                 : step === 'otp'
                   ? 'Enter the code we just emailed you.'
@@ -452,8 +486,8 @@ export function LoginModal({
                   icon={FiMail}
                   type="email"
                   required
-                  autoFocus={step === 'email'}
-                  disabled={step !== 'email'}
+                  autoFocus={step === credentialsStep}
+                  disabled={step !== credentialsStep}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="Enter Your Email"
@@ -464,6 +498,18 @@ export function LoginModal({
                 <p className="text-xs text-slate-500">
                   We'll email you a 6-digit sign-in code — no password needed.
                 </p>
+              ) : step === 'password' ? (
+                <div>
+                  <label className="mb-1.5 block text-[11px] font-semibold uppercase text-slate-500">Password</label>
+                  <LoginTextInput
+                    icon={FiLock}
+                    type="password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Enter Your Password"
+                  />
+                </div>
               ) : step === 'otp' ? (
                 <div>
                   <div className="mb-1.5 flex items-center justify-between">
@@ -560,11 +606,15 @@ export function LoginModal({
                   ? submitting
                     ? 'Sending code…'
                     : 'Sign In'
-                  : submitting
-                    ? 'Verifying…'
-                    : step === 'mfa'
-                      ? 'Verify code'
-                      : 'Verify & Sign In'}
+                  : step === 'password'
+                    ? submitting
+                      ? 'Signing in…'
+                      : 'Sign In'
+                    : submitting
+                      ? 'Verifying…'
+                      : step === 'mfa'
+                        ? 'Verify code'
+                        : 'Verify & Sign In'}
               </button>
             </form>
 
