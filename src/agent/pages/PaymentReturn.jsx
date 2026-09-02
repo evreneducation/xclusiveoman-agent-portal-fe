@@ -1,9 +1,48 @@
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { LuCheck } from 'react-icons/lu';
 import { api } from '../api/client.js';
 import { Button, Card, ErrorText } from '../components/ui.jsx';
 import { usePaymentAttempt } from '../lib/usePaymentAttempt.js';
 import { PaymentAttemptStatus } from '../components/PaymentAttemptStatus.jsx';
+
+// A celebratory, full-bleed treatment for the one status that actually ends
+// the flow successfully — takes over the whole page (no back link/heading
+// above it, unlike every other status below) so the card itself fills the
+// screen the way a "you're done" moment should, rather than sitting as a
+// small compact block. Everything else (pending/awaiting/failed/cancelled)
+// stays the plain compact PaymentAttemptStatus layout, since those are still
+// mid-flow or need a retry action.
+function PaymentConfirmedView({ bookingId }) {
+  return (
+    <div className="flex min-h-[calc(100vh-70px)] flex-col p-5 lg:p-8">
+      <div className="flex flex-1 flex-col items-center justify-center rounded-lg border border-white bg-white/95 p-8 text-center shadow-[0_4px_16px_rgba(11,79,74,0.06)]">
+        <h3 className="text-3xl font-bold text-agent-ink">Payment Confirmed!</h3>
+        <div className="relative mx-auto my-8 flex h-48 w-48 items-center justify-center">
+          <div className="absolute inset-0 rounded-full bg-[#22C55E]/10" />
+          <div className="absolute inset-5 rounded-full bg-[#22C55E]/15" />
+          <div className="absolute inset-10 rounded-full bg-[#22C55E]/20" />
+          <div className="relative flex h-20 w-20 items-center justify-center rounded-full bg-[#22C55E] shadow-lg shadow-[#22C55E]/30">
+            <LuCheck size={40} strokeWidth={3} className="text-white" />
+          </div>
+        </div>
+        <p className="text-sm text-agent-muted">Your Payment Has Been Received</p>
+        <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
+          {bookingId && (
+            <Link to={`/agent/bookings/${bookingId}`}>
+              <Button variant="accent" className="!rounded-full px-6 py-2.5 text-sm">
+                View Booking
+              </Button>
+            </Link>
+          )}
+          <Link to="/agent/bookings">
+            <Button className="!rounded-full px-6 py-2.5 text-sm">My Bookings</Button>
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // Cashfree redirects here after checkout (order_meta.return_url). It carries
 // only the order_id, so step one is order_id -> paymentId; then the shared
@@ -62,6 +101,13 @@ export default function PaymentReturn() {
   const status = payment?.status;
   const bookingId = payment?.bookingId;
 
+  // Confirmed gets its own full-bleed page — no back link/heading, no
+  // outer max-width cap or Card wrapper, since PaymentConfirmedView is
+  // already the whole screen (see its own comment above).
+  if (!resolving && !resolveError && status === 'confirmed') {
+    return <PaymentConfirmedView bookingId={bookingId} />;
+  }
+
   return (
     <div className="mx-auto max-w-xl p-5 lg:p-8">
       <Link to="/agent/bookings" className="mb-4 inline-block text-xs text-agent-muted hover:text-agent-ink">
@@ -81,11 +127,6 @@ export default function PaymentReturn() {
           )}
 
           <div className="mt-4 flex flex-wrap gap-2">
-            {status === 'confirmed' && bookingId && (
-              <Link to={`/agent/bookings/${bookingId}`}>
-                <Button variant="accent">View booking</Button>
-              </Link>
-            )}
             {(status === 'failed' || status === 'cancelled') && bookingId && (
               <Link to={`/agent/payments/${bookingId}`}>
                 <Button variant="accent">Back to payment</Button>
