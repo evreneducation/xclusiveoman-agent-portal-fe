@@ -1,0 +1,58 @@
+# SPA fallback for Apache hosting — mirrors public/vercel.json's own
+# rewrite rule for Vercel. Client-side routes (e.g. /agent/dashboard) have
+# no matching file on disk, so without this Apache 404s on any direct link
+# or page refresh other than "/" itself; this sends every request that
+# isn't a real file/directory to index.html instead, letting React Router
+# take over from there.
+
+# Classic Apache mod_proxy_http + Node/Express issue: a chunked-transfer or
+# gzip-encoded upstream response can arrive at the browser malformed/
+# truncated through the proxy below, even on a 200 OK — the frontend then
+# fails to JSON.parse it (createApiClient.js's rawRequest silently falls
+# back to `data: null`), which is exactly "Cannot destructure property
+# 'message' of null". proxy-sendcl forces a real Content-Length instead of
+# chunked encoding; not asking for a gzip body sidesteps the other half of
+# the same class of bug.
+SetEnv proxy-sendcl 1
+<IfModule mod_headers.c>
+  RequestHeader unset Accept-Encoding
+</IfModule>
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+
+  # Force HTTPS — the backend's refresh-token cookie is Secure + SameSite=None
+  # in production (auth.controller.js#refreshCookieOptions), and browsers
+  # refuse to store a Secure cookie at all over a plain http:// connection,
+  # so login can never persist without this. ONLY deploy this once a real
+  # SSL/TLS certificate is actually active for this domain on the host —
+  # enabling it before that will make the site completely unreachable
+  # (redirect loop / connection failure on 443), not just break login.
+  RewriteCond %{HTTPS} off
+  RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+  # Reverse-proxy /api/* to the Render backend, same-origin from the
+  # browser's point of view — mirrors public/vercel.json's own /api rewrite.
+  # Needed so the login cookie (httpOnly, cross-site-cookie-blocked in
+  # Safari/increasingly Chrome/Firefox) actually gets sent/stored; calling
+  # the Render URL directly from the frontend would make every request
+  # cross-site. Requires mod_proxy + mod_proxy_http AND "AllowOverride" to
+  # permit proxy directives in .htaccess — many shared hosts disable one or
+  # both. If /api calls start failing with a 500 (instead of this 404)
+  # after deploying this, that's the tell: ask your host to enable
+  # mod_proxy/mod_proxy_http and SSLProxyEngine, or move the API behind a
+  # proxy your host does support.
+  RewriteCond %{REQUEST_URI} ^/api/
+  RewriteRule ^api/(.*)$ https://xclusiveoman-agent-portal-be.onrender.com/api/$1 [P,L]
+
+  # Leave a request for index.html itself alone (avoids a redirect loop).
+  RewriteRule ^index\.html$ - [L]
+
+  # Real files/directories (JS/CSS/images/etc. under dist/) are served as-is.
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+
+  # Everything else falls back to index.html.
+  RewriteRule . /index.html [L]
+</IfModule>
