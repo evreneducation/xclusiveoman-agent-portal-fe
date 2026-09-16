@@ -4,6 +4,9 @@ import { api } from '../api/client.js';
 import { Badge, ErrorText, Table } from '../components/ui.jsx';
 
 const SOURCE_LABEL = { fd_package: 'Fixed Departure', package_request: 'Custom FIT', mice_rfq: 'MICE' };
+// Statuses where money is still owed and the agent can re-open the payment
+// page to pay it off (deposit not yet made, or a part-payment left over).
+const PAYABLE_STATUSES = new Set(['pending_payment', 'balance_due']);
 const STATUS_TONE = {
   pending_payment: 'amber',
   deposit_paid: 'teal',
@@ -54,17 +57,36 @@ export default function Bookings() {
               <td className="px-3 py-2">₹{b.totalPrice}</td>
               <td className="px-3 py-2">₹{b.balanceDue}</td>
               <td className="px-3 py-2">
-                <Badge tone={STATUS_TONE[b.status] || 'grey'}>{b.status?.replace(/_/g, ' ')}</Badge>
+                {PAYABLE_STATUSES.has(b.status) ? (
+                  <Link
+                    to={`/agent/payments/${b.id}`}
+                    title="Click to complete the remaining payment"
+                    className="inline-block"
+                  >
+                    <Badge tone={STATUS_TONE[b.status] || 'grey'} className="cursor-pointer hover:underline">
+                      {b.status?.replace(/_/g, ' ')}
+                    </Badge>
+                  </Link>
+                ) : (
+                  <Badge tone={STATUS_TONE[b.status] || 'grey'}>{b.status?.replace(/_/g, ' ')}</Badge>
+                )}
               </td>
               <td className="px-3 py-2">{new Date(b.createdAt).toLocaleDateString()}</td>
               <td className="px-3 py-2 text-right">
-                {/* Documents (Task 14) only exist for FD bookings today — see
-                    documents.model.js's own FD-only scoping. */}
-                {b.sourceType === 'fd_package' && (
-                  <Link to={`/agent/bookings/${b.id}`} className="text-agent-accent hover:underline">
-                    Documents
-                  </Link>
-                )}
+                <div className="flex items-center justify-end gap-3">
+                  {PAYABLE_STATUSES.has(b.status) && (
+                    <Link to={`/agent/payments/${b.id}`} className="font-semibold text-agent-accent hover:underline">
+                      Complete Payment
+                    </Link>
+                  )}
+                  {/* Documents (Task 14) only exist for FD bookings today — see
+                      documents.model.js's own FD-only scoping. */}
+                  {b.sourceType === 'fd_package' && (
+                    <Link to={`/agent/bookings/${b.id}`} className="text-agent-accent hover:underline">
+                      Documents
+                    </Link>
+                  )}
+                </div>
               </td>
             </tr>
           )}

@@ -220,6 +220,11 @@ export default function BookingDetail() {
           <p className="text-sm text-agent-muted">
             Traveler document upload will be available once this booking is confirmed. Please complete payment first.
           </p>
+          {(booking.status === 'pending_payment' || booking.status === 'balance_due') && (
+            <Link to={`/agent/payments/${bookingId}`} className="mt-3 inline-block">
+              <Button variant="accent">Complete Payment</Button>
+            </Link>
+          )}
         </Card>
       ) : (
         <>
