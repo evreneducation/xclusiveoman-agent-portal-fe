@@ -2,7 +2,10 @@ import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
 import { Badge, Table } from '../components/ui.jsx';
 
-const STATUS_TONE = { confirmed: 'green', pending: 'amber', failed: 'red' };
+// 'confirmed' kept for historical transactions written before
+// paymentConfirmation.service.js started writing balance_due/fully_paid
+// instead (whether that payment left a balance or settled the booking).
+const STATUS_TONE = { confirmed: 'green', balance_due: 'amber', fully_paid: 'green', pending: 'amber', failed: 'red' };
 
 export default function Transactions() {
   const [transactions, setTransactions] = useState([]);
@@ -34,7 +37,7 @@ export default function Transactions() {
               <td className="px-3 py-2">₹{t.amount}</td>
               <td className="px-3 py-2 uppercase">{t.method}</td>
               <td className="px-3 py-2">
-                <Badge tone={STATUS_TONE[t.status] || 'grey'}>{t.status}</Badge>
+                <Badge tone={STATUS_TONE[t.status] || 'grey'}>{t.status?.replace(/_/g, ' ')}</Badge>
               </td>
             </tr>
           )}
