@@ -80,19 +80,36 @@ function SidebarContent({ onNavigate, collapsed = false }) {
 
   return (
     <>
-      <div
-        className={`flex items-center border-b border-black/10 bg-agent-panel ${collapsed ? 'justify-center px-2 py-4' : 'justify-between px-6 py-6'}`}
-      >
-        <img
-          src={collapsed ? '/logo_scroll_closed.png' : '/Xclusive_Oman_Logo_2.png'}
-          alt="Xclusive Oman"
-          className={`w-auto flex-none object-contain ${collapsed ? 'h-10' : 'h-12'}`}
-        />
-        {!collapsed && (
-          <span className="flex-none rounded-full border border-black/10 bg-[#1C1C1C] px-2.5 py-1 text-xs font-semibold uppercase text-agent-accent shadow-sm shadow-black/20">
-            Agent
-          </span>
-        )}
+      {/* Fixed row height (h-12, matching the taller of the two logo marks)
+          regardless of collapsed state — the previous h-10/h-12 swap made
+          the whole header (and everything below it, nav included) shift
+          vertically by a few px on hover. The two logo images crossfade in
+          place instead of instantly swapping src, so growing into the wide
+          wordmark reads as a reveal, not a pop. */}
+      <div className="flex items-center justify-between border-b border-black/10 bg-agent-panel px-3 py-5">
+        <div className="relative h-12 flex-1 overflow-hidden">
+          <img
+            src="/logo_scroll_closed.png"
+            alt="Xclusive Oman"
+            className={`absolute left-0 top-1/2 h-10 w-auto -translate-y-1/2 object-contain transition-opacity duration-300 ease-out ${
+              collapsed ? 'opacity-100' : 'opacity-0'
+            }`}
+          />
+          <img
+            src="/Xclusive_Oman_Logo_2.png"
+            alt="Xclusive Oman"
+            className={`absolute left-0 top-1/2 h-12 w-auto -translate-y-1/2 object-contain transition-opacity duration-300 ease-out ${
+              collapsed ? 'opacity-0' : 'opacity-100'
+            }`}
+          />
+        </div>
+        <span
+          className={`flex-none overflow-hidden whitespace-nowrap rounded-full border border-black/10 bg-[#1C1C1C] px-2.5 py-1 text-xs font-semibold uppercase text-agent-accent shadow-sm shadow-black/20 transition-[max-width,opacity] duration-300 ease-out ${
+            collapsed ? 'max-w-0 !border-0 !px-0 opacity-0' : 'max-w-[80px] opacity-100'
+          }`}
+        >
+          Agent
+        </span>
       </div>
 
       <nav className="flex-1 space-y-1.5 overflow-y-auto overflow-x-hidden px-3 py-5">
@@ -117,47 +134,64 @@ function SidebarContent({ onNavigate, collapsed = false }) {
                   transition={{ type: 'spring', stiffness: 380, damping: 32 }}
                 />
               )}
+              {/* Fixed left inset in both states (Instagram-style rail) — the
+                  icon never recenters/relocates as the rail expands; only the
+                  label's own box grows into the extra room beside it. */}
               <span
-                className={`relative z-10 flex items-center gap-3 rounded-xl py-3 text-sm font-semibold transition-colors ${
-                  collapsed ? 'justify-center px-0' : 'px-4'
-                } ${active ? 'text-agent-ink-dark' : 'text-[#1C1C1C]/75 hover:bg-black/5 hover:text-agent-ink-dark'}`}
+                className={`relative z-10 flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold transition-colors ${
+                  active ? 'text-agent-ink-dark' : 'text-[#1C1C1C]/75 hover:bg-black/5 hover:text-agent-ink-dark'
+                }`}
               >
                 <Icon className="flex-none" />
-                {!collapsed && label}
+                <span
+                  className={`overflow-hidden whitespace-nowrap transition-[max-width,opacity] duration-300 ease-out ${
+                    collapsed ? 'max-w-0 opacity-0' : 'max-w-[180px] opacity-100'
+                  }`}
+                >
+                  {label}
+                </span>
               </span>
             </Link>
           );
         })}
       </nav>
 
-      <div className={`space-y-3 border-t border-black/10 py-5 ${collapsed ? 'px-2' : 'px-4'}`}>
-        <div
-          className={`flex items-center gap-2.5 rounded-xl bg-black/10 py-2.5 text-xs ${
-            collapsed ? 'justify-center px-0' : 'px-3.5'
-          }`}
-        >
+      <div className="space-y-3 border-t border-black/10 px-2 py-5">
+        <div className="flex items-center gap-2.5 rounded-xl bg-black/10 px-3.5 py-2.5 text-xs">
           <span
             className={`h-2.5 w-2.5 flex-none rounded-full ${
               socketConnected ? 'bg-[#227647] shadow-[0_0_0_4px_rgba(34,118,71,0.25)]' : 'bg-black/20'
             }`}
           />
-          {!collapsed && (
-            <span className="text-[#1C1C1C]/70">{socketConnected ? 'Live connection active' : 'Connecting…'}</span>
-          )}
+          <span
+            className={`overflow-hidden whitespace-nowrap text-[#1C1C1C]/70 transition-[max-width,opacity] duration-300 ease-out ${
+              collapsed ? 'max-w-0 opacity-0' : 'max-w-[180px] opacity-100'
+            }`}
+          >
+            {socketConnected ? 'Live connection active' : 'Connecting…'}
+          </span>
         </div>
-        {!collapsed && (
-          <div className="px-1 text-xs">
-            <div className="font-semibold text-[#1C1C1C]">{user?.fullName}</div>
-            <div className="text-[#1C1C1C]/60">{user?.role}</div>
-          </div>
-        )}
+        <div
+          className={`overflow-hidden px-1 text-xs transition-[max-height,opacity] duration-300 ease-out ${
+            collapsed ? 'max-h-0 opacity-0' : 'max-h-12 opacity-100'
+          }`}
+        >
+          <div className="whitespace-nowrap font-semibold text-[#1C1C1C]">{user?.fullName}</div>
+          <div className="whitespace-nowrap text-[#1C1C1C]/60">{user?.role}</div>
+        </div>
         <Button
           onClick={logout}
           title={collapsed ? 'Log out' : undefined}
-          className={`w-full justify-center gap-2 ${collapsed ? 'px-0' : ''}`}
+          className="w-full !justify-start gap-2 px-4"
         >
-          <LogoutIcon width={16} height={16} />
-          {!collapsed && 'Log out'}
+          <LogoutIcon width={16} height={16} className="flex-none" />
+          <span
+            className={`overflow-hidden whitespace-nowrap transition-[max-width,opacity] duration-300 ease-out ${
+              collapsed ? 'max-w-0 opacity-0' : 'max-w-[180px] opacity-100'
+            }`}
+          >
+            Log out
+          </span>
         </Button>
       </div>
     </>
