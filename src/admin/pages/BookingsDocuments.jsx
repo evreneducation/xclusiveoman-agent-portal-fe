@@ -614,16 +614,37 @@ function PackagesTab({ packagesById }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
+  const [status, setStatus] = useState('');
+  const [dateRange, setDateRange] = useState('');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
   const [selectedKey, setSelectedKey] = useState(null);
+
+  function updateDateRange(v) {
+    setDateRange(v);
+    if (v !== 'custom') {
+      setCustomFrom('');
+      setCustomTo('');
+    }
+  }
 
   useEffect(() => {
     setLoading(true);
     setError('');
-    fetchAllBookings()
+    const filters = {};
+    if (status) filters.status = status;
+    if (dateRange === 'custom') {
+      if (customFrom) filters.dateFrom = customFrom;
+      if (customTo) filters.dateTo = customTo;
+    } else if (dateRange) {
+      const from = dateRangeFrom(dateRange);
+      if (from) filters.dateFrom = from;
+    }
+    fetchAllBookings(filters)
       .then(setAllBookings)
       .catch((err) => setError(err.message || 'Unable to load bookings'))
       .finally(() => setLoading(false));
-  }, []);
+  }, [status, dateRange, customFrom, customTo]);
 
   const rows = useMemo(() => aggregateBookings(allBookings, 'fdPackageId', 'packageTitle'), [allBookings]);
   const filteredRows = useMemo(() => {
@@ -636,7 +657,29 @@ function PackagesTab({ packagesById }) {
   return (
     <>
       <Card className="mb-5 border-white">
-        <TextInput placeholder="Search package…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <TextInput placeholder="Search package…" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <Select value={status} onChange={(e) => setStatus(e.target.value)}>
+            {STATUS_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </Select>
+          <Select value={dateRange} onChange={(e) => updateDateRange(e.target.value)}>
+            {DATE_RANGE_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </Select>
+        </div>
+        {dateRange === 'custom' && (
+          <div className="mt-3 grid grid-cols-2 gap-3 sm:max-w-xs">
+            <TextInput type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} />
+            <TextInput type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} />
+          </div>
+        )}
       </Card>
 
       {error && <p className="mb-4 text-sm text-[#a5162d]">{error}</p>}
