@@ -25,18 +25,18 @@ import { formatCurrency } from '../../shared/fdPackage/index.js';
 // payment/package they've booked, and a package's modal shows every agent/
 // payment booked against it.
 
+// Narrowed to the same three payment-outcome values as transactions.status
+// (0085_transactions_status_enum.sql: confirmed/balance_due/fully_paid) — the
+// Payments/Agent tabs filter on payment progress, not the wider booking
+// lifecycle. bookings.status itself still declares a bigger enum
+// (0007_bookings.sql), but only these three (plus 'confirmed' kept for
+// bookings written before paymentConfirmation.service.js started using
+// balance_due) are relevant here.
 const STATUS_OPTIONS = [
   { value: '', label: 'All statuses' },
-  { value: 'pending_payment', label: 'Pending payment' },
-  { value: 'deposit_paid', label: 'Deposit paid' },
-  { value: 'confirmed', label: 'Confirmed' },
   { value: 'balance_due', label: 'Balance due' },
   { value: 'fully_paid', label: 'Fully paid' },
-  { value: 'amendment_requested', label: 'Amendment requested' },
-  { value: 'cancellation_requested', label: 'Cancellation requested' },
-  { value: 'cancelled', label: 'Cancelled' },
-  { value: 'completed', label: 'Completed' },
-  { value: 'waitlisted', label: 'Waitlisted' },
+  { value: 'confirmed', label: 'Confirmed (historical)' },
 ];
 
 const STATUS_TONE = {
@@ -504,16 +504,37 @@ function AgentsTab({ agenciesById }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
+  const [status, setStatus] = useState('');
+  const [dateRange, setDateRange] = useState('');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
   const [selectedKey, setSelectedKey] = useState(null);
+
+  function updateDateRange(v) {
+    setDateRange(v);
+    if (v !== 'custom') {
+      setCustomFrom('');
+      setCustomTo('');
+    }
+  }
 
   useEffect(() => {
     setLoading(true);
     setError('');
-    fetchAllBookings()
+    const filters = {};
+    if (status) filters.status = status;
+    if (dateRange === 'custom') {
+      if (customFrom) filters.dateFrom = customFrom;
+      if (customTo) filters.dateTo = customTo;
+    } else if (dateRange) {
+      const from = dateRangeFrom(dateRange);
+      if (from) filters.dateFrom = from;
+    }
+    fetchAllBookings(filters)
       .then(setAllBookings)
       .catch((err) => setError(err.message || 'Unable to load bookings'))
       .finally(() => setLoading(false));
-  }, []);
+  }, [status, dateRange, customFrom, customTo]);
 
   const rows = useMemo(() => aggregateBookings(allBookings, 'agencyId', 'agencyName'), [allBookings]);
   const filteredRows = useMemo(() => {
@@ -526,7 +547,29 @@ function AgentsTab({ agenciesById }) {
   return (
     <>
       <Card className="mb-5 border-white">
-        <TextInput placeholder="Search agency…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <TextInput placeholder="Search agency…" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <Select value={status} onChange={(e) => setStatus(e.target.value)}>
+            {STATUS_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </Select>
+          <Select value={dateRange} onChange={(e) => updateDateRange(e.target.value)}>
+            {DATE_RANGE_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </Select>
+        </div>
+        {dateRange === 'custom' && (
+          <div className="mt-3 grid grid-cols-2 gap-3 sm:max-w-xs">
+            <TextInput type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} />
+            <TextInput type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} />
+          </div>
+        )}
       </Card>
 
       {error && <p className="mb-4 text-sm text-[#a5162d]">{error}</p>}

@@ -2,7 +2,15 @@ import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
 import { Badge, Select, Table } from '../components/ui.jsx';
 
-const STATUS_TONE = { confirmed: 'green', pending: 'amber', failed: 'red', pending_verification: 'amber' };
+// Matches transactions.status's real DB enum (0085_transactions_status_enum.sql):
+// 'confirmed' (kept only for historical rows), 'balance_due', 'fully_paid'.
+const STATUS_TONE = { confirmed: 'green', balance_due: 'amber', fully_paid: 'green' };
+const STATUS_OPTIONS = [
+  { value: '', label: 'All statuses' },
+  { value: 'balance_due', label: 'Balance due' },
+  { value: 'fully_paid', label: 'Fully paid' },
+  { value: 'confirmed', label: 'Confirmed (historical)' },
+];
 
 export default function TransactionLedger() {
   const [transactions, setTransactions] = useState([]);
@@ -35,10 +43,11 @@ export default function TransactionLedger() {
             <option value="credit_terms">Credit Terms</option>
           </Select>
           <Select className="max-w-[160px]" value={status} onChange={(e) => setStatus(e.target.value)}>
-            <option value="">All statuses</option>
-            <option value="confirmed">Confirmed</option>
-            <option value="pending">Pending</option>
-            <option value="failed">Failed</option>
+            {STATUS_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
           </Select>
         </div>
 
@@ -56,7 +65,7 @@ export default function TransactionLedger() {
                 <td className="px-3 py-2">₹{t.amount}</td>
                 <td className="px-3 py-2 uppercase">{t.method}</td>
                 <td className="px-3 py-2">
-                  <Badge tone={STATUS_TONE[t.status] || 'grey'}>{t.status}</Badge>
+                  <Badge tone={STATUS_TONE[t.status] || 'grey'}>{t.status?.replace(/_/g, ' ')}</Badge>
                 </td>
               </tr>
             )}
