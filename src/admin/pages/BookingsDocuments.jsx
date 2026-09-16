@@ -54,6 +54,29 @@ const STATUS_TONE = {
 
 const CREATED_VIA_LABEL = { self_service: 'Self-service', manual_admin: 'Manual (admin)' };
 
+// Payments tab's date filter — a handful of common lookback windows plus a
+// custom range, all resolved to dateFrom/dateTo and sent to the backend
+// (GET /admin/bookings?dateFrom=&dateTo=); filtering is server-side, this
+// page never filters the already-fetched rows itself.
+const DATE_RANGE_OPTIONS = [
+  { value: '', label: 'All time' },
+  { value: '1d', label: 'Up to 1 day' },
+  { value: '7d', label: 'Up to 7 days' },
+  { value: '1m', label: 'Up to 1 month' },
+  { value: '6m', label: 'Up to 6 months' },
+  { value: 'custom', label: 'Custom range' },
+];
+
+function dateRangeFrom(preset) {
+  const d = new Date();
+  if (preset === '1d') d.setDate(d.getDate() - 1);
+  else if (preset === '7d') d.setDate(d.getDate() - 7);
+  else if (preset === '1m') d.setMonth(d.getMonth() - 1);
+  else if (preset === '6m') d.setMonth(d.getMonth() - 6);
+  else return null;
+  return d.toISOString().slice(0, 10);
+}
+
 // agencies.status (AgentApprovals.jsx's own STATUS_BADGE) — reused here so
 // the Agent tab's approval-status badge matches Agent Approvals exactly.
 const AGENCY_STATUS_TONE = { pending: 'amber', approved: 'green', rejected: 'red', suspended: 'grey' };
@@ -321,6 +344,9 @@ function PackageDetailsModal({ row, fdPackage, onClose }) {
 function PaymentsTab({ agenciesById, packagesById }) {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
+  const [dateRange, setDateRange] = useState('');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
   const [page, setPage] = useState(1);
   const [items, setItems] = useState([]);
   const [pagination, setPagination] = useState({ total: 0, page: 1, pageSize: 20, totalPages: 1 });
@@ -336,6 +362,22 @@ function PaymentsTab({ agenciesById, packagesById }) {
     setStatus(v);
     setPage(1);
   }
+  function updateDateRange(v) {
+    setDateRange(v);
+    if (v !== 'custom') {
+      setCustomFrom('');
+      setCustomTo('');
+    }
+    setPage(1);
+  }
+  function updateCustomFrom(v) {
+    setCustomFrom(v);
+    setPage(1);
+  }
+  function updateCustomTo(v) {
+    setCustomTo(v);
+    setPage(1);
+  }
 
   useEffect(() => {
     setLoading(true);
@@ -343,6 +385,13 @@ function PaymentsTab({ agenciesById, packagesById }) {
     const params = new URLSearchParams();
     if (search) params.set('search', search);
     if (status) params.set('status', status);
+    if (dateRange === 'custom') {
+      if (customFrom) params.set('dateFrom', customFrom);
+      if (customTo) params.set('dateTo', customTo);
+    } else if (dateRange) {
+      const from = dateRangeFrom(dateRange);
+      if (from) params.set('dateFrom', from);
+    }
     params.set('page', String(page));
 
     api
@@ -353,12 +402,12 @@ function PaymentsTab({ agenciesById, packagesById }) {
       })
       .catch((err) => setError(err.message || 'Unable to load bookings'))
       .finally(() => setLoading(false));
-  }, [search, status, page]);
+  }, [search, status, dateRange, customFrom, customTo, page]);
 
   return (
     <>
       <Card className="mb-5 border-white">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <TextInput
             className="lg:col-span-2"
             placeholder="Search agency or package name…"
@@ -372,7 +421,20 @@ function PaymentsTab({ agenciesById, packagesById }) {
               </option>
             ))}
           </Select>
+          <Select value={dateRange} onChange={(e) => updateDateRange(e.target.value)}>
+            {DATE_RANGE_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </Select>
         </div>
+        {dateRange === 'custom' && (
+          <div className="mt-3 grid grid-cols-2 gap-3 sm:max-w-xs">
+            <TextInput type="date" value={customFrom} onChange={(e) => updateCustomFrom(e.target.value)} />
+            <TextInput type="date" value={customTo} onChange={(e) => updateCustomTo(e.target.value)} />
+          </div>
+        )}
       </Card>
 
       {error && <p className="mb-4 text-sm text-[#a5162d]">{error}</p>}
