@@ -91,7 +91,13 @@ export default function AuthShell({
   children,
 }) {
   return (
-    <div className="flex min-h-screen bg-[#0b1424]">
+    // min-h-screen/items-center are lg:-only — see LoginModal.jsx's own
+    // identical fix (this file's top comment says it duplicates that
+    // structure on purpose): forcing them at every width left a large dead
+    // gap above the compact header and another below the card on real phone
+    // heights, since the mobile content is much shorter than a full
+    // viewport. lg: restores centering against the equally-tall hero panel.
+    <div className="flex bg-[#0b1424] lg:min-h-screen">
       <div className="relative hidden w-[46%] flex-none overflow-hidden lg:block">
         <img src={HERO_IMAGE_SRC} alt="" className="absolute inset-0 h-full w-full object-cover" />
         <div className="absolute inset-0 bg-gradient-to-t from-[#0b1424] via-[#0b1424]/80 to-[#0b1424]/30" />
@@ -124,12 +130,37 @@ export default function AuthShell({
 
       <div
         style={{ background: 'linear-gradient(135deg, #FFF8F3 0%, #FFF4EC 50%, #FFEEE5 100%)' }}
-        className="relative flex flex-1 items-center justify-center overflow-y-auto px-4 py-10"
+        className="relative flex flex-1 items-start justify-center overflow-y-auto px-4 py-8 lg:items-center lg:py-10"
       >
         <div className={`w-full ${maxWidthClassName}`}>
+          {/* Compact header below lg — a banner crop of the same hero photo
+              (was just the bare logo before) plus the title/subtitle the
+              lg-only header carries, so this range isn't left with just the
+              tagline as its only text (same fix as LoginModal.jsx's own
+              equivalent header block). */}
           <div className="mb-8 text-center lg:hidden">
-            <img src="/Xclusive_Oman_Logo_2.png" alt="Xclusive Oman" className="mx-auto mb-4 h-14 w-auto object-contain" />
-            <p className="text-sm text-slate-500">{tagline}</p>
+            <div className="relative mb-5 h-48 w-full overflow-hidden rounded-2xl sm:h-56">
+              <img src={HERO_IMAGE_SRC} alt="" className="absolute inset-0 h-full w-full object-cover" />
+              <div className="absolute inset-0 bg-gradient-to-t from-[#0b1424] via-[#0b1424]/30 to-transparent" />
+              <img
+                src="/Xclusive_Oman_Logo_2.png"
+                alt="Xclusive Oman"
+                className="absolute bottom-3 left-1/2 h-9 w-auto -translate-x-1/2 object-contain"
+              />
+            </div>
+            {eyebrow && <p className="mb-1.5 text-xs font-bold uppercase tracking-[0.2em] text-[#d1642f]">{eyebrow}</p>}
+            <h2
+              style={{
+                backgroundImage: `linear-gradient(90deg, ${AUTH_INK}, ${AUTH_ACCENT}, ${AUTH_ACCENT_WARM})`,
+                WebkitBackgroundClip: 'text',
+                backgroundClip: 'text',
+                color: 'transparent',
+              }}
+              className="text-xl font-bold"
+            >
+              {title}
+            </h2>
+            <p className="mt-1.5 text-sm text-slate-500">{subtitle || tagline}</p>
           </div>
 
           <div className="hidden lg:block lg:mb-8">

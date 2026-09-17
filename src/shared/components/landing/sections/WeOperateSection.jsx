@@ -76,7 +76,13 @@ export function WeOperateSection() {
             back out around the 2nd image), which plain CSS border-radius
             can't do (it only bends at the box's actual corners). Traced as
             a single cubic-bezier clip-path instead, in objectBoundingBox
-            units (0–1) so it scales with the container at any breakpoint. */}
+            units (0–1) so it scales with the container at any breakpoint.
+            Below md the grid collapses to one full-width column, where the
+            desktop path's bite (a 24%-of-width excursion) reads as a much
+            deeper, harsher gouge out of a narrow stack — so mobile uses a
+            second copy of the same path with every x-coordinate halved
+            (same waist/bite rhythm, half the horizontal depth), keeping the
+            cut style rather than dropping it. md/lg keep the original. */}
         <svg width="0" height="0" className="absolute">
           <defs>
             <clipPath id="operate-collage-blob" clipPathUnits="objectBoundingBox">
@@ -89,9 +95,19 @@ export function WeOperateSection() {
                    Z"
               />
             </clipPath>
+            <clipPath id="operate-collage-blob-sm" clipPathUnits="objectBoundingBox">
+              <path
+                d="M1,0 L1,1 L0.1,1
+                   C0.085,0.9633 0.0067,0.8633 0.01,0.78
+                   C0.0134,0.6967 0.12,0.5933 0.12,0.5
+                   C0.12,0.4067 0.0159,0.3033 0.01,0.22
+                   C0.0042,0.1367 0.0725,0.0367 0.085,0
+                   Z"
+              />
+            </clipPath>
           </defs>
         </svg>
-        <div className="[clip-path:url(#operate-collage-blob)]">
+        <div className="[clip-path:url(#operate-collage-blob-sm)] md:[clip-path:url(#operate-collage-blob)]">
           <div className="flex flex-col gap-1.5">
             <img src="/travel_1.png" alt="Camel caravan in the Sharqiya Sands" className="h-56 w-full object-cover sm:h-72" />
             <img src="/travel_2.png" alt="Mountain fort at sunset in the Hajar Mountains" className="h-56 w-full object-cover sm:h-72" />

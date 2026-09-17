@@ -209,19 +209,35 @@ export default function AdminLayout() {
         style={{ background: 'linear-gradient(180deg, #0F1B4D 0%, #172B68 55%, #24145F 100%)' }}
         className="sticky top-0 flex h-screen flex-none flex-col border-r border-white/10"
       >
-        <div
-          className={`flex items-center border-b border-white/10 ${collapsed ? 'justify-center px-2 py-4' : 'justify-between px-6 py-6'}`}
-        >
-          <img
-            src={collapsed ? '/logo_scroll_closed.png' : '/Xclusive_Oman_Logo_2.png'}
-            alt="Xclusive Oman"
-            className={`w-auto flex-none object-contain ${collapsed ? 'h-10' : 'h-12'}`}
-          />
-          {!collapsed && (
-            <span className="flex-none rounded-full border border-transparent bg-gradient-to-r from-[#2563EB] to-[#7C3AED] px-2.5 py-1 text-xs font-semibold uppercase text-white shadow-sm shadow-black/20">
-              Admin
-            </span>
-          )}
+        {/* Fixed row height/padding regardless of collapsed state — matching
+            AgentLayout.jsx's own SidebarContent header (see its comment):
+            swapping padding/justify classes on collapse made this whole row
+            (and everything below it) shift by a few px instead of just
+            crossfading in place. */}
+        <div className="flex items-center justify-between border-b border-white/10 px-3 py-5">
+          <div className="relative h-12 flex-1 overflow-hidden">
+            <img
+              src="/logo_scroll_closed.png"
+              alt="Xclusive Oman"
+              className={`absolute left-0 top-1/2 h-10 w-auto -translate-y-1/2 object-contain transition-opacity duration-300 ease-out ${
+                collapsed ? 'opacity-100' : 'opacity-0'
+              }`}
+            />
+            <img
+              src="/Xclusive_Oman_Logo_2.png"
+              alt="Xclusive Oman"
+              className={`absolute left-0 top-1/2 h-12 w-auto -translate-y-1/2 object-contain transition-opacity duration-300 ease-out ${
+                collapsed ? 'opacity-0' : 'opacity-100'
+              }`}
+            />
+          </div>
+          <span
+            className={`flex-none overflow-hidden whitespace-nowrap rounded-full border border-transparent bg-gradient-to-r from-[#2563EB] to-[#7C3AED] px-2.5 py-1 text-xs font-semibold uppercase text-white shadow-sm shadow-black/20 transition-[max-width,opacity] duration-300 ease-out ${
+              collapsed ? 'max-w-0 !px-0 opacity-0' : 'max-w-[80px] opacity-100'
+            }`}
+          >
+            Admin
+          </span>
         </div>
 
         <nav className="flex-1 space-y-1 overflow-y-auto overflow-x-hidden px-3 py-5">
@@ -233,16 +249,20 @@ export default function AdminLayout() {
                   key={item.key}
                   to={item.to}
                   title={collapsed ? item.label : undefined}
-                  className={`flex items-center gap-3 rounded-lg border-l-[3px] py-2.5 text-sm font-semibold transition-colors ${
-                    collapsed ? 'justify-center px-0' : 'px-3.5'
-                  } ${
+                  className={`flex items-center gap-3 rounded-lg border-l-[3px] px-3.5 py-2.5 text-sm font-semibold transition-colors ${
                     active
                       ? 'border-transparent bg-accent-soft text-ink-dark shadow-md shadow-black/15'
                       : 'border-transparent text-white/90 hover:bg-white/10 hover:text-white'
                   }`}
                 >
                   <item.Icon className="flex-none" size={18} />
-                  {!collapsed && item.label}
+                  <span
+                    className={`overflow-hidden whitespace-nowrap transition-[max-width,opacity] duration-300 ease-out ${
+                      collapsed ? 'max-w-0 opacity-0' : 'max-w-[200px] opacity-100'
+                    }`}
+                  >
+                    {item.label}
+                  </span>
                 </Link>
               );
             }
@@ -256,24 +276,24 @@ export default function AdminLayout() {
                   type="button"
                   onClick={() => handleGroupClick(item.key)}
                   title={collapsed ? item.label : undefined}
-                  className={`flex w-full items-center gap-3 rounded-lg border-l-[3px] py-2.5 text-left text-sm font-semibold transition-colors ${
-                    collapsed ? 'justify-center px-0' : 'px-3.5'
-                  } ${
+                  className={`flex w-full items-center gap-3 rounded-lg border-l-[3px] px-3.5 py-2.5 text-left text-sm font-semibold transition-colors ${
                     hasActiveChild
                       ? 'border-transparent bg-white/10 text-white'
                       : 'border-transparent text-white/90 hover:bg-white/10 hover:text-white'
                   }`}
                 >
                   <item.Icon className="flex-none" size={18} />
-                  {!collapsed && (
-                    <>
-                      <span className="flex-1">{item.label}</span>
-                      <LuChevronDown
-                        size={14}
-                        className={`flex-none transition-transform ${open ? 'rotate-180' : ''}`}
-                      />
-                    </>
-                  )}
+                  <span
+                    className={`flex flex-1 items-center justify-between overflow-hidden whitespace-nowrap transition-[max-width,opacity] duration-300 ease-out ${
+                      collapsed ? 'max-w-0 opacity-0' : 'max-w-[200px] opacity-100'
+                    }`}
+                  >
+                    <span>{item.label}</span>
+                    <LuChevronDown
+                      size={14}
+                      className={`flex-none transition-transform ${open ? 'rotate-180' : ''}`}
+                    />
+                  </span>
                 </button>
                 <AnimatePresence initial={false}>
                   {open && (
@@ -311,34 +331,42 @@ export default function AdminLayout() {
           })}
         </nav>
 
-        <div className={`space-y-3 border-t border-white/10 py-5 ${collapsed ? 'px-2' : 'px-4'}`}>
-          <div
-            className={`flex items-center gap-2.5 rounded-xl bg-white/10 py-2.5 text-xs ${
-              collapsed ? 'justify-center px-0' : 'px-3.5'
-            }`}
-          >
+        <div className="space-y-3 border-t border-white/10 px-2 py-5">
+          <div className="flex items-center gap-2.5 rounded-xl bg-white/10 px-3.5 py-2.5 text-xs">
             <span
               className={`h-2.5 w-2.5 flex-none rounded-full ${
                 socketConnected ? 'bg-[#10B981] shadow-[0_0_0_4px_rgba(16,185,129,0.25)]' : 'bg-white/30'
               }`}
             />
-            {!collapsed && (
-              <span className="text-white/70">{socketConnected ? 'Live connection active' : 'Connecting…'}</span>
-            )}
+            <span
+              className={`overflow-hidden whitespace-nowrap text-white/70 transition-[max-width,opacity] duration-300 ease-out ${
+                collapsed ? 'max-w-0 opacity-0' : 'max-w-[180px] opacity-100'
+              }`}
+            >
+              {socketConnected ? 'Live connection active' : 'Connecting…'}
+            </span>
           </div>
-          {!collapsed && (
-            <div className="px-1 text-xs">
-              <div className="font-semibold text-white">{user?.fullName}</div>
-              <div className="text-white/60">{user?.role}</div>
-            </div>
-          )}
+          <div
+            className={`overflow-hidden px-1 text-xs transition-[max-height,opacity] duration-300 ease-out ${
+              collapsed ? 'max-h-0 opacity-0' : 'max-h-12 opacity-100'
+            }`}
+          >
+            <div className="whitespace-nowrap font-semibold text-white">{user?.fullName}</div>
+            <div className="whitespace-nowrap text-white/60">{user?.role}</div>
+          </div>
           <Button
             onClick={logout}
             title={collapsed ? 'Log out' : undefined}
-            className={`w-full justify-center gap-2 border-white/15 bg-white/10 text-white hover:border-white/30 hover:bg-white/20 ${collapsed ? 'px-0' : ''}`}
+            className="w-full !justify-start gap-2 border-white/15 bg-white/10 px-4 text-white hover:border-white/30 hover:bg-white/20"
           >
-            <LuLogOut size={16} />
-            {!collapsed && 'Log out'}
+            <LuLogOut size={16} className="flex-none" />
+            <span
+              className={`overflow-hidden whitespace-nowrap transition-[max-width,opacity] duration-300 ease-out ${
+                collapsed ? 'max-w-0 opacity-0' : 'max-w-[180px] opacity-100'
+              }`}
+            >
+              Log out
+            </span>
           </Button>
         </div>
       </motion.aside>

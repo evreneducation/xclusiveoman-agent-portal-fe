@@ -2117,7 +2117,7 @@ export default function FdPackageEditor() {
             else is set. */}
         <PricingForm form={form} update={update} computedRatePerPax={computedRatePerPax} />
 
-        <div className="flex items-center justify-between rounded-lg border border-line-light bg-white px-5 py-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line-light bg-white px-5 py-4">
           {/* Task 2 — replaces "Save as Draft": every field above autosaves
               a moment after you stop typing, nothing to click. No separate
               Save as Draft button here by design — this bar restyles that

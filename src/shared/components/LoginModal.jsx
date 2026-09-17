@@ -157,7 +157,6 @@ function isTeamUser(user) {
 
 // The one, universal copy — not per-portal props, so no caller can
 // accidentally reintroduce a difference between where this is mounted.
-const TAGLINE = 'Your trade gateway to exclusive Oman experiences';
 const FOOTER_NOTE = "By logging in, you agree to Xclusive Oman's current Terms of Service and Privacy Policy.";
 const SIGN_UP_HREF = '/agent/register';
 
@@ -384,6 +383,15 @@ export function LoginModal({
   }
 
   const otpExpired = step === 'otp' && remainingSeconds <= 0;
+  // Shared by both the lg-only "Welcome back" heading and its mobile/sm/md
+  // equivalent below, so the two headers can't drift out of sync with each
+  // other's step-copy the way separately-inlined ternaries eventually would.
+  const stepSubtitle =
+    step === 'email' || step === 'password'
+      ? 'Sign in to continue to your dashboard.'
+      : step === 'otp'
+        ? 'Enter the code we just emailed you.'
+        : 'Enter the code from your authenticator app.';
   const canSubmit =
     step === 'email'
       ? email.trim().length > 0
@@ -392,7 +400,12 @@ export function LoginModal({
         : otp.length === 6 && !otpExpired;
 
   return (
-    <div className="flex min-h-screen bg-[#0b1424]">
+    // min-h-screen is lg:-only: it exists so the form panel can fill/center
+    // against the equally-tall hero panel next to it, a desktop-only need.
+    // Forcing it unconditionally left a large dead gap below the (shorter)
+    // mobile card, stretching the page to full viewport height for no
+    // reason — on mobile the page should just be as tall as its content.
+    <div className="flex bg-[#0b1424] lg:min-h-screen">
       {/* Visual/brand panel — presentational only, hidden below lg. Real
           photo (public/oman_pic.jpg, already shipped), copy adapted from
           the master documentation's own Executive Summary/feature list —
@@ -428,10 +441,15 @@ export function LoginModal({
         </div>
       </div>
 
-      {/* Form panel */}
+      {/* Form panel — items-start on mobile: with the always-centered layout,
+          a short form on a tall phone (e.g. 390x844) left a ~150px dead gap
+          above the Home link and another below the card, both empty. lg:
+          restores the original vertical centering for the fixed-height
+          desktop split layout, where that centering is what makes it look
+          right next to the equally-tall hero panel. */}
       <div
         style={{ background: 'linear-gradient(135deg, #FFF8F3 0%, #FFF4EC 50%, #FFEEE5 100%)' }}
-        className="relative flex flex-1 items-center justify-center overflow-y-auto px-4 py-10"
+        className="relative flex flex-1 items-start justify-center overflow-y-auto px-4 py-8 lg:items-center lg:py-10"
       >
         <div className="w-full max-w-[400px]">
           {/* Way back to the public site — this page is otherwise a dead
@@ -446,11 +464,32 @@ export function LoginModal({
           </Link>
 
           {/* Compact header shown only when the visual panel above is
-              hidden (mobile/tablet) — desktop already carries the logo and
-              headline on the left. */}
+              hidden (below lg) — a small banner crop of the same hero photo
+              (was just the bare logo before) plus the same "Welcome back" +
+              step-subtitle copy the lg-only header carries, so sm/md aren't
+              left with the tagline as their only text like before. */}
           <div className="mb-8 text-center lg:hidden">
-            <img src={logoSrc} alt="Xclusive Oman" className="mx-auto mb-4 h-14 w-auto object-contain" />
-            <p className="text-sm text-slate-500">{TAGLINE}</p>
+            <div className="relative mb-5 h-48 w-full overflow-hidden rounded-2xl sm:h-56">
+              <img src={HERO_IMAGE_SRC} alt="" className="absolute inset-0 h-full w-full object-cover" />
+              <div className="absolute inset-0 bg-gradient-to-t from-[#0b1424] via-[#0b1424]/30 to-transparent" />
+              <img
+                src={logoSrc}
+                alt="Xclusive Oman"
+                className="absolute bottom-3 left-1/2 h-9 w-auto -translate-x-1/2 object-contain"
+              />
+            </div>
+            <h2
+              style={{
+                backgroundImage: `linear-gradient(90deg, ${INK}, ${ACCENT}, ${ACCENT_WARM})`,
+                WebkitBackgroundClip: 'text',
+                backgroundClip: 'text',
+                color: 'transparent',
+              }}
+              className="text-xl font-bold"
+            >
+              Welcome back
+            </h2>
+            <p className="mt-1.5 text-sm text-slate-500">{stepSubtitle}</p>
           </div>
 
           <div className="hidden lg:block lg:mb-8">
@@ -465,13 +504,7 @@ export function LoginModal({
             >
               Welcome back
             </h2>
-            <p className="mt-1.5 text-sm text-slate-500">
-              {step === 'email' || step === 'password'
-                ? 'Sign in to continue to your dashboard.'
-                : step === 'otp'
-                  ? 'Enter the code we just emailed you.'
-                  : 'Enter the code from your authenticator app.'}
-            </p>
+            <p className="mt-1.5 text-sm text-slate-500">{stepSubtitle}</p>
           </div>
 
           <div className="relative overflow-hidden rounded-xl border border-white bg-white p-6 shadow-xl shadow-[#d1642f]/[0.08] sm:p-7">

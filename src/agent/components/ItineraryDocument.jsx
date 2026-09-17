@@ -86,24 +86,33 @@ export default function ItineraryDocument({
       {/* 2. Trip Details */}
       <div className="mb-6">
         <SectionBar>Trip Details</SectionBar>
-        <table className="w-full border-collapse text-sm">
-          <thead>
-            <tr>
-              <Th>Arrival Date</Th>
-              <Th>Departure Date</Th>
-              <Th>Number of Nights</Th>
-              <Th>Persons (PAX)</Th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <Td>{dateFrom ? formatShortDate(dateFrom) : '—'}</Td>
-              <Td>{dateTo ? formatShortDate(dateTo) : '—'}</Td>
-              <Td>{dayCount > 0 ? nights : '—'}</Td>
-              <Td>{totalPax || '—'}</Td>
-            </tr>
-          </tbody>
-        </table>
+        {/* overflow-x-auto print:overflow-visible — this document renders both
+            inline in PackageBuilder.jsx's Review step (a real phone-viewed
+            page) and standalone for Puppeteer PDF export (ItineraryPrint.jsx,
+            fixed page width, this wrapper is a no-op there). Every table here
+            was missing the horizontal-scroll wrapper the shared ui.jsx Table
+            component already has, so a 7-column table forced the whole page
+            to overflow sideways on mobile instead of just scrolling itself. */}
+        <div className="overflow-x-auto print:overflow-visible">
+          <table className="w-full border-collapse text-sm">
+            <thead>
+              <tr>
+                <Th>Arrival Date</Th>
+                <Th>Departure Date</Th>
+                <Th>Number of Nights</Th>
+                <Th>Persons (PAX)</Th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <Td>{dateFrom ? formatShortDate(dateFrom) : '—'}</Td>
+                <Td>{dateTo ? formatShortDate(dateTo) : '—'}</Td>
+                <Td>{dayCount > 0 ? nights : '—'}</Td>
+                <Td>{totalPax || '—'}</Td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
         <p className="mt-1.5 text-[11px] text-agent-muted">
           {paxAdults || 0} Adult{paxAdults === 1 ? '' : 's'}
           {paxChildren ? `, ${paxChildren} Child${paxChildren === 1 ? '' : 'ren'}` : ''}
@@ -116,32 +125,34 @@ export default function ItineraryDocument({
         {hotelRows.length === 0 ? (
           <p className="text-sm text-agent-muted">No hotel selected yet.</p>
         ) : (
-          <table className="w-full border-collapse text-sm">
-            <thead>
-              <tr>
-                <Th>Hotel Name</Th>
-                <Th>Star Rating</Th>
-                <Th>Location</Th>
-                <Th>Rooms</Th>
-                <Th>Adults</Th>
-                <Th>Children</Th>
-                <Th>Nights</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {hotelRows.map((h) => (
-                <tr key={h.id}>
-                  <Td className="font-semibold text-agent-ink">{h.name}</Td>
-                  <Td>{h.category ? `${h.category}★` : '—'}</Td>
-                  <Td>{[h.city, h.state].filter(Boolean).join(', ') || '—'}</Td>
-                  <Td>{rooms}</Td>
-                  <Td>{paxAdults || 0}</Td>
-                  <Td>{paxChildren || 0}</Td>
-                  <Td>{h.nights ?? (dayCount > 0 ? nights : '—')}</Td>
+          <div className="overflow-x-auto print:overflow-visible">
+            <table className="w-full border-collapse text-sm">
+              <thead>
+                <tr>
+                  <Th>Hotel Name</Th>
+                  <Th>Star Rating</Th>
+                  <Th>Location</Th>
+                  <Th>Rooms</Th>
+                  <Th>Adults</Th>
+                  <Th>Children</Th>
+                  <Th>Nights</Th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {hotelRows.map((h) => (
+                  <tr key={h.id}>
+                    <Td className="font-semibold text-agent-ink">{h.name}</Td>
+                    <Td>{h.category ? `${h.category}★` : '—'}</Td>
+                    <Td>{[h.city, h.state].filter(Boolean).join(', ') || '—'}</Td>
+                    <Td>{rooms}</Td>
+                    <Td>{paxAdults || 0}</Td>
+                    <Td>{paxChildren || 0}</Td>
+                    <Td>{h.nights ?? (dayCount > 0 ? nights : '—')}</Td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
@@ -154,39 +165,41 @@ export default function ItineraryDocument({
         {days.length === 0 ? (
           <p className="text-sm text-agent-muted">Set Travel Start/End Date in Trip Details to generate the day-wise itinerary.</p>
         ) : (
-          <table className="w-full border-collapse text-sm">
-            <thead>
-              <tr>
-                <Th className="w-20">Day</Th>
-                <Th>Description</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {days.map((day) => (
-                <tr key={day.dayNumber}>
-                  <Td className="font-semibold text-agent-ink">Day {day.dayNumber}</Td>
-                  <Td>
-                    {day.items.length === 0 && !day.notes ? (
-                      <span className="text-agent-muted">No activities planned for this day yet.</span>
-                    ) : (
-                      <div className="space-y-0.5">
-                        {day.items.map((item, idx) => {
-                          const typeMeta = ITINERARY_ITEM_TYPE_META[item.type];
-                          return (
-                            <div key={`${item.type}:${item.id}:${idx}`}>
-                              {item.name || typeMeta?.label || 'Item'}
-                              {item.note && <span className="text-agent-muted"> — {item.note}</span>}
-                            </div>
-                          );
-                        })}
-                        {day.notes && <div className="text-agent-muted">{day.notes}</div>}
-                      </div>
-                    )}
-                  </Td>
+          <div className="overflow-x-auto print:overflow-visible">
+            <table className="w-full border-collapse text-sm">
+              <thead>
+                <tr>
+                  <Th className="w-20">Day</Th>
+                  <Th>Description</Th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {days.map((day) => (
+                  <tr key={day.dayNumber}>
+                    <Td className="font-semibold text-agent-ink">Day {day.dayNumber}</Td>
+                    <Td>
+                      {day.items.length === 0 && !day.notes ? (
+                        <span className="text-agent-muted">No activities planned for this day yet.</span>
+                      ) : (
+                        <div className="space-y-0.5">
+                          {day.items.map((item, idx) => {
+                            const typeMeta = ITINERARY_ITEM_TYPE_META[item.type];
+                            return (
+                              <div key={`${item.type}:${item.id}:${idx}`}>
+                                {item.name || typeMeta?.label || 'Item'}
+                                {item.note && <span className="text-agent-muted"> — {item.note}</span>}
+                              </div>
+                            );
+                          })}
+                          {day.notes && <div className="text-agent-muted">{day.notes}</div>}
+                        </div>
+                      )}
+                    </Td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 

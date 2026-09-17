@@ -87,7 +87,12 @@ export default function Notifications() {
 
   return (
     <div className="mx-auto max-w-3xl p-5 lg:p-8">
-      <div className="mb-1 flex items-center justify-between gap-3">
+      {/* flex-wrap — matches every other page's heading+action header
+          (BookingDetail.jsx, FitRequests.jsx, MiceProposalDetail.jsx,
+          QuoteDetail.jsx all use this exact pattern); without it, the
+          text-2xl heading plus "Mark all as read" had nowhere to go but
+          overflow/cramp together on a phone. */}
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-2xl font-bold text-agent-ink">Notification Center</h2>
         <Button onClick={handleMarkAllRead} disabled={unreadCount === 0}>
           Mark all as read
