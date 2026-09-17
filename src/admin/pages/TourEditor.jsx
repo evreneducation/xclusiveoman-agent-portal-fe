@@ -247,7 +247,11 @@ export default function TourEditor() {
         <button onClick={handleBackToCatalog} className="text-xs text-muted hover:text-ink">
           ← Back to catalog
         </button>
-        <div className="flex items-center justify-between">
+        {/* flex-wrap — the title can be a long catalog item name at
+            text-3xl; without wrap it fought the "Saving draft…" indicator
+            for the same line instead of the indicator just dropping below
+            it on a narrow screen. */}
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
           <h2 className="text-3xl font-bold">{isNew ? 'Add Tour' : `Edit — ${form.name || ''}`}</h2>
           {autosaving && <span className="text-xs font-semibold text-muted">Saving draft…</span>}
         </div>

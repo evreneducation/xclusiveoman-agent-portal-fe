@@ -1,15 +1,14 @@
-// Dark full-bleed photo divider (matches the reference's night shot of a lit
-// building) followed by the "Ready to sell Oman with confidence?" strip.
-// oman_pic.jpg stands in for a dedicated night photo — see data.js's note on
-// placeholder imagery.
-import { PillButton } from '../components/PillButton.jsx';
+// Dark full-bleed photo divider (Royal Opera House Muscat, at night) followed
+// by the "Ready to sell Oman with confidence?" strip. Button style matches
+// ArrowPillButton's other landing-page usages (SignatureToursSection,
+// ActivitiesSection) — cream pill, gold border, arrow framed in its own arc.
+import { ArrowPillButton } from '../components/ArrowPillButton.jsx';
 
 export function CtaSection() {
   return (
     <>
       <div className="relative h-56 w-full overflow-hidden sm:h-72">
-        <img src="/oman_pic.jpg" alt="Oman by night" className="h-full w-full object-cover" />
-        <div className="absolute inset-0 bg-[#0d1b2a]/70" />
+        <img src="/cta-section.png" alt="Oman by night" className="h-full w-full object-cover" />
       </div>
 
       <section className="bg-[#F7F3EA] px-6 py-16 sm:px-10">
@@ -22,9 +21,7 @@ export function CtaSection() {
               Create a free trade account to access net rates, full itinerary PDFs and our booking portal.
             </p>
           </div>
-          <PillButton to="/agent" variant="solid" className="whitespace-nowrap">
-            Sign Up For Trade Access / Log In
-          </PillButton>
+          <ArrowPillButton href="/agent">Sign Up For Trade Access / Log In</ArrowPillButton>
         </div>
       </section>
     </>
