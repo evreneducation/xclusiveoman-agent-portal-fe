@@ -153,7 +153,7 @@ export default function MiceRequests() {
               )}
             />
 
-            <div className="mt-4 flex items-center justify-between">
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
               <span className="text-xs text-muted">
                 Page {pagination.page} of {pagination.totalPages} · {pagination.total} total
               </span>

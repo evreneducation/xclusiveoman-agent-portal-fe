@@ -215,7 +215,7 @@ export default function Analytics() {
                   </tr>
                 )}
               />
-              <div className="mt-4 flex items-center justify-between">
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
                 <span className="text-xs text-muted">
                   Page {agenciesPagination.page} of {agenciesPagination.totalPages} · {agenciesPagination.total} total
                 </span>

@@ -242,7 +242,7 @@ export default function TransferEditor() {
         <button onClick={handleBackToCatalog} className="text-xs text-muted hover:text-ink">
           ← Back to catalog
         </button>
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
           <h2 className="text-3xl font-bold">{isNew ? 'Add Transfer' : `Edit — ${form.name || ''}`}</h2>
           {autosaving && <span className="text-xs font-semibold text-muted">Saving draft…</span>}
         </div>

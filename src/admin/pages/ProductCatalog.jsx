@@ -280,8 +280,12 @@ function FdPackagesTab() {
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <TextInput className="flex-1" placeholder="Search FD packages…" value={search} onChange={(e) => updateSearch(e.target.value)} />
+      {/* flex-wrap + a min-width on the search box — Button's own
+          whitespace-nowrap can't shrink, so without either of these the
+          "+ Add New ..." button held its full width and crushed the search
+          input down to an unusably thin sliver on a phone. */}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <TextInput className="min-w-[200px] flex-1" placeholder="Search FD packages…" value={search} onChange={(e) => updateSearch(e.target.value)} />
         <Link to="/admin/catalog/fd-packages/new">
           <Button variant="accent">+ Add New FD Package</Button>
         </Link>
@@ -486,8 +490,8 @@ function HotelsTab() {
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <TextInput className="flex-1" placeholder="Search hotels…" value={search} onChange={(e) => updateSearch(e.target.value)} />
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <TextInput className="min-w-[200px] flex-1" placeholder="Search hotels…" value={search} onChange={(e) => updateSearch(e.target.value)} />
         <Link to="/admin/catalog/hotels/new">
           <Button variant="accent">+ Add New Hotel</Button>
         </Link>
@@ -649,8 +653,8 @@ function ToursTab() {
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <TextInput className="flex-1" placeholder="Search tours…" value={search} onChange={(e) => updateSearch(e.target.value)} />
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <TextInput className="min-w-[200px] flex-1" placeholder="Search tours…" value={search} onChange={(e) => updateSearch(e.target.value)} />
         <Link to="/admin/catalog/tours/new">
           <Button variant="accent">+ Add New Tour</Button>
         </Link>
@@ -802,8 +806,8 @@ function ActivitiesTab() {
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <TextInput className="flex-1" placeholder="Search activities…" value={search} onChange={(e) => updateSearch(e.target.value)} />
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <TextInput className="min-w-[200px] flex-1" placeholder="Search activities…" value={search} onChange={(e) => updateSearch(e.target.value)} />
         <Link to="/admin/catalog/activities/new">
           <Button variant="accent">+ Add New Activity</Button>
         </Link>
@@ -955,8 +959,8 @@ function TransfersTab() {
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <TextInput className="flex-1" placeholder="Search transfers…" value={search} onChange={(e) => updateSearch(e.target.value)} />
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <TextInput className="min-w-[200px] flex-1" placeholder="Search transfers…" value={search} onChange={(e) => updateSearch(e.target.value)} />
         <Link to="/admin/catalog/transfers/new">
           <Button variant="accent">+ Add New Transfer</Button>
         </Link>

@@ -358,7 +358,7 @@ function RecipientsModal({ campaign, onClose }) {
             )}
           />
           {pagination.totalPages > 1 && (
-            <div className="mt-3 flex items-center justify-between">
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
               <span className="text-xs text-muted">
                 Page {pagination.page} of {pagination.totalPages} · {pagination.total} total
               </span>
@@ -635,7 +635,7 @@ function CampaignHistoryTab() {
             )}
           />
 
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-xs text-muted">
               Page {pagination.page} of {pagination.totalPages} · {pagination.total} total
             </span>
