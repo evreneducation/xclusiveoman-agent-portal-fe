@@ -79,14 +79,17 @@ function RelationshipManagerCard({ rm }) {
           start, phone centered, WhatsApp end) so the phone number lands in
           the true middle of the row regardless of how wide the email or the
           WhatsApp pill happen to be, rather than just wherever leftover
-          flex space pushes it. */}
-      <div className="grid grid-cols-3 items-center gap-3 text-sm text-agent-ink">
+          flex space pushes it. Stacked (grid-cols-1) below sm — a real
+          email address, phone number and "Chat on WhatsApp" pill forced
+          into 3 equal columns had no room to breathe on a phone; sm: and up
+          keep the original 3-column row exactly as before. */}
+      <div className="grid grid-cols-1 items-start gap-2 text-sm text-agent-ink sm:grid-cols-3 sm:items-center sm:gap-3">
         <span className="flex items-center justify-self-start gap-2">
           <LuMail size={15} className="flex-none text-agent-accent-dark" />
           {rm.email}
         </span>
         {rm.phone && (
-          <span className="flex items-center justify-self-center gap-2">
+          <span className="flex items-center justify-self-start gap-2 sm:justify-self-center">
             <LuPhone size={15} className="flex-none text-agent-accent-dark" />
             {rm.phone}
           </span>
@@ -96,7 +99,7 @@ function RelationshipManagerCard({ rm }) {
             href={`https://wa.me/${rm.whatsappNumber.replace(/[^\d]/g, '')}`}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex flex-none items-center justify-self-end gap-1.5 rounded-full border border-[#2f7d32] bg-[#eef7ee] px-3 py-1.5 text-xs font-semibold text-[#2f7d32]"
+            className="inline-flex flex-none items-center justify-self-start gap-1.5 rounded-full border border-[#2f7d32] bg-[#eef7ee] px-3 py-1.5 text-xs font-semibold text-[#2f7d32] sm:justify-self-end"
           >
             💬 Chat on WhatsApp
           </a>
@@ -179,28 +182,48 @@ export default function Dashboard() {
     // No mx-auto/max-w cap — the page fills the full width available next to
     // the sidebar (matching the reference design), with only a small edge
     // gap from the padding itself rather than a centered, narrower column.
-    <div className="p-4 lg:p-6">
+    <div className="p-4 md:p-6">
       {error && <p className="mb-5 rounded-lg border border-[#f2bdc6] bg-[#fff7f8] px-4 py-3 text-sm text-[#a5162d]">{error}</p>}
 
-      <div className="mb-6 flex flex-wrap gap-3">
-        <Link to="/agent/departures">
-          <Button variant="accent" className="!rounded-full px-5 py-2.5 text-sm">
+      {/* Below sm, a 2-col grid instead of flex-wrap — even shrunk down,
+          these labels are long enough that no two of them fit on one row by
+          natural content width, so flex-wrap just stacked every button on
+          its own line regardless of padding. Forcing 2 columns guarantees
+          the first two sit side by side (text wraps to a 2nd line in the
+          button if needed); the longest label spans both columns on its own
+          row rather than being paired awkwardly. sm: and up revert to the
+          exact flex-wrap layout/sizing this always rendered at. */}
+      <div className="mb-6 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:gap-3">
+        <Link to="/agent/departures" className="w-full sm:w-auto">
+          <Button
+            variant="accent"
+            className="!rounded-full w-full px-3 py-2 text-xs sm:w-auto sm:px-5 sm:py-2.5 sm:text-sm"
+          >
             Browse Group Departures
           </Button>
         </Link>
-        <Link to="/agent/package-builder">
-          <Button className="!rounded-full px-5 py-2.5 text-sm">Build a Custom FIT Package</Button>
+        <Link to="/agent/package-builder" className="w-full sm:w-auto">
+          <Button className="!rounded-full w-full px-3 py-2 text-xs sm:w-auto sm:px-5 sm:py-2.5 sm:text-sm">
+            Build a Custom FIT Package
+          </Button>
         </Link>
-        <Link to="/agent/transactions">
-          <Button className="!rounded-full px-5 py-2.5 text-sm">Payment &amp; Transaction History</Button>
+        <Link to="/agent/transactions" className="col-span-2 w-full sm:col-span-1 sm:w-auto">
+          <Button className="!rounded-full w-full px-3 py-2 text-xs sm:w-auto sm:px-5 sm:py-2.5 sm:text-sm">
+            Payment &amp; Transaction History
+          </Button>
         </Link>
       </div>
 
       {/* Uneven split (2fr/3fr, not a plain 50/50) — the agency card has far
           less to show than the Relationship Manager card (name + one line
           vs. avatar/name/contact row), so matching the reference design's
-          narrower left column avoids a lot of dead white space there. */}
-      <div className="mb-8 grid grid-cols-1 gap-5 lg:grid-cols-[2fr_3fr]">
+          narrower left column avoids a lot of dead white space there.
+          md:, not lg: — AgentLayout's own sidebar is lg:flex-only (hidden
+          entirely below lg, mobile drawer is an overlay), so md already has
+          the full viewport width to work with, same as lg. Waiting for lg
+          left a single, near-empty full-width agency card sitting stacked
+          above the RM card through the whole md range for no reason. */}
+      <div className="mb-8 grid grid-cols-1 gap-5 md:grid-cols-[2fr_3fr]">
         <div className="rounded-2xl border border-agent-line-light bg-white p-6 shadow-sm">
           <h2 className="text-3xl font-extrabold leading-tight text-agent-ink">{agency?.name || 'Your agency'}</h2>
           <div className="my-4 h-px bg-agent-line" />
@@ -221,7 +244,7 @@ export default function Dashboard() {
           uploaded any yet. Arrows/dots both call the same goToDeal/
           setActiveDeal state the auto-rotate interval drives, so a manual
           click doesn't fight the timer — it just jumps early. */}
-      <div className="relative mb-8 h-56 overflow-hidden rounded-2xl bg-[#0B1130] shadow-sm sm:h-72 lg:h-80">
+      <div className="relative mb-8 h-56 overflow-hidden rounded-2xl bg-[#0B1130] shadow-sm sm:h-72 md:h-80">
         <img
           src={currentDealImage}
           alt={currentDeal.title}
@@ -234,7 +257,7 @@ export default function Dashboard() {
           </div>
         )}
         <div className="absolute inset-x-0 bottom-10 px-6 text-center">
-          <h3 className="text-3xl font-extrabold text-white sm:text-4xl lg:text-5xl">{currentDeal.title}</h3>
+          <h3 className="text-3xl font-extrabold text-white sm:text-4xl md:text-5xl">{currentDeal.title}</h3>
         </div>
         {dealSlides.length > 1 && (
           <>
@@ -276,8 +299,11 @@ export default function Dashboard() {
           bigger text + rule don't grow the card past its existing min-h-28.
           Scoped here rather than changed on Card itself, which plenty of
           other cards across both portals still rely on for its existing
-          look. */}
-      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          look. sm:2-col, md:4-col (not lg:) — same full-width-below-lg
+          reasoning as the agency/RM split above: md already has as much
+          room as lg does, so 4 cards fit fine there too instead of staying
+          2-wide (and unusually wide themselves) until lg. */}
+      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-4">
         {loading
           ? ['Open Quotes', 'Awaiting Pricing', 'Confirmed Bookings', 'Balance Due'].map((label) => (
               <Card key={label} className="min-h-28 border-white">

@@ -1086,12 +1086,15 @@ function MealDaysTrigger({ addon, itineraryDayNumbers, target, dayNumbers, price
   }, [open]);
 
   return (
-    <div ref={containerRef} className="relative flex flex-none items-center gap-2">
+    <div ref={containerRef} className="relative flex flex-none items-center gap-1 sm:gap-2">
       {/* Increase/decrease counter — always visible on the row once this
           meal is checked, no click-to-reveal needed for the count itself.
           Fixed width + centered so it lines up under the "Number of Days"
-          header (MealAddonList) regardless of how wide the row's name is. */}
-      <div className={`flex w-28 flex-none items-center justify-center gap-1 rounded-full border ${DIVIDER} py-0.5`}>
+          header (MealAddonList) regardless of how wide the row's name is.
+          Narrower below sm — at the original w-28, this plus the w-24
+          "Select Days" button left almost no room for the checkbox+name
+          column on a phone; sm: and up restore the original width exactly. */}
+      <div className={`flex w-20 flex-none items-center justify-center gap-1 rounded-full border ${DIVIDER} py-0.5 sm:w-28`}>
         <button
           type="button"
           onClick={() => onTargetChange(target - 1)}
@@ -1115,8 +1118,9 @@ function MealDaysTrigger({ addon, itineraryDayNumbers, target, dayNumbers, price
 
       {/* Opens the floating day-checkbox panel — a labeled "Select Days"
           button (not just an arrow icon) sitting to the right of the
-          counter. Fixed width (w-24) so MealAddonList's header can reserve
-          an identical-width spacer after "Number of Days" — otherwise that
+          counter. Fixed width (w-24, w-16 below sm — same narrowing reason
+          as the counter above) so MealAddonList's header can reserve an
+          identical-width spacer after "Number of Days" — otherwise that
           heading, having nothing after it, would sit flush against the
           header's right edge while the counter above stays pushed left of
           this trailing button, throwing the two out of alignment. */}
@@ -1124,7 +1128,7 @@ function MealDaysTrigger({ addon, itineraryDayNumbers, target, dayNumbers, price
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-label={`Choose which days ${addon.name} applies to`}
-        className={`flex w-24 flex-none items-center justify-center rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+        className={`flex w-16 flex-none items-center justify-center rounded-full border px-1.5 py-1 text-center text-[11px] font-semibold leading-tight transition-colors sm:w-24 sm:px-2.5 ${
           open ? 'border-agent-accent bg-agent-accent-soft text-agent-accent-dark' : 'border-agent-accent/50 text-agent-accent-dark hover:bg-agent-accent-soft'
         }`}
       >
@@ -1192,20 +1196,26 @@ function MealAddonList({ addons, selectedAddonIds, onToggle, itineraryDayNumbers
       {/* "Number of Days" sits above the Lunch/Dinner rows, aligned over
           where their +/- counters render (MealDaysTrigger), the same way
           "Meals" itself labels the checkbox+name column to its left. */}
-      <div className={`flex items-center gap-2.5 border-b px-4 py-2 ${DIVIDER}`}>
+      <div className={`flex items-center gap-1.5 border-b px-3 py-2 sm:gap-2.5 sm:px-4 ${DIVIDER}`}>
         <p className={`flex-1 text-xs font-semibold uppercase tracking-wide ${MUTED}`}>Meals</p>
         {/* w-28 + text-center matches MealDaysTrigger's own counter width
             below, so this sits centered directly above it; whitespace-nowrap
             keeps it on one line even though it's a touch wider than w-28
             (it's just overflow past the header row, not something the
-            counter's own layout below needs to accommodate). */}
-        <p className={`w-28 flex-none whitespace-nowrap text-center text-xs font-semibold uppercase tracking-wide ${MUTED}`}>
-          Number of Days
+            counter's own layout below needs to accommodate). Narrower
+            (w-20) + a shorter label below sm — at the full "Number of
+            Days" text, that same tolerated overflow would spill into the
+            "Days" column next to it once this box shrinks to match the
+            row's own narrower mobile counter. */}
+        <p className={`w-20 flex-none whitespace-nowrap text-center text-xs font-semibold uppercase tracking-wide ${MUTED} sm:w-28`}>
+          <span className="sm:hidden"># Days</span>
+          <span className="hidden sm:inline">Number of Days</span>
         </p>
         {/* Labels the trailing "Select Days" button below — same fixed
-            width (w-24) as that button, so it sits centered directly above
-            it (mirrors "Number of Days" above the counter just before it). */}
-        <p className={`w-24 flex-none whitespace-nowrap text-center text-xs font-semibold uppercase tracking-wide ${MUTED}`}>
+            width (w-24, w-16 below sm) as that button, so it sits centered
+            directly above it (mirrors "Number of Days" above the counter
+            just before it). */}
+        <p className={`w-16 flex-none whitespace-nowrap text-center text-xs font-semibold uppercase tracking-wide ${MUTED} sm:w-24`}>
           Days
         </p>
       </div>
@@ -1214,11 +1224,11 @@ function MealAddonList({ addons, selectedAddonIds, onToggle, itineraryDayNumbers
         return (
           <div
             key={addon.id}
-            className={`flex items-center gap-2.5 border-b px-4 py-2.5 last:border-b-0 ${DIVIDER} ${
+            className={`flex items-center gap-1.5 border-b px-3 py-2.5 last:border-b-0 sm:gap-2.5 sm:px-4 ${DIVIDER} ${
               checked ? 'bg-agent-accent-soft/40' : ''
             }`}
           >
-            <button type="button" onClick={() => onToggle(addon.id)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
+            <button type="button" onClick={() => onToggle(addon.id)} className="flex min-w-0 flex-1 items-center gap-1.5 text-left sm:gap-2">
               <span
                 className={`flex h-4 w-4 flex-none items-center justify-center rounded-full border-2 ${
                   checked ? 'border-agent-accent bg-agent-accent' : `${DIVIDER} bg-white`
